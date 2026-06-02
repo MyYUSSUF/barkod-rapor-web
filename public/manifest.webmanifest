@@ -1,0 +1,10 @@
+{
+  "name": "Barkod Rapor Web",
+  "short_name": "Barkod Rapor",
+  "description": "Barkod okutma ve rapor açma uygulaması",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f3f4f6",
+  "theme_color": "#111827",
+  "orientation": "portrait"
+}

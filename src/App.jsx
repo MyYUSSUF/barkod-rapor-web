@@ -1,0 +1,322 @@
+import { useState } from 'react'
+import { supabase } from './lib/supabaseClient'
+import './App.css'
+
+const API_BASE_URL =
+  window.location.port === '5173'
+    ? `http://${window.location.hostname}:3001`
+    : window.location.origin
+
+const REPORTS = [
+  {
+    code: 'RAR00032',
+    name: 'Inspection Raporu',
+  },
+  {
+    code: 'RAR00033',
+    name: 'İş Emri Raporu',
+  },
+  {
+    code: 'RAR00034',
+    name: 'Yüzey Kontrol Raporu',
+  },
+]
+
+function App() {
+  const [username, setUsername] = useState('')
+  const [password, setPassword] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [selectedReportCode, setSelectedReportCode] = useState('')
+  const [userProfile, setUserProfile] = useState(null)
+  const [barcode, setBarcode] = useState('')
+  const [message, setMessage] = useState('')
+
+  const getDeviceName = () => {
+    return navigator.userAgent || 'Web Browser'
+  }
+
+  const handleLogin = async (e) => {
+    e.preventDefault()
+    setMessage('')
+    setLoading(true)
+
+    try {
+      const cleanUsername = username.trim().toLowerCase()
+
+      if (!cleanUsername || !password) {
+        setMessage('Kullanıcı adı ve şifre zorunludur.')
+        setLoading(false)
+        return
+      }
+
+      const hiddenEmail = `${cleanUsername}@app.local`
+
+      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+        email: hiddenEmail,
+        password: password,
+      })
+
+      if (authError) {
+        setMessage(`Giriş başarısız: ${authError.message} | Denenen email: ${hiddenEmail}`)
+        setLoading(false)
+        return
+      }
+
+      const userId = authData.user.id
+
+      const { data: profileData, error: profileError } = await supabase
+        .from('profiles')
+        .select('id, email, full_name, role, is_active')
+        .eq('id', userId)
+        .single()
+
+      if (profileError || !profileData) {
+        await supabase.auth.signOut()
+        setMessage('Profil bilgisi bulunamadı.')
+        setLoading(false)
+        return
+      }
+
+      if (profileData.is_active === false) {
+        await supabase.auth.signOut()
+        setMessage('Bu kullanıcı pasif durumda. Giriş engellendi.')
+        setLoading(false)
+        return
+      }
+
+      await supabase.from('login_logs').insert({
+        user_id: userId,
+        event_type: 'login',
+        device_name: getDeviceName(),
+        app_version: 'web-v1.0',
+      })
+
+      setUserProfile(profileData)
+      setMessage('')
+    } catch (err) {
+      setMessage('Beklenmeyen hata: ' + err.message)
+    }
+
+    setLoading(false)
+  }
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut()
+    setUserProfile(null)
+    setUsername('')
+    setPassword('')
+    setBarcode('')
+    setSelectedReportCode('')
+    setMessage('Çıkış yapıldı.')
+  }
+
+  const openReport = async (report) => {
+    const cleanBarcode = barcode.trim()
+
+    if (!cleanBarcode) {
+      setMessage('Önce barkod girilmelidir.')
+      return
+    }
+
+    /*
+      iPhone Safari için önemli:
+      Yeni sekme butona basılır basılmaz açılıyor.
+      Rapor linki hazır olunca bu sekme PDF'e yönlendiriliyor.
+    */
+    const reportWindow = window.open('', '_blank')
+
+    if (reportWindow) {
+      reportWindow.document.write(`
+        <html>
+          <head>
+            <title>Rapor Hazırlanıyor</title>
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <style>
+              body {
+                font-family: Arial, sans-serif;
+                padding: 30px;
+                text-align: center;
+                background: #f3f4f6;
+              }
+              .box {
+                background: white;
+                padding: 25px;
+                border-radius: 16px;
+                box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+              }
+            </style>
+          </head>
+          <body>
+            <div class="box">
+              <h2>Rapor hazırlanıyor...</h2>
+              <p>Lütfen bekleyin.</p>
+            </div>
+          </body>
+        </html>
+      `)
+    }
+
+    setLoading(true)
+    setSelectedReportCode(report.code)
+    setMessage(`${report.name} hazırlanıyor...`)
+
+    try {
+      const { data: sessionData } = await supabase.auth.getSession()
+      const userId = sessionData?.session?.user?.id
+
+      if (!userId) {
+        if (reportWindow) reportWindow.close()
+        setMessage('Oturum bulunamadı. Tekrar giriş yap.')
+        setUserProfile(null)
+        setLoading(false)
+        setSelectedReportCode('')
+        return
+      }
+
+      const response = await fetch(`${API_BASE_URL}/api/report-url`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          barcode: cleanBarcode,
+          reportCode: report.code,
+        }),
+      })
+
+      const result = await response.json()
+
+      if (!response.ok) {
+        if (reportWindow) reportWindow.close()
+        setMessage('Rapor linki alınamadı: ' + (result.error || 'Bilinmeyen hata'))
+        setLoading(false)
+        setSelectedReportCode('')
+        return
+      }
+
+      const pdfUrl = result.pdfUrl
+
+      if (!pdfUrl) {
+        if (reportWindow) reportWindow.close()
+        setMessage('PDF linki boş geldi.')
+        setLoading(false)
+        setSelectedReportCode('')
+        return
+      }
+
+      const { error: logError } = await supabase.from('report_logs').insert({
+        user_id: userId,
+        barcode: cleanBarcode,
+        report_code: report.code,
+        report_name: report.name,
+        device_name: getDeviceName(),
+        app_version: 'web-v1.0',
+      })
+
+      if (logError) {
+        if (reportWindow) reportWindow.close()
+        setMessage('Rapor log kaydı başarısız: ' + logError.message)
+        setLoading(false)
+        setSelectedReportCode('')
+        return
+      }
+
+      if (reportWindow) {
+        reportWindow.location.href = pdfUrl
+      } else {
+        window.location.href = pdfUrl
+      }
+
+      setMessage(`${report.name} açıldı ve log kaydedildi.`)
+    } catch (err) {
+      if (reportWindow) reportWindow.close()
+      setMessage('Beklenmeyen hata: ' + err.message)
+    }
+
+    setLoading(false)
+    setSelectedReportCode('')
+  }
+
+  if (userProfile) {
+    return (
+      <div className="page">
+        <div className="card">
+          <h1>Barkod Rapor Web</h1>
+
+          <p className="success">
+            Giriş başarılı: {userProfile.full_name || userProfile.email}
+          </p>
+
+          <div className="infoBox">
+            <p><strong>Rol:</strong> {userProfile.role}</p>
+            <p><strong>Durum:</strong> Aktif</p>
+          </div>
+
+          <label>Barkod</label>
+          <input
+            type="text"
+            placeholder="Barkodu gir veya okut"
+            value={barcode}
+            onChange={(e) => setBarcode(e.target.value)}
+          />
+
+          <div className="reportButtons">
+            {REPORTS.map((report) => (
+              <button
+                key={report.code}
+                className="mainButton"
+                onClick={() => openReport(report)}
+                disabled={loading}
+              >
+                {loading && selectedReportCode === report.code
+                  ? 'Hazırlanıyor...'
+                  : report.name}
+              </button>
+            ))}
+          </div>
+
+          {message && <p className="message">{message}</p>}
+
+          <button className="logoutButton" onClick={handleLogout}>
+            Çıkış Yap
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="page">
+      <div className="card">
+        <h1>Barkod Rapor Web</h1>
+        <p className="subtitle">Kullanıcı adı ve şifre ile giriş yap</p>
+
+        <form onSubmit={handleLogin}>
+          <label>Kullanıcı Adı</label>
+          <input
+            type="text"
+            placeholder="Kullanıcı adını gir"
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+          />
+
+          <label>Şifre</label>
+          <input
+            type="password"
+            placeholder="Şifreni gir"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+          />
+
+          <button type="submit" disabled={loading}>
+            {loading ? 'Giriş yapılıyor...' : 'Giriş Yap'}
+          </button>
+        </form>
+
+        {message && <p className="message">{message}</p>}
+      </div>
+    </div>
+  )
+}
+
+export default App

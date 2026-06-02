@@ -1,0 +1,104 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: Arial, Helvetica, sans-serif;
+  background: #f3f4f6;
+}
+
+.page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.card {
+  width: 100%;
+  max-width: 420px;
+  background: white;
+  border-radius: 18px;
+  padding: 28px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.12);
+}
+
+h1 {
+  margin: 0 0 8px;
+  text-align: center;
+  font-size: 26px;
+}
+
+.subtitle {
+  margin: 0 0 24px;
+  text-align: center;
+  color: #6b7280;
+}
+
+label {
+  display: block;
+  margin: 14px 0 6px;
+  font-weight: bold;
+}
+
+input {
+  width: 100%;
+  padding: 14px;
+  border: 1px solid #d1d5db;
+  border-radius: 12px;
+  font-size: 16px;
+}
+
+button {
+  width: 100%;
+  margin-top: 20px;
+  padding: 14px;
+  border: none;
+  border-radius: 12px;
+  background: #111827;
+  color: white;
+  font-size: 16px;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+button:disabled {
+  background: #9ca3af;
+  cursor: not-allowed;
+}
+
+.message {
+  margin-top: 16px;
+  color: #dc2626;
+  text-align: center;
+  font-weight: bold;
+}
+
+.success {
+  margin-top: 18px;
+  color: #15803d;
+  text-align: center;
+  font-weight: bold;
+}
+
+.infoBox {
+  margin-top: 20px;
+  padding: 14px;
+  background: #f9fafb;
+  border-radius: 12px;
+  border: 1px solid #e5e7eb;
+}
+
+.infoBox p {
+  margin: 8px 0;
+}
+
+.mainButton {
+  background: #2563eb;
+}
+
+.logoutButton {
+  background: #dc2626;
+}
