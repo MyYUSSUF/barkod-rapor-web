@@ -1305,6 +1305,21 @@ function App() {
             </div>
           )}
 
+          <div className="reportButtons">
+            {REPORTS.map((report) => (
+              <button
+                key={report.code}
+                className="mainButton"
+                onClick={() => openReport(report)}
+                disabled={loading}
+              >
+                {loading && selectedReportCode === report.code
+                  ? `${getReportName(report)} ${t.reportPreparing}`
+                  : getReportName(report)}
+              </button>
+            ))}
+          </div>
+
           {barcodeHistory.length > 0 && (
             <div className="historyBox">
               <div className="historyHeader">
@@ -1335,21 +1350,6 @@ function App() {
               </div>
             </div>
           )}
-
-          <div className="reportButtons">
-            {REPORTS.map((report) => (
-              <button
-                key={report.code}
-                className="mainButton"
-                onClick={() => openReport(report)}
-                disabled={loading}
-              >
-                {loading && selectedReportCode === report.code
-                  ? `${getReportName(report)} ${t.reportPreparing}`
-                  : getReportName(report)}
-              </button>
-            ))}
-          </div>
 
           {message && <p className="message">{message}</p>}
 
