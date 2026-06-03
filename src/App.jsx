@@ -8,6 +8,8 @@ const API_BASE_URL =
     ? `http://${window.location.hostname}:3001`
     : window.location.origin
 
+const HISTORY_KEY = 'barkod_rapor_history'
+
 const REPORTS = [
   {
     code: 'RAR00032',
@@ -33,12 +35,56 @@ function App() {
   const [selectedReportCode, setSelectedReportCode] = useState('')
   const [userProfile, setUserProfile] = useState(null)
   const [barcode, setBarcode] = useState('')
+  const [barcodeHistory, setBarcodeHistory] = useState([])
   const [message, setMessage] = useState('')
   const [scannerOpen, setScannerOpen] = useState(false)
   const [scannerMessage, setScannerMessage] = useState('')
 
   const getDeviceName = () => {
     return navigator.userAgent || 'Web Browser'
+  }
+
+  const loadBarcodeHistory = () => {
+    try {
+      const saved = localStorage.getItem(HISTORY_KEY)
+
+      if (!saved) {
+        return []
+      }
+
+      const parsed = JSON.parse(saved)
+
+      if (!Array.isArray(parsed)) {
+        return []
+      }
+
+      return parsed.filter((item) => typeof item === 'string' && item.trim() !== '')
+    } catch (err) {
+      return []
+    }
+  }
+
+  const saveBarcodeToHistory = (value) => {
+    const cleanValue = value ? String(value).trim() : ''
+
+    if (!cleanValue) {
+      return
+    }
+
+    const currentHistory = loadBarcodeHistory()
+
+    const newHistory = [
+      cleanValue,
+      ...currentHistory.filter((item) => item !== cleanValue),
+    ].slice(0, 10)
+
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(newHistory))
+    setBarcodeHistory(newHistory)
+  }
+
+  const clearBarcodeHistory = () => {
+    localStorage.removeItem(HISTORY_KEY)
+    setBarcodeHistory([])
   }
 
   const stopScanner = () => {
@@ -54,6 +100,10 @@ function App() {
     setScannerOpen(false)
     setScannerMessage('')
   }
+
+  useEffect(() => {
+    setBarcodeHistory(loadBarcodeHistory())
+  }, [])
 
   useEffect(() => {
     if (!userProfile?.id) {
@@ -138,6 +188,7 @@ function App() {
               const scannedText = result.getText()
 
               setBarcode(scannedText)
+              saveBarcodeToHistory(scannedText)
               setMessage(`Barkod okundu: ${scannedText}`)
 
               try {
@@ -217,10 +268,11 @@ function App() {
         user_id: userId,
         event_type: 'login',
         device_name: getDeviceName(),
-        app_version: 'web-v1.2',
+        app_version: 'web-v1.3',
       })
 
       setUserProfile(profileData)
+      setBarcodeHistory(loadBarcodeHistory())
       setMessage('')
     } catch (err) {
       setMessage('Beklenmeyen hata: ' + err.message)
@@ -249,6 +301,7 @@ function App() {
       return
     }
 
+    saveBarcodeToHistory(cleanBarcode)
     stopScanner()
 
     const reportWindow = window.open('', '_blank')
@@ -338,7 +391,7 @@ function App() {
         report_code: report.code,
         report_name: report.name,
         device_name: getDeviceName(),
-        app_version: 'web-v1.2',
+        app_version: 'web-v1.3',
       })
 
       if (logError) {
@@ -417,6 +470,37 @@ function App() {
               Kamerayı Kapat
             </button>
           </div>
+
+          {barcodeHistory.length > 0 && (
+            <div className="historyBox">
+              <div className="historyHeader">
+                <strong>Son Barkodlar</strong>
+                <button
+                  type="button"
+                  className="clearHistoryButton"
+                  onClick={clearBarcodeHistory}
+                >
+                  Temizle
+                </button>
+              </div>
+
+              <div className="historyList">
+                {barcodeHistory.map((item) => (
+                  <button
+                    type="button"
+                    key={item}
+                    className="historyItem"
+                    onClick={() => {
+                      setBarcode(item)
+                      setMessage(`Barkod seçildi: ${item}`)
+                    }}
+                  >
+                    {item}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           <div className="reportButtons">
             {REPORTS.map((report) => (

@@ -136,3 +136,45 @@ button:disabled {
   margin-top: 12px;
   background: #dc2626;
 }
+.historyBox {
+  margin-top: 18px;
+  padding: 14px;
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 14px;
+}
+
+.historyHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.clearHistoryButton {
+  width: auto;
+  margin: 0;
+  padding: 8px 12px;
+  background: #6b7280;
+  font-size: 13px;
+  border-radius: 10px;
+}
+
+.historyList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.historyItem {
+  width: 100%;
+  margin: 0;
+  padding: 11px;
+  background: white;
+  color: #111827;
+  border: 1px solid #d1d5db;
+  text-align: left;
+  font-size: 15px;
+  border-radius: 10px;
+}
