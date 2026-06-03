@@ -343,10 +343,9 @@ function App() {
       `${makePdfProxyUrl(pdfUrl)}&filename=${encodeURIComponent(pdfFileName)}`
 
     const pdfViewUrl =
-      `${pdfFileUrl}#view=FitH&toolbar=1&navpanes=0&scrollbar=1`
+      `${pdfFileUrl}#view=Fit&zoom=page-fit&toolbar=0&navpanes=0&scrollbar=1`
 
     const payload = {
-      title: t.reportPageTitle,
       preparing: t.reportPagePreparing,
       pleaseWait: t.pleaseWait,
       share: t.share,
@@ -378,87 +377,22 @@ function App() {
               margin: 0;
               padding: 0;
               width: 100%;
-              height: 100%;
+              min-height: 100%;
               font-family: Arial, sans-serif;
-              background: #111827;
+              background: white;
               color: #111827;
+            }
+
+            body {
               overflow: hidden;
-            }
-
-            .toolbar {
-              height: 58px;
-              display: flex;
-              align-items: center;
-              justify-content: space-between;
-              gap: 10px;
-              padding: 8px 10px;
-              background: linear-gradient(135deg, #070b14, #111827);
-              color: white;
-              border-bottom: 1px solid rgba(255,255,255,0.08);
-            }
-
-            .title {
-              min-width: 0;
-              flex: 1;
-            }
-
-            .title strong {
-              display: block;
-              font-size: 14px;
-              white-space: nowrap;
-              overflow: hidden;
-              text-overflow: ellipsis;
-            }
-
-            .title span {
-              display: block;
-              font-size: 11px;
-              color: #cbd5e1;
-              margin-top: 3px;
-              white-space: nowrap;
-              overflow: hidden;
-              text-overflow: ellipsis;
-            }
-
-            .actions {
-              display: flex;
-              gap: 7px;
-              flex-shrink: 0;
-            }
-
-            button {
-              border: 1px solid rgba(255,255,255,0.12);
-              border-radius: 10px;
-              padding: 8px 9px;
-              background: rgba(255,255,255,0.94);
-              color: #111827;
-              font-weight: 800;
-              font-size: 12px;
-              cursor: pointer;
-            }
-
-            .closeBtn {
-              background: #dc2626;
-              color: white;
-            }
-
-            .status {
-              position: fixed;
-              left: 0;
-              right: 0;
-              top: 58px;
-              z-index: 5;
-              padding: 9px;
-              text-align: center;
-              font-size: 13px;
-              color: #111827;
-              background: #f8fafc;
             }
 
             .viewer {
-              width: 100%;
-              height: calc(100dvh - 58px);
-              background: #525659;
+              position: fixed;
+              inset: 0;
+              width: 100vw;
+              height: 100dvh;
+              background: white;
             }
 
             iframe {
@@ -469,51 +403,73 @@ function App() {
               background: white;
             }
 
-            @media (max-width: 480px) {
-              .toolbar {
-                height: 98px;
-                align-items: flex-start;
-                flex-direction: column;
-              }
+            .status {
+              position: fixed;
+              top: 12px;
+              left: 50%;
+              transform: translateX(-50%);
+              z-index: 20;
+              padding: 9px 13px;
+              border-radius: 999px;
+              text-align: center;
+              font-size: 13px;
+              font-weight: 800;
+              color: #111827;
+              background: rgba(255, 255, 255, 0.92);
+              box-shadow: 0 10px 24px rgba(15, 23, 42, 0.14);
+            }
 
-              .actions {
-                width: 100%;
-              }
+            .floatingActions {
+              position: fixed;
+              left: 12px;
+              right: 12px;
+              bottom: calc(env(safe-area-inset-bottom) + 12px);
+              z-index: 30;
+              display: flex;
+              gap: 8px;
+              padding: 8px;
+              border-radius: 18px;
+              background: rgba(255, 255, 255, 0.92);
+              box-shadow: 0 16px 36px rgba(15, 23, 42, 0.22);
+              backdrop-filter: blur(14px);
+            }
 
-              button {
-                flex: 1;
-                text-align: center;
-              }
+            .floatingActions button {
+              flex: 1;
+              border: none;
+              border-radius: 13px;
+              padding: 12px 8px;
+              color: white;
+              font-weight: 900;
+              font-size: 13px;
+              cursor: pointer;
+            }
 
-              .status {
-                top: 98px;
-              }
+            .shareBtn {
+              background: #0f766e;
+            }
 
-              .viewer {
-                height: calc(100dvh - 98px);
-              }
+            .refreshBtn {
+              background: #1d4ed8;
+            }
+
+            .closeBtn {
+              background: #b91c1c;
             }
           </style>
         </head>
 
         <body>
-          <div class="toolbar">
-            <div class="title">
-              <strong>${payload.reportName}</strong>
-              <span>${payload.pdfFileName}</span>
-            </div>
-
-            <div class="actions">
-              <button id="shareBtn">${payload.share}</button>
-              <button id="refreshBtn">${payload.refresh}</button>
-              <button id="closeBtn" class="closeBtn">${payload.close}</button>
-            </div>
+          <div class="viewer">
+            <iframe id="pdfFrame" src="${payload.pdfViewUrl}" allow="fullscreen"></iframe>
           </div>
 
           <div id="status" class="status">${payload.preparing} ${payload.pleaseWait}</div>
 
-          <div class="viewer">
-            <iframe id="pdfFrame" src="${payload.pdfViewUrl}" allow="fullscreen"></iframe>
+          <div class="floatingActions">
+            <button id="shareBtn" class="shareBtn">${payload.share}</button>
+            <button id="refreshBtn" class="refreshBtn">${payload.refresh}</button>
+            <button id="closeBtn" class="closeBtn">${payload.close}</button>
           </div>
 
           <script>
@@ -549,7 +505,9 @@ function App() {
             }
 
             pdfFrame.addEventListener('load', () => {
-              statusEl.style.display = 'none'
+              setTimeout(() => {
+                statusEl.style.display = 'none'
+              }, 500)
             })
 
             pdfFrame.addEventListener('error', () => {
@@ -599,7 +557,7 @@ function App() {
                 pdfFileUrl +
                 '&t=' +
                 Date.now() +
-                '#view=FitH&toolbar=1&navpanes=0&scrollbar=1'
+                '#view=Fit&zoom=page-fit&toolbar=0&navpanes=0&scrollbar=1'
             })
 
             closeBtn.addEventListener('click', () => {
@@ -850,7 +808,7 @@ function App() {
         user_id: userId,
         event_type: 'login',
         device_name: getDeviceName(),
-        app_version: 'web-v1.7',
+        app_version: 'web-v1.8',
       })
 
       setUserProfile(profileData)
@@ -906,7 +864,7 @@ function App() {
                 font-family: Arial, sans-serif;
                 padding: 30px;
                 text-align: center;
-                background: #f3f4f6;
+                background: white;
               }
               .box {
                 background: white;
@@ -981,7 +939,7 @@ function App() {
         report_code: report.code,
         report_name: reportName,
         device_name: getDeviceName(),
-        app_version: 'web-v1.7',
+        app_version: 'web-v1.8',
       })
 
       if (logError) {
@@ -1011,8 +969,6 @@ function App() {
   if (restoringSession) {
     return (
       <div className="page" dir={isArabic ? 'rtl' : 'ltr'}>
-        <div className="luxuryGlow"></div>
-
         <div className="card">
           <div className="topBar">
             <img src="/elvan-logo.png" alt="Elvan Dyeing" className="appLogo" />
@@ -1028,8 +984,6 @@ function App() {
   if (userProfile) {
     return (
       <div className="page" dir={isArabic ? 'rtl' : 'ltr'}>
-        <div className="luxuryGlow"></div>
-
         <div className="card">
           <div className="topBar">
             <img src="/elvan-logo.png" alt="Elvan Dyeing" className="appLogo" />
@@ -1146,8 +1100,6 @@ function App() {
 
   return (
     <div className="page" dir={isArabic ? 'rtl' : 'ltr'}>
-      <div className="luxuryGlow"></div>
-
       <div className="card">
         <div className="topBar">
           <img src="/elvan-logo.png" alt="Elvan Dyeing" className="appLogo" />
