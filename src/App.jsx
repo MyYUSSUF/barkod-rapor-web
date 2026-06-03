@@ -10,6 +10,8 @@ const API_BASE_URL =
 
 const HISTORY_KEY = 'barkod_rapor_history'
 const LANGUAGE_KEY = 'barkod_rapor_language'
+const SESSION_STARTED_AT_KEY = 'barkod_rapor_session_started_at'
+const SESSION_MAX_MS = 60 * 60 * 1000
 
 const REPORTS = [
   {
@@ -36,6 +38,7 @@ const LANGUAGES = {
     passwordPlaceholder: 'Şifreni gir',
     login: 'Giriş Yap',
     loggingIn: 'Giriş yapılıyor...',
+    checkingSession: 'Oturum kontrol ediliyor...',
     welcome: 'Hoş geldiniz',
     role: 'Rol',
     status: 'Durum',
@@ -59,6 +62,7 @@ const LANGUAGES = {
     profileNotFound: 'Profil bilgisi bulunamadı.',
     inactiveBlocked: 'Bu kullanıcı pasif durumda. Giriş engellendi.',
     inactiveAutoLogout: 'Bu kullanıcı pasif yapıldı. Oturum kapatıldı.',
+    sessionExpired: 'Oturum süresi doldu. Lütfen tekrar giriş yap.',
     logoutSuccess: 'Çıkış yapıldı.',
     barcodeRequired: 'Önce barkod girilmelidir.',
     reportPreparing: 'hazırlanıyor...',
@@ -91,6 +95,7 @@ const LANGUAGES = {
     passwordPlaceholder: 'Enter password',
     login: 'Login',
     loggingIn: 'Logging in...',
+    checkingSession: 'Checking session...',
     welcome: 'Welcome',
     role: 'Role',
     status: 'Status',
@@ -114,6 +119,7 @@ const LANGUAGES = {
     profileNotFound: 'Profile information not found.',
     inactiveBlocked: 'This user is inactive. Login blocked.',
     inactiveAutoLogout: 'This user was deactivated. Session closed.',
+    sessionExpired: 'Session expired. Please login again.',
     logoutSuccess: 'Logged out.',
     barcodeRequired: 'Barcode is required first.',
     reportPreparing: 'is preparing...',
@@ -146,6 +152,7 @@ const LANGUAGES = {
     passwordPlaceholder: 'أدخل كلمة المرور',
     login: 'تسجيل الدخول',
     loggingIn: 'جارٍ تسجيل الدخول...',
+    checkingSession: 'جارٍ التحقق من الجلسة...',
     welcome: 'أهلاً وسهلاً',
     role: 'الدور',
     status: 'الحالة',
@@ -169,6 +176,7 @@ const LANGUAGES = {
     profileNotFound: 'لم يتم العثور على بيانات الملف الشخصي.',
     inactiveBlocked: 'هذا المستخدم غير نشط. تم منع الدخول.',
     inactiveAutoLogout: 'تم تعطيل هذا المستخدم. تم إغلاق الجلسة.',
+    sessionExpired: 'انتهت مدة الجلسة. يرجى تسجيل الدخول مرة أخرى.',
     logoutSuccess: 'تم تسجيل الخروج.',
     barcodeRequired: 'يجب إدخال الباركود أولاً.',
     reportPreparing: 'قيد التحضير...',
@@ -208,6 +216,7 @@ function App() {
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
+  const [restoringSession, setRestoringSession] = useState(true)
   const [selectedReportCode, setSelectedReportCode] = useState('')
   const [userProfile, setUserProfile] = useState(null)
   const [displayName, setDisplayName] = useState('')
@@ -224,6 +233,30 @@ function App() {
 
   const getDeviceName = () => {
     return navigator.userAgent || 'Web Browser'
+  }
+
+  const isSessionExpired = () => {
+    const startedAt = Number(localStorage.getItem(SESSION_STARTED_AT_KEY))
+
+    if (!startedAt) {
+      return false
+    }
+
+    return Date.now() - startedAt >= SESSION_MAX_MS
+  }
+
+  const clearLocalSession = () => {
+    localStorage.removeItem(SESSION_STARTED_AT_KEY)
+  }
+
+  const resetUserState = () => {
+    stopScanner()
+    setUserProfile(null)
+    setUsername('')
+    setPassword('')
+    setBarcode('')
+    setSelectedReportCode('')
+    setDisplayName('')
   }
 
   const makeDisplayName = (profile, fallbackUsername) => {
@@ -289,7 +322,7 @@ function App() {
     setBarcodeHistory([])
   }
 
-  const stopScanner = () => {
+  function stopScanner() {
     try {
       if (scannerControlsRef.current) {
         scannerControlsRef.current.stop()
@@ -308,7 +341,7 @@ function App() {
   }
 
   const writeReportWindow = (reportWindow, reportName, pdfUrl) => {
-    const proxyUrl = makePdfProxyUrl(pdfUrl)
+    const proxyUrl = `${makePdfProxyUrl(pdfUrl)}#view=Fit&zoom=page-fit&toolbar=0&navpanes=0&scrollbar=1`
 
     const payload = {
       title: t.reportPageTitle,
@@ -338,28 +371,32 @@ function App() {
               box-sizing: border-box;
             }
 
+            html,
             body {
               margin: 0;
+              padding: 0;
+              width: 100%;
+              height: 100%;
               font-family: Arial, sans-serif;
               background: #f3f4f6;
               color: #111827;
+              overflow: hidden;
             }
 
             .toolbar {
-              position: sticky;
-              top: 0;
-              z-index: 10;
+              height: 64px;
               display: flex;
               align-items: center;
               justify-content: space-between;
               gap: 10px;
-              padding: 12px;
+              padding: 10px 12px;
               background: #111827;
               color: white;
             }
 
             .title {
               min-width: 0;
+              flex: 1;
             }
 
             .title strong {
@@ -383,7 +420,7 @@ function App() {
               flex-shrink: 0;
             }
 
-            button, a.actionLink {
+            button {
               border: none;
               border-radius: 10px;
               padding: 9px 10px;
@@ -391,7 +428,6 @@ function App() {
               color: #111827;
               font-weight: bold;
               font-size: 13px;
-              text-decoration: none;
               cursor: pointer;
             }
 
@@ -401,22 +437,29 @@ function App() {
             }
 
             .status {
-              padding: 12px;
+              position: fixed;
+              left: 0;
+              right: 0;
+              top: 64px;
+              z-index: 5;
+              padding: 10px;
               text-align: center;
               font-size: 14px;
               color: #374151;
+              background: #f3f4f6;
             }
 
             iframe {
               display: block;
               width: 100%;
-              height: calc(100vh - 72px);
+              height: calc(100dvh - 64px);
               border: none;
               background: white;
             }
 
             @media (max-width: 480px) {
               .toolbar {
+                height: 106px;
                 align-items: flex-start;
                 flex-direction: column;
               }
@@ -425,13 +468,17 @@ function App() {
                 width: 100%;
               }
 
-              button, a.actionLink {
+              button {
                 flex: 1;
                 text-align: center;
               }
 
+              .status {
+                top: 106px;
+              }
+
               iframe {
-                height: calc(100vh - 118px);
+                height: calc(100dvh - 106px);
               }
             }
           </style>
@@ -486,7 +533,7 @@ function App() {
                   })
                 } else {
                   await navigator.clipboard.writeText(pdfUrl)
-                  alert(shareNotSupported + ' Link kopyalandı.')
+                  alert(shareNotSupported)
                 }
               } catch (err) {
                 console.log(err)
@@ -496,7 +543,7 @@ function App() {
             refreshBtn.addEventListener('click', () => {
               statusEl.style.display = 'block'
               statusEl.textContent = ${JSON.stringify(payload.preparing)}
-              pdfFrame.src = pdfUrl + '&t=' + Date.now()
+              pdfFrame.src = pdfUrl.split('#')[0] + '&t=' + Date.now() + '#view=Fit&zoom=page-fit&toolbar=0&navpanes=0&scrollbar=1'
             })
 
             closeBtn.addEventListener('click', () => {
@@ -514,12 +561,83 @@ function App() {
   }, [])
 
   useEffect(() => {
+    const restoreSession = async () => {
+      try {
+        const { data } = await supabase.auth.getSession()
+        const session = data?.session
+
+        if (!session?.user?.id) {
+          clearLocalSession()
+          setRestoringSession(false)
+          return
+        }
+
+        let startedAt = Number(localStorage.getItem(SESSION_STARTED_AT_KEY))
+
+        if (!startedAt) {
+          startedAt = Date.now()
+          localStorage.setItem(SESSION_STARTED_AT_KEY, String(startedAt))
+        }
+
+        if (Date.now() - startedAt >= SESSION_MAX_MS) {
+          await supabase.auth.signOut()
+          clearLocalSession()
+          setMessage(t.sessionExpired)
+          setRestoringSession(false)
+          return
+        }
+
+        const { data: profileData, error: profileError } = await supabase
+          .from('profiles')
+          .select('id, email, full_name, role, is_active')
+          .eq('id', session.user.id)
+          .single()
+
+        if (profileError || !profileData) {
+          await supabase.auth.signOut()
+          clearLocalSession()
+          setMessage(t.profileNotFound)
+          setRestoringSession(false)
+          return
+        }
+
+        if (profileData.is_active === false) {
+          await supabase.auth.signOut()
+          clearLocalSession()
+          setMessage(t.inactiveBlocked)
+          setRestoringSession(false)
+          return
+        }
+
+        setUserProfile(profileData)
+        setDisplayName(makeDisplayName(profileData, ''))
+        setBarcodeHistory(loadBarcodeHistory())
+      } catch (err) {
+        console.log('Oturum geri yükleme hatası:', err)
+      }
+
+      setRestoringSession(false)
+    }
+
+    restoreSession()
+  }, [])
+
+  useEffect(() => {
     if (!userProfile?.id) {
       return
     }
 
     const checkUserActiveStatus = async () => {
       try {
+        if (isSessionExpired()) {
+          stopScanner()
+          await supabase.auth.signOut()
+          clearLocalSession()
+          resetUserState()
+          setMessage(t.sessionExpired)
+          return
+        }
+
         const { data, error } = await supabase
           .from('profiles')
           .select('id, is_active')
@@ -533,12 +651,8 @@ function App() {
         if (data.is_active === false) {
           stopScanner()
           await supabase.auth.signOut()
-
-          setUserProfile(null)
-          setUsername('')
-          setPassword('')
-          setBarcode('')
-          setSelectedReportCode('')
+          clearLocalSession()
+          resetUserState()
           setMessage(t.inactiveAutoLogout)
         }
       } catch (err) {
@@ -660,6 +774,7 @@ function App() {
 
       if (profileError || !profileData) {
         await supabase.auth.signOut()
+        clearLocalSession()
         setMessage(t.profileNotFound)
         setLoading(false)
         return
@@ -667,16 +782,19 @@ function App() {
 
       if (profileData.is_active === false) {
         await supabase.auth.signOut()
+        clearLocalSession()
         setMessage(t.inactiveBlocked)
         setLoading(false)
         return
       }
 
+      localStorage.setItem(SESSION_STARTED_AT_KEY, String(Date.now()))
+
       await supabase.from('login_logs').insert({
         user_id: userId,
         event_type: 'login',
         device_name: getDeviceName(),
-        app_version: 'web-v1.4',
+        app_version: 'web-v1.5',
       })
 
       setUserProfile(profileData)
@@ -694,12 +812,8 @@ function App() {
     stopScanner()
 
     await supabase.auth.signOut()
-    setUserProfile(null)
-    setUsername('')
-    setPassword('')
-    setBarcode('')
-    setSelectedReportCode('')
-    setDisplayName('')
+    clearLocalSession()
+    resetUserState()
     setMessage(t.logoutSuccess)
   }
 
@@ -709,6 +823,14 @@ function App() {
 
     if (!cleanBarcode) {
       setMessage(t.barcodeRequired)
+      return
+    }
+
+    if (isSessionExpired()) {
+      await supabase.auth.signOut()
+      clearLocalSession()
+      resetUserState()
+      setMessage(t.sessionExpired)
       return
     }
 
@@ -758,6 +880,7 @@ function App() {
 
       if (!userId) {
         if (reportWindow) reportWindow.close()
+        clearLocalSession()
         setMessage(t.sessionMissing)
         setUserProfile(null)
         setLoading(false)
@@ -802,7 +925,7 @@ function App() {
         report_code: report.code,
         report_name: reportName,
         device_name: getDeviceName(),
-        app_version: 'web-v1.4',
+        app_version: 'web-v1.5',
       })
 
       if (logError) {
@@ -827,6 +950,21 @@ function App() {
 
     setLoading(false)
     setSelectedReportCode('')
+  }
+
+  if (restoringSession) {
+    return (
+      <div className="page" dir={isArabic ? 'rtl' : 'ltr'}>
+        <div className="card">
+          <div className="topBar">
+            <img src="/elvan-logo.png" alt="Elvan Dyeing" className="appLogo" />
+          </div>
+
+          <h1>{t.appTitle}</h1>
+          <p className="subtitle">{t.checkingSession}</p>
+        </div>
+      </div>
+    )
   }
 
   if (userProfile) {
