@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { BrowserCodeReader, BrowserMultiFormatReader } from '@zxing/browser'
 import { supabase } from './lib/supabaseClient'
 import './App.css'
@@ -54,6 +54,46 @@ function App() {
     setScannerOpen(false)
     setScannerMessage('')
   }
+
+  useEffect(() => {
+    if (!userProfile?.id) {
+      return
+    }
+
+    const checkUserActiveStatus = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('id, is_active')
+          .eq('id', userProfile.id)
+          .single()
+
+        if (error || !data) {
+          return
+        }
+
+        if (data.is_active === false) {
+          stopScanner()
+          await supabase.auth.signOut()
+
+          setUserProfile(null)
+          setUsername('')
+          setPassword('')
+          setBarcode('')
+          setSelectedReportCode('')
+          setMessage('Bu kullanıcı pasif yapıldı. Oturum kapatıldı.')
+        }
+      } catch (err) {
+        console.log('Aktiflik kontrol hatası:', err)
+      }
+    }
+
+    checkUserActiveStatus()
+
+    const intervalId = setInterval(checkUserActiveStatus, 10000)
+
+    return () => clearInterval(intervalId)
+  }, [userProfile?.id])
 
   const startScanner = async () => {
     if (scannerControlsRef.current) {
@@ -177,7 +217,7 @@ function App() {
         user_id: userId,
         event_type: 'login',
         device_name: getDeviceName(),
-        app_version: 'web-v1.1',
+        app_version: 'web-v1.2',
       })
 
       setUserProfile(profileData)
@@ -298,7 +338,7 @@ function App() {
         report_code: report.code,
         report_name: report.name,
         device_name: getDeviceName(),
-        app_version: 'web-v1.1',
+        app_version: 'web-v1.2',
       })
 
       if (logError) {
