@@ -950,7 +950,7 @@ function App() {
         return
       }
 
-     const safeReportName = sanitizePdfFileName(reportName)
+   const safeReportName = sanitizePdfFileName(reportName)
 const safeBarcode = sanitizePdfFileName(cleanBarcode)
 const pdfFileName = `${safeReportName}_${safeBarcode}.pdf`
 
@@ -958,11 +958,167 @@ const pdfFileUrl =
   `${makePdfProxyUrl(pdfUrl)}&filename=${encodeURIComponent(pdfFileName)}`
 
 if (reportWindow) {
-  reportWindow.location.href = pdfFileUrl
+  reportWindow.document.open()
+  reportWindow.document.write(`
+    <!doctype html>
+    <html lang="${language}" dir="${isArabic ? 'rtl' : 'ltr'}">
+      <head>
+        <title>${reportName}</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <style>
+          * {
+            box-sizing: border-box;
+          }
+
+          body {
+            margin: 0;
+            min-height: 100vh;
+            font-family: Arial, sans-serif;
+            background: #ffffff;
+            color: #111827;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+          }
+
+          .box {
+            width: 100%;
+            max-width: 420px;
+            background: white;
+            border: 1px solid #e5e7eb;
+            border-radius: 22px;
+            padding: 24px;
+            box-shadow: 0 18px 50px rgba(17, 24, 39, 0.14);
+            text-align: center;
+          }
+
+          h2 {
+            margin: 0 0 8px;
+            font-size: 22px;
+            color: #17324d;
+          }
+
+          p {
+            margin: 0 0 20px;
+            color: #6b7280;
+            word-break: break-word;
+          }
+
+          button, a {
+            display: block;
+            width: 100%;
+            margin-top: 12px;
+            padding: 15px;
+            border: none;
+            border-radius: 15px;
+            color: white;
+            font-size: 16px;
+            font-weight: 900;
+            text-decoration: none;
+            cursor: pointer;
+          }
+
+          .openBtn {
+            background: #17324d;
+          }
+
+          .shareBtn {
+            background: #0f766e;
+          }
+
+          .closeBtn {
+            background: #b91c1c;
+          }
+
+          .status {
+            margin-top: 14px;
+            font-weight: bold;
+            color: #b91c1c;
+          }
+        </style>
+      </head>
+
+      <body>
+        <div class="box">
+          <h2>${reportName}</h2>
+          <p>${pdfFileName}</p>
+
+          <a class="openBtn" href="${pdfFileUrl}" target="_self">
+            PDF’i Aç
+          </a>
+
+          <button id="shareBtn" class="shareBtn">
+            PDF Olarak Paylaş
+          </button>
+
+          <button id="closeBtn" class="closeBtn">
+            Kapat
+          </button>
+
+          <div id="status" class="status"></div>
+        </div>
+
+        <script>
+          const pdfFileUrl = ${JSON.stringify(pdfFileUrl)}
+          const pdfFileName = ${JSON.stringify(pdfFileName)}
+          const reportName = ${JSON.stringify(reportName)}
+
+          const shareBtn = document.getElementById('shareBtn')
+          const closeBtn = document.getElementById('closeBtn')
+          const statusEl = document.getElementById('status')
+
+          shareBtn.addEventListener('click', async () => {
+            try {
+              statusEl.textContent = 'PDF hazırlanıyor...'
+
+              const response = await fetch(pdfFileUrl)
+
+              if (!response.ok) {
+                throw new Error('PDF alınamadı.')
+              }
+
+              const blob = await response.blob()
+              const file = new File([blob], pdfFileName, {
+                type: 'application/pdf'
+              })
+
+              if (navigator.canShare && navigator.canShare({ files: [file] })) {
+                await navigator.share({
+                  title: reportName,
+                  text: pdfFileName,
+                  files: [file]
+                })
+
+                statusEl.textContent = ''
+              } else if (navigator.share) {
+                await navigator.share({
+                  title: reportName,
+                  text: pdfFileName,
+                  url: pdfFileUrl
+                })
+
+                statusEl.textContent = ''
+              } else {
+                await navigator.clipboard.writeText(pdfFileUrl)
+                statusEl.textContent = 'PDF paylaşımı desteklenmedi. Link kopyalandı.'
+              }
+            } catch (err) {
+              statusEl.textContent = err.message || 'Paylaşım yapılamadı.'
+            }
+          })
+
+          closeBtn.addEventListener('click', () => {
+            window.close()
+          })
+        </script>
+      </body>
+    </html>
+  `)
+  reportWindow.document.close()
 } else {
   window.location.href = pdfFileUrl
 }
-
       setMessage(`${reportName} ${t.reportOpened}`)
     } catch (err) {
       if (reportWindow) reportWindow.close()
