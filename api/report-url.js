@@ -1,22 +1,8 @@
-import express from 'express'
-import cors from 'cors'
-import path from 'path'
-import { fileURLToPath } from 'url'
-
-const app = express()
-const PORT = process.env.PORT || 3001
-
-const __filename = fileURLToPath(import.meta.url)
-const __dirname = path.dirname(__filename)
-
 const BASE_URL = 'http://repx.elvandyeing.com'
 const ENDPOINT = `${BASE_URL}/RepxService/vxC_RepxWebService.asmx`
 const WSDL_URL = `${ENDPOINT}?WSDL`
 
 let cachedTargetNs = null
-
-app.use(cors())
-app.use(express.json())
 
 function isNotBlank(value) {
   return value !== null && value !== undefined && String(value).trim() !== ''
@@ -182,9 +168,13 @@ async function getReportPdfUrl(reportCode, barcode) {
   return BASE_URL + '/' + result
 }
 
-app.post('/api/report-url', async (req, res) => {
+export default async function handler(req, res) {
   try {
-    const { barcode, reportCode } = req.body
+    if (req.method !== 'POST') {
+      return res.status(405).json({ error: 'Sadece POST isteği desteklenir.' })
+    }
+
+    const { barcode, reportCode } = req.body || {}
 
     if (!isNotBlank(barcode)) {
       return res.status(400).json({ error: 'Barkod zorunludur.' })
@@ -196,20 +186,10 @@ app.post('/api/report-url', async (req, res) => {
 
     const pdfUrl = await getReportPdfUrl(reportCode, barcode)
 
-    res.json({ pdfUrl })
+    return res.status(200).json({ pdfUrl })
   } catch (error) {
-    res.status(500).json({
+    return res.status(500).json({
       error: error.message || 'Rapor linki alınamadı.',
     })
   }
-})
-
-app.use(express.static(path.join(__dirname, 'dist')))
-
-app.use((req, res) => {
-  res.sendFile(path.join(__dirname, 'dist', 'index.html'))
-})
-
-app.listen(PORT, () => {
-  console.log(`Barkod Rapor Web çalışıyor: http://localhost:${PORT}`)
-})
+}
