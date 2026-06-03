@@ -1044,10 +1044,9 @@ if (reportWindow) {
           <h2>${reportName}</h2>
           <p>${pdfFileName}</p>
 
-          <a class="openBtn" href="${pdfFileUrl}" target="_self">
-            PDF’i Aç
-          </a>
-
+         <a class="openBtn" href="${pdfFileUrl}" target="_blank" rel="noopener">
+  PDF’i Aç
+</a>
           <button id="shareBtn" class="shareBtn">
             PDF Olarak Paylaş
           </button>
