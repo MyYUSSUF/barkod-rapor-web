@@ -12,6 +12,7 @@ const HISTORY_KEY = 'barkod_rapor_history'
 const LANGUAGE_KEY = 'barkod_rapor_language'
 const SESSION_STARTED_AT_KEY = 'barkod_rapor_session_started_at'
 const SESSION_MAX_MS = 60 * 60 * 1000
+const REPORT_TIMEOUT_MS = 45000
 
 const REPORTS = [
   {
@@ -47,6 +48,8 @@ const LANGUAGES = {
     closeCamera: 'Kamerayı Kapat',
     cameraOpening: 'Kamera açılıyor...',
     showBarcode: 'Barkodu kameraya göster.',
+    alignBarcode: 'Barkodu çerçevenin içine hizalayın.',
+    cameraHint: 'Net okuma için barkodu ışık alan yerde, çerçeveye paralel tutun.',
     cameraAreaMissing: 'Kamera alanı bulunamadı.',
     cameraError: 'Kamera açılamadı: ',
     barcodeRead: 'Barkod okundu',
@@ -63,6 +66,7 @@ const LANGUAGES = {
     logoutSuccess: 'Çıkış yapıldı.',
     barcodeRequired: 'Önce barkod girilmelidir.',
     reportPreparing: 'hazırlanıyor...',
+    reportRequestTimeout: 'Rapor hazırlanması çok uzun sürdü. Lütfen tekrar deneyin.',
     sessionMissing: 'Oturum bulunamadı. Tekrar giriş yap.',
     reportUrlFailed: 'Rapor linki alınamadı: ',
     pdfUrlEmpty: 'PDF linki boş geldi.',
@@ -75,9 +79,14 @@ const LANGUAGES = {
     reportPageTitle: 'Rapor Görüntüleyici',
     reportPagePreparing: 'Rapor hazırlanıyor...',
     pleaseWait: 'Lütfen bekleyin.',
+    openPdf: 'PDF’i Aç',
+    sharePdf: 'PDF Olarak Paylaş',
     share: 'Paylaş',
     refresh: 'Yenile',
     close: 'Kapat',
+    pdfPreparing: 'PDF hazırlanıyor...',
+    pdfFetchFailed: 'PDF alınamadı.',
+    shareFailed: 'Paylaşım yapılamadı.',
     shareNotSupported: 'PDF paylaşımı desteklenmiyor. Link kopyalandı.',
     reportCouldNotLoad: 'Rapor yüklenemedi.',
   },
@@ -99,6 +108,8 @@ const LANGUAGES = {
     closeCamera: 'Close Camera',
     cameraOpening: 'Opening camera...',
     showBarcode: 'Show the barcode to the camera.',
+    alignBarcode: 'Align the barcode inside the frame.',
+    cameraHint: 'For clear scanning, keep the barcode parallel to the frame in good light.',
     cameraAreaMissing: 'Camera area not found.',
     cameraError: 'Camera could not be opened: ',
     barcodeRead: 'Barcode read',
@@ -115,6 +126,7 @@ const LANGUAGES = {
     logoutSuccess: 'Logged out.',
     barcodeRequired: 'Barcode is required first.',
     reportPreparing: 'is preparing...',
+    reportRequestTimeout: 'Report preparation took too long. Please try again.',
     sessionMissing: 'Session not found. Please login again.',
     reportUrlFailed: 'Report link could not be received: ',
     pdfUrlEmpty: 'PDF link is empty.',
@@ -127,9 +139,14 @@ const LANGUAGES = {
     reportPageTitle: 'Report Viewer',
     reportPagePreparing: 'Report is preparing...',
     pleaseWait: 'Please wait.',
+    openPdf: 'Open PDF',
+    sharePdf: 'Share as PDF',
     share: 'Share',
     refresh: 'Refresh',
     close: 'Close',
+    pdfPreparing: 'Preparing PDF...',
+    pdfFetchFailed: 'PDF could not be received.',
+    shareFailed: 'Sharing failed.',
     shareNotSupported: 'PDF sharing is not supported. Link copied.',
     reportCouldNotLoad: 'Report could not be loaded.',
   },
@@ -151,6 +168,8 @@ const LANGUAGES = {
     closeCamera: 'إغلاق الكاميرا',
     cameraOpening: 'جارٍ فتح الكاميرا...',
     showBarcode: 'اعرض الباركود أمام الكاميرا.',
+    alignBarcode: 'ضع الباركود داخل الإطار.',
+    cameraHint: 'للقراءة بوضوح، اجعل الباركود موازيًا للإطار وفي إضاءة جيدة.',
     cameraAreaMissing: 'لم يتم العثور على مساحة الكاميرا.',
     cameraError: 'تعذر فتح الكاميرا: ',
     barcodeRead: 'تمت قراءة الباركود',
@@ -167,6 +186,7 @@ const LANGUAGES = {
     logoutSuccess: 'تم تسجيل الخروج.',
     barcodeRequired: 'يجب إدخال الباركود أولاً.',
     reportPreparing: 'قيد التحضير...',
+    reportRequestTimeout: 'استغرق تجهيز التقرير وقتًا طويلاً. يرجى المحاولة مرة أخرى.',
     sessionMissing: 'لم يتم العثور على الجلسة. سجّل الدخول مرة أخرى.',
     reportUrlFailed: 'تعذر الحصول على رابط التقرير: ',
     pdfUrlEmpty: 'رابط PDF فارغ.',
@@ -179,17 +199,46 @@ const LANGUAGES = {
     reportPageTitle: 'عارض التقرير',
     reportPagePreparing: 'جارٍ تجهيز التقرير...',
     pleaseWait: 'يرجى الانتظار.',
+    openPdf: 'فتح PDF',
+    sharePdf: 'مشاركة كملف PDF',
     share: 'مشاركة',
     refresh: 'تحديث',
     close: 'إغلاق',
+    pdfPreparing: 'جارٍ تجهيز PDF...',
+    pdfFetchFailed: 'تعذر الحصول على PDF.',
+    shareFailed: 'تعذرت المشاركة.',
     shareNotSupported: 'مشاركة PDF غير مدعومة. تم نسخ الرابط.',
     reportCouldNotLoad: 'تعذر تحميل التقرير.',
   },
 }
 
+const escapeHtml = (value) => {
+  return String(value || '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#039;')
+}
+
+const fetchWithTimeout = async (url, options = {}, timeoutMs = REPORT_TIMEOUT_MS) => {
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
+
+  try {
+    return await fetch(url, {
+      ...options,
+      signal: controller.signal,
+    })
+  } finally {
+    clearTimeout(timeoutId)
+  }
+}
+
 function App() {
   const videoRef = useRef(null)
   const scannerControlsRef = useRef(null)
+  const scannerResultHandledRef = useRef(false)
 
   const [language, setLanguage] = useState(() => {
     return localStorage.getItem(LANGUAGE_KEY) || 'tr'
@@ -234,7 +283,9 @@ function App() {
     localStorage.removeItem(SESSION_STARTED_AT_KEY)
   }
 
-  function stopScanner() {
+  function stopScanner(options = {}) {
+    const { keepResultHandled = false } = options
+
     try {
       if (scannerControlsRef.current) {
         scannerControlsRef.current.stop()
@@ -242,6 +293,19 @@ function App() {
       }
     } catch (err) {
       console.log('Scanner stop error:', err)
+    }
+
+    try {
+      if (videoRef.current && videoRef.current.srcObject) {
+        videoRef.current.srcObject.getTracks().forEach((track) => track.stop())
+        videoRef.current.srcObject = null
+      }
+    } catch (err) {
+      console.log('Camera stream stop error:', err)
+    }
+
+    if (!keepResultHandled) {
+      scannerResultHandledRef.current = false
     }
 
     setScannerOpen(false)
@@ -331,10 +395,131 @@ function App() {
       .replace(/[\\/:*?"<>|]/g, '_')
       .replace(/\s+/g, '_')
       .replace(/_+/g, '_')
-      .replace(/^_+|_+$/g, '')
+      .replace(/^_+|_+$/g, '') || 'report'
   }
 
-  const writeReportWindow = (reportWindow, reportName, pdfUrl, barcodeValue) => {
+  const writeReportStatusWindow = (reportWindow, title, detail, type = 'loading') => {
+    if (!reportWindow) {
+      return
+    }
+
+    const safeTitle = escapeHtml(title)
+    const safeDetail = escapeHtml(detail)
+    const safeClose = escapeHtml(t.close)
+    const isError = type === 'error'
+
+    reportWindow.document.open()
+    reportWindow.document.write(`
+      <!doctype html>
+      <html lang="${language}" dir="${isArabic ? 'rtl' : 'ltr'}">
+        <head>
+          <title>${safeTitle}</title>
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <style>
+            * {
+              box-sizing: border-box;
+            }
+
+            body {
+              margin: 0;
+              min-height: 100vh;
+              font-family: Arial, sans-serif;
+              background: #ffffff;
+              color: #111827;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              padding: 20px;
+            }
+
+            .box {
+              width: 100%;
+              max-width: 440px;
+              background: white;
+              border: 1px solid #e5e7eb;
+              border-radius: 22px;
+              padding: 24px;
+              box-shadow: 0 18px 50px rgba(17, 24, 39, 0.14);
+              text-align: center;
+            }
+
+            .loader {
+              width: 46px;
+              height: 46px;
+              margin: 0 auto 18px;
+              border-radius: 999px;
+              border: 5px solid #e5e7eb;
+              border-top-color: ${isError ? '#b91c1c' : '#17324d'};
+              animation: spin 1s linear infinite;
+            }
+
+            .errorIcon {
+              width: 48px;
+              height: 48px;
+              margin: 0 auto 18px;
+              border-radius: 999px;
+              background: #fee2e2;
+              color: #b91c1c;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              font-size: 28px;
+              font-weight: 900;
+            }
+
+            h2 {
+              margin: 0 0 10px;
+              font-size: 22px;
+              color: #17324d;
+            }
+
+            p {
+              margin: 0;
+              color: #6b7280;
+              line-height: 1.45;
+              word-break: break-word;
+            }
+
+            button {
+              display: block;
+              width: 100%;
+              margin-top: 18px;
+              padding: 15px;
+              border: none;
+              border-radius: 15px;
+              background: #b91c1c;
+              color: white;
+              font-size: 16px;
+              font-weight: 900;
+              cursor: pointer;
+            }
+
+            @keyframes spin {
+              to {
+                transform: rotate(360deg);
+              }
+            }
+          </style>
+        </head>
+
+        <body>
+          <div class="box">
+            ${isError ? '<div class="errorIcon">!</div>' : '<div class="loader"></div>'}
+            <h2>${safeTitle}</h2>
+            <p>${safeDetail}</p>
+            ${
+              isError
+                ? `<button onclick="window.close()">${safeClose}</button>`
+                : ''
+            }
+          </div>
+        </body>
+      </html>
+    `)
+    reportWindow.document.close()
+  }
+
+  const writeShareWindow = (reportWindow, reportName, pdfUrl, barcodeValue) => {
     const safeReportName = sanitizePdfFileName(reportName)
     const safeBarcode = sanitizePdfFileName(barcodeValue)
     const pdfFileName = `${safeReportName}_${safeBarcode}.pdf`
@@ -342,22 +527,9 @@ function App() {
     const pdfFileUrl =
       `${makePdfProxyUrl(pdfUrl)}&filename=${encodeURIComponent(pdfFileName)}`
 
-    const pdfViewUrl =
-      `${pdfFileUrl}#view=Fit&zoom=page-fit&toolbar=0&navpanes=0&scrollbar=1`
-
-    const payload = {
-      preparing: t.reportPagePreparing,
-      pleaseWait: t.pleaseWait,
-      share: t.share,
-      refresh: t.refresh,
-      close: t.close,
-      shareNotSupported: t.shareNotSupported,
-      reportCouldNotLoad: t.reportCouldNotLoad,
-      reportName,
-      pdfFileName,
-      pdfFileUrl,
-      pdfViewUrl,
-      isArabic,
+    if (!reportWindow) {
+      window.location.href = pdfFileUrl
+      return
     }
 
     reportWindow.document.open()
@@ -365,162 +537,142 @@ function App() {
       <!doctype html>
       <html lang="${language}" dir="${isArabic ? 'rtl' : 'ltr'}">
         <head>
-          <title>${payload.reportName}</title>
-          <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
+          <title>${escapeHtml(reportName)}</title>
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
           <style>
             * {
               box-sizing: border-box;
             }
 
-            html,
             body {
               margin: 0;
-              padding: 0;
-              width: 100%;
-              min-height: 100%;
+              min-height: 100vh;
               font-family: Arial, sans-serif;
-              background: white;
+              background: #ffffff;
               color: #111827;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              padding: 20px;
             }
 
-            body {
-              overflow: hidden;
-            }
-
-            .viewer {
-              position: fixed;
-              inset: 0;
-              width: 100vw;
-              height: 100dvh;
+            .box {
+              width: 100%;
+              max-width: 430px;
               background: white;
+              border: 1px solid #e5e7eb;
+              border-radius: 22px;
+              padding: 24px;
+              box-shadow: 0 18px 50px rgba(17, 24, 39, 0.14);
+              text-align: center;
             }
 
-            iframe {
+            .badge {
+              display: inline-block;
+              margin-bottom: 12px;
+              padding: 8px 12px;
+              border-radius: 999px;
+              background: #f3f4f6;
+              color: #17324d;
+              font-size: 12px;
+              font-weight: 900;
+            }
+
+            h2 {
+              margin: 0 0 8px;
+              font-size: 22px;
+              color: #17324d;
+            }
+
+            p {
+              margin: 0 0 20px;
+              color: #6b7280;
+              line-height: 1.45;
+              word-break: break-word;
+            }
+
+            button,
+            a {
               display: block;
               width: 100%;
-              height: 100%;
+              margin-top: 12px;
+              padding: 15px;
               border: none;
-              background: white;
-            }
-
-            .status {
-              position: fixed;
-              top: 12px;
-              left: 50%;
-              transform: translateX(-50%);
-              z-index: 20;
-              padding: 9px 13px;
-              border-radius: 999px;
-              text-align: center;
-              font-size: 13px;
-              font-weight: 800;
-              color: #111827;
-              background: rgba(255, 255, 255, 0.92);
-              box-shadow: 0 10px 24px rgba(15, 23, 42, 0.14);
-            }
-
-            .floatingActions {
-              position: fixed;
-              left: 12px;
-              right: 12px;
-              bottom: calc(env(safe-area-inset-bottom) + 12px);
-              z-index: 30;
-              display: flex;
-              gap: 8px;
-              padding: 8px;
-              border-radius: 18px;
-              background: rgba(255, 255, 255, 0.92);
-              box-shadow: 0 16px 36px rgba(15, 23, 42, 0.22);
-              backdrop-filter: blur(14px);
-            }
-
-            .floatingActions button {
-              flex: 1;
-              border: none;
-              border-radius: 13px;
-              padding: 12px 8px;
+              border-radius: 15px;
               color: white;
+              font-size: 16px;
               font-weight: 900;
-              font-size: 13px;
+              text-decoration: none;
               cursor: pointer;
+            }
+
+            .openBtn {
+              background: #17324d;
             }
 
             .shareBtn {
               background: #0f766e;
             }
 
-            .refreshBtn {
-              background: #1d4ed8;
-            }
-
             .closeBtn {
               background: #b91c1c;
+            }
+
+            .status {
+              min-height: 20px;
+              margin-top: 14px;
+              font-weight: 900;
+              color: #b91c1c;
+              line-height: 1.4;
             }
           </style>
         </head>
 
         <body>
-          <div class="viewer">
-            <iframe id="pdfFrame" src="${payload.pdfViewUrl}" allow="fullscreen"></iframe>
-          </div>
+          <div class="box">
+            <span class="badge">PDF</span>
+            <h2>${escapeHtml(reportName)}</h2>
+            <p>${escapeHtml(pdfFileName)}</p>
 
-          <div id="status" class="status">${payload.preparing} ${payload.pleaseWait}</div>
+            <a class="openBtn" href="${pdfFileUrl}" target="_blank" rel="noopener">
+              ${escapeHtml(t.openPdf)}
+            </a>
 
-          <div class="floatingActions">
-            <button id="shareBtn" class="shareBtn">${payload.share}</button>
-            <button id="refreshBtn" class="refreshBtn">${payload.refresh}</button>
-            <button id="closeBtn" class="closeBtn">${payload.close}</button>
+            <button id="shareBtn" class="shareBtn">
+              ${escapeHtml(t.sharePdf)}
+            </button>
+
+            <button id="closeBtn" class="closeBtn">
+              ${escapeHtml(t.close)}
+            </button>
+
+            <div id="status" class="status"></div>
           </div>
 
           <script>
-            const pdfFileUrl = ${JSON.stringify(payload.pdfFileUrl)}
-            const pdfViewUrl = ${JSON.stringify(payload.pdfViewUrl)}
-            const pdfFileName = ${JSON.stringify(payload.pdfFileName)}
-            const reportName = ${JSON.stringify(payload.reportName)}
-            const shareNotSupported = ${JSON.stringify(payload.shareNotSupported)}
-            const reportCouldNotLoad = ${JSON.stringify(payload.reportCouldNotLoad)}
-            const preparing = ${JSON.stringify(payload.preparing)}
+            const pdfFileUrl = ${JSON.stringify(pdfFileUrl)}
+            const pdfFileName = ${JSON.stringify(pdfFileName)}
+            const reportName = ${JSON.stringify(reportName)}
+            const pdfPreparing = ${JSON.stringify(t.pdfPreparing)}
+            const pdfFetchFailed = ${JSON.stringify(t.pdfFetchFailed)}
+            const shareFailed = ${JSON.stringify(t.shareFailed)}
+            const shareNotSupported = ${JSON.stringify(t.shareNotSupported)}
 
-            let cachedPdfBlob = null
-
-            const statusEl = document.getElementById('status')
-            const pdfFrame = document.getElementById('pdfFrame')
             const shareBtn = document.getElementById('shareBtn')
-            const refreshBtn = document.getElementById('refreshBtn')
             const closeBtn = document.getElementById('closeBtn')
-
-            async function getPdfBlob() {
-              if (cachedPdfBlob) {
-                return cachedPdfBlob
-              }
-
-              const response = await fetch(pdfFileUrl)
-
-              if (!response.ok) {
-                throw new Error(reportCouldNotLoad)
-              }
-
-              cachedPdfBlob = await response.blob()
-              return cachedPdfBlob
-            }
-
-            pdfFrame.addEventListener('load', () => {
-              setTimeout(() => {
-                statusEl.style.display = 'none'
-              }, 500)
-            })
-
-            pdfFrame.addEventListener('error', () => {
-              statusEl.textContent = reportCouldNotLoad
-              statusEl.style.display = 'block'
-            })
+            const statusEl = document.getElementById('status')
 
             shareBtn.addEventListener('click', async () => {
               try {
-                statusEl.style.display = 'block'
-                statusEl.textContent = preparing
+                statusEl.textContent = pdfPreparing
 
-                const blob = await getPdfBlob()
+                const response = await fetch(pdfFileUrl)
+
+                if (!response.ok) {
+                  throw new Error(pdfFetchFailed + ' HTTP ' + response.status)
+                }
+
+                const blob = await response.blob()
                 const file = new File([blob], pdfFileName, {
                   type: 'application/pdf'
                 })
@@ -531,33 +683,23 @@ function App() {
                     text: pdfFileName,
                     files: [file]
                   })
+
+                  statusEl.textContent = ''
                 } else if (navigator.share) {
                   await navigator.share({
                     title: reportName,
                     text: pdfFileName,
                     url: pdfFileUrl
                   })
+
+                  statusEl.textContent = ''
                 } else {
                   await navigator.clipboard.writeText(pdfFileUrl)
-                  alert(shareNotSupported)
+                  statusEl.textContent = shareNotSupported
                 }
-
-                statusEl.style.display = 'none'
               } catch (err) {
-                statusEl.textContent = err.message || reportCouldNotLoad
-                statusEl.style.display = 'block'
+                statusEl.textContent = err.message || shareFailed
               }
-            })
-
-            refreshBtn.addEventListener('click', () => {
-              cachedPdfBlob = null
-              statusEl.style.display = 'block'
-              statusEl.textContent = preparing
-              pdfFrame.src =
-                pdfFileUrl +
-                '&t=' +
-                Date.now() +
-                '#view=Fit&zoom=page-fit&toolbar=0&navpanes=0&scrollbar=1'
             })
 
             closeBtn.addEventListener('click', () => {
@@ -572,6 +714,12 @@ function App() {
 
   useEffect(() => {
     setBarcodeHistory(loadBarcodeHistory())
+  }, [])
+
+  useEffect(() => {
+    return () => {
+      stopScanner()
+    }
   }, [])
 
   useEffect(() => {
@@ -681,8 +829,41 @@ function App() {
     return () => clearInterval(intervalId)
   }, [userProfile?.id, language])
 
+  const improveCameraTrack = async () => {
+    try {
+      const stream = videoRef.current?.srcObject
+
+      if (!stream) {
+        return
+      }
+
+      const track = stream.getVideoTracks()[0]
+
+      if (!track || !track.getCapabilities || !track.applyConstraints) {
+        return
+      }
+
+      const capabilities = track.getCapabilities()
+      const advanced = []
+
+      if (
+        capabilities.focusMode &&
+        Array.isArray(capabilities.focusMode) &&
+        capabilities.focusMode.includes('continuous')
+      ) {
+        advanced.push({ focusMode: 'continuous' })
+      }
+
+      if (advanced.length > 0) {
+        await track.applyConstraints({ advanced })
+      }
+    } catch (err) {
+      console.log('Camera improve skipped:', err)
+    }
+  }
+
   const startScanner = async () => {
-    if (scannerControlsRef.current) {
+    if (scannerControlsRef.current || scannerOpen) {
       stopScanner()
       return
     }
@@ -690,6 +871,7 @@ function App() {
     setMessage('')
     setScannerOpen(true)
     setScannerMessage(t.cameraOpening)
+    scannerResultHandledRef.current = false
 
     setTimeout(async () => {
       try {
@@ -701,47 +883,83 @@ function App() {
         }
 
         const codeReader = new BrowserMultiFormatReader()
-        const videoInputDevices = await BrowserCodeReader.listVideoInputDevices()
 
-        let selectedDeviceId = undefined
+        const handleScanResult = (result, error, controlsFromCallback) => {
+          if (!result || scannerResultHandledRef.current) {
+            return
+          }
 
-        if (videoInputDevices && videoInputDevices.length > 0) {
-          const backCamera = videoInputDevices.find((device) => {
-            const label = device.label || ''
-            return /back|rear|environment|arka/i.test(label)
-          })
+          scannerResultHandledRef.current = true
 
-          selectedDeviceId =
-            backCamera?.deviceId ||
-            videoInputDevices[videoInputDevices.length - 1]?.deviceId
+          const scannedText = result.getText()
+
+          setBarcode(scannedText)
+          saveBarcodeToHistory(scannedText)
+          setMessage(`${t.barcodeRead}: ${scannedText}`)
+
+          if (navigator.vibrate) {
+            navigator.vibrate([120, 50, 120])
+          }
+
+          try {
+            if (controlsFromCallback) {
+              controlsFromCallback.stop()
+            }
+          } catch (err) {
+            console.log('Scanner callback stop error:', err)
+          }
+
+          scannerControlsRef.current = null
+          stopScanner({ keepResultHandled: true })
         }
 
-        const controls = await codeReader.decodeFromVideoDevice(
-          selectedDeviceId,
-          videoRef.current,
-          (result, error, controlsFromCallback) => {
-            if (result) {
-              const scannedText = result.getText()
+        const constraints = {
+          audio: false,
+          video: {
+            facingMode: { ideal: 'environment' },
+            width: { ideal: 1920 },
+            height: { ideal: 1080 },
+          },
+        }
 
-              setBarcode(scannedText)
-              saveBarcodeToHistory(scannedText)
-              setMessage(`${t.barcodeRead}: ${scannedText}`)
+        let controls
 
-              try {
-                controlsFromCallback.stop()
-              } catch (err) {
-                console.log('Scanner callback stop error:', err)
-              }
+        try {
+          controls = await codeReader.decodeFromConstraints(
+            constraints,
+            videoRef.current,
+            handleScanResult
+          )
+        } catch (constraintError) {
+          console.log('decodeFromConstraints failed, trying device list:', constraintError)
 
-              scannerControlsRef.current = null
-              setScannerOpen(false)
-              setScannerMessage('')
-            }
+          const videoInputDevices = await BrowserCodeReader.listVideoInputDevices()
+          let selectedDeviceId = undefined
+
+          if (videoInputDevices && videoInputDevices.length > 0) {
+            const backCamera = videoInputDevices.find((device) => {
+              const label = device.label || ''
+              return /back|rear|environment|arka|camera 0/i.test(label)
+            })
+
+            selectedDeviceId =
+              backCamera?.deviceId ||
+              videoInputDevices[videoInputDevices.length - 1]?.deviceId
           }
-        )
+
+          controls = await codeReader.decodeFromVideoDevice(
+            selectedDeviceId,
+            videoRef.current,
+            handleScanResult
+          )
+        }
 
         scannerControlsRef.current = controls
-        setScannerMessage(t.showBarcode)
+        setScannerMessage(t.alignBarcode)
+
+        setTimeout(() => {
+          improveCameraTrack()
+        }, 700)
       } catch (err) {
         scannerControlsRef.current = null
         setScannerOpen(false)
@@ -808,7 +1026,7 @@ function App() {
         user_id: userId,
         event_type: 'login',
         device_name: getDeviceName(),
-        app_version: 'web-v1.8',
+        app_version: 'web-v1.9',
       })
 
       setUserProfile(profileData)
@@ -853,36 +1071,12 @@ function App() {
 
     const reportWindow = window.open('', '_blank')
 
-    if (reportWindow) {
-      reportWindow.document.write(`
-        <html>
-          <head>
-            <title>${t.reportPagePreparing}</title>
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <style>
-              body {
-                font-family: Arial, sans-serif;
-                padding: 30px;
-                text-align: center;
-                background: white;
-              }
-              .box {
-                background: white;
-                padding: 25px;
-                border-radius: 16px;
-                box-shadow: 0 8px 24px rgba(0,0,0,0.12);
-              }
-            </style>
-          </head>
-          <body>
-            <div class="box">
-              <h2>${t.reportPagePreparing}</h2>
-              <p>${t.pleaseWait}</p>
-            </div>
-          </body>
-        </html>
-      `)
-    }
+    writeReportStatusWindow(
+      reportWindow,
+      t.reportPagePreparing,
+      `${reportName} ${t.reportPreparing}\n${t.pleaseWait}`,
+      'loading'
+    )
 
     setLoading(true)
     setSelectedReportCode(report.code)
@@ -893,7 +1087,10 @@ function App() {
       const userId = sessionData?.session?.user?.id
 
       if (!userId) {
-        if (reportWindow) reportWindow.close()
+        if (reportWindow) {
+          writeReportStatusWindow(reportWindow, t.reportCouldNotLoad, t.sessionMissing, 'error')
+        }
+
         clearLocalSession()
         setMessage(t.sessionMissing)
         setUserProfile(null)
@@ -902,7 +1099,7 @@ function App() {
         return
       }
 
-      const response = await fetch(`${API_BASE_URL}/api/report-url`, {
+      const response = await fetchWithTimeout(`${API_BASE_URL}/api/report-url`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -913,11 +1110,28 @@ function App() {
         }),
       })
 
-      const result = await response.json()
+      const responseText = await response.text()
+      let result = {}
+
+      try {
+        result = JSON.parse(responseText)
+      } catch (err) {
+        result = {
+          error: responseText || 'Unknown error',
+        }
+      }
 
       if (!response.ok) {
-        if (reportWindow) reportWindow.close()
-        setMessage(t.reportUrlFailed + (result.error || 'Unknown error'))
+        const errorText =
+          t.reportUrlFailed +
+          (result.error || 'Unknown error') +
+          ` (${report.code} - ${cleanBarcode})`
+
+        if (reportWindow) {
+          writeReportStatusWindow(reportWindow, t.reportCouldNotLoad, errorText, 'error')
+        }
+
+        setMessage(errorText)
         setLoading(false)
         setSelectedReportCode('')
         return
@@ -926,8 +1140,13 @@ function App() {
       const pdfUrl = result.pdfUrl
 
       if (!pdfUrl) {
-        if (reportWindow) reportWindow.close()
-        setMessage(t.pdfUrlEmpty)
+        const errorText = `${t.pdfUrlEmpty} (${report.code} - ${cleanBarcode})`
+
+        if (reportWindow) {
+          writeReportStatusWindow(reportWindow, t.reportCouldNotLoad, errorText, 'error')
+        }
+
+        setMessage(errorText)
         setLoading(false)
         setSelectedReportCode('')
         return
@@ -939,189 +1158,35 @@ function App() {
         report_code: report.code,
         report_name: reportName,
         device_name: getDeviceName(),
-        app_version: 'web-v1.8',
+        app_version: 'web-v1.9',
       })
 
       if (logError) {
-        if (reportWindow) reportWindow.close()
-        setMessage(t.reportLogFailed + logError.message)
+        const errorText = t.reportLogFailed + logError.message
+
+        if (reportWindow) {
+          writeReportStatusWindow(reportWindow, t.reportCouldNotLoad, errorText, 'error')
+        }
+
+        setMessage(errorText)
         setLoading(false)
         setSelectedReportCode('')
         return
       }
 
-   const safeReportName = sanitizePdfFileName(reportName)
-const safeBarcode = sanitizePdfFileName(cleanBarcode)
-const pdfFileName = `${safeReportName}_${safeBarcode}.pdf`
-
-const pdfFileUrl =
-  `${makePdfProxyUrl(pdfUrl)}&filename=${encodeURIComponent(pdfFileName)}`
-
-if (reportWindow) {
-  reportWindow.document.open()
-  reportWindow.document.write(`
-    <!doctype html>
-    <html lang="${language}" dir="${isArabic ? 'rtl' : 'ltr'}">
-      <head>
-        <title>${reportName}</title>
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <style>
-          * {
-            box-sizing: border-box;
-          }
-
-          body {
-            margin: 0;
-            min-height: 100vh;
-            font-family: Arial, sans-serif;
-            background: #ffffff;
-            color: #111827;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            padding: 20px;
-          }
-
-          .box {
-            width: 100%;
-            max-width: 420px;
-            background: white;
-            border: 1px solid #e5e7eb;
-            border-radius: 22px;
-            padding: 24px;
-            box-shadow: 0 18px 50px rgba(17, 24, 39, 0.14);
-            text-align: center;
-          }
-
-          h2 {
-            margin: 0 0 8px;
-            font-size: 22px;
-            color: #17324d;
-          }
-
-          p {
-            margin: 0 0 20px;
-            color: #6b7280;
-            word-break: break-word;
-          }
-
-          button, a {
-            display: block;
-            width: 100%;
-            margin-top: 12px;
-            padding: 15px;
-            border: none;
-            border-radius: 15px;
-            color: white;
-            font-size: 16px;
-            font-weight: 900;
-            text-decoration: none;
-            cursor: pointer;
-          }
-
-          .openBtn {
-            background: #17324d;
-          }
-
-          .shareBtn {
-            background: #0f766e;
-          }
-
-          .closeBtn {
-            background: #b91c1c;
-          }
-
-          .status {
-            margin-top: 14px;
-            font-weight: bold;
-            color: #b91c1c;
-          }
-        </style>
-      </head>
-
-      <body>
-        <div class="box">
-          <h2>${reportName}</h2>
-          <p>${pdfFileName}</p>
-
-         <a class="openBtn" href="${pdfFileUrl}" target="_blank" rel="noopener">
-  PDF’i Aç
-</a>
-          <button id="shareBtn" class="shareBtn">
-            PDF Olarak Paylaş
-          </button>
-
-          <button id="closeBtn" class="closeBtn">
-            Kapat
-          </button>
-
-          <div id="status" class="status"></div>
-        </div>
-
-        <script>
-          const pdfFileUrl = ${JSON.stringify(pdfFileUrl)}
-          const pdfFileName = ${JSON.stringify(pdfFileName)}
-          const reportName = ${JSON.stringify(reportName)}
-
-          const shareBtn = document.getElementById('shareBtn')
-          const closeBtn = document.getElementById('closeBtn')
-          const statusEl = document.getElementById('status')
-
-          shareBtn.addEventListener('click', async () => {
-            try {
-              statusEl.textContent = 'PDF hazırlanıyor...'
-
-              const response = await fetch(pdfFileUrl)
-
-              if (!response.ok) {
-                throw new Error('PDF alınamadı.')
-              }
-
-              const blob = await response.blob()
-              const file = new File([blob], pdfFileName, {
-                type: 'application/pdf'
-              })
-
-              if (navigator.canShare && navigator.canShare({ files: [file] })) {
-                await navigator.share({
-                  title: reportName,
-                  text: pdfFileName,
-                  files: [file]
-                })
-
-                statusEl.textContent = ''
-              } else if (navigator.share) {
-                await navigator.share({
-                  title: reportName,
-                  text: pdfFileName,
-                  url: pdfFileUrl
-                })
-
-                statusEl.textContent = ''
-              } else {
-                await navigator.clipboard.writeText(pdfFileUrl)
-                statusEl.textContent = 'PDF paylaşımı desteklenmedi. Link kopyalandı.'
-              }
-            } catch (err) {
-              statusEl.textContent = err.message || 'Paylaşım yapılamadı.'
-            }
-          })
-
-          closeBtn.addEventListener('click', () => {
-            window.close()
-          })
-        </script>
-      </body>
-    </html>
-  `)
-  reportWindow.document.close()
-} else {
-  window.location.href = pdfFileUrl
-}
+      writeShareWindow(reportWindow, reportName, pdfUrl, cleanBarcode)
       setMessage(`${reportName} ${t.reportOpened}`)
     } catch (err) {
-      if (reportWindow) reportWindow.close()
-      setMessage(t.unexpectedError + err.message)
+      const errorText =
+        err.name === 'AbortError'
+          ? `${t.reportRequestTimeout} (${report.code} - ${cleanBarcode})`
+          : `${t.unexpectedError}${err.message}`
+
+      if (reportWindow) {
+        writeReportStatusWindow(reportWindow, t.reportCouldNotLoad, errorText, 'error')
+      }
+
+      setMessage(errorText)
     }
 
     setLoading(false)
@@ -1183,26 +1248,62 @@ if (reportWindow) {
             {scannerOpen ? t.cameraOpen : t.scanBarcode}
           </button>
 
-          <div className={scannerOpen ? 'scannerBox open' : 'scannerBox'}>
-            <video
-              ref={videoRef}
-              className="scannerVideo"
-              muted
-              playsInline
-            />
+          {scannerOpen && (
+            <div className="scannerOverlay">
+              <div className="scannerPanel">
+                <div className="scannerTop">
+                  <div>
+                    <strong>{t.cameraOpen}</strong>
+                    <span>{t.alignBarcode}</span>
+                  </div>
 
-            {scannerMessage && (
-              <p className="scannerMessage">{scannerMessage}</p>
-            )}
+                  <button
+                    type="button"
+                    className="scannerCloseSmall"
+                    onClick={stopScanner}
+                  >
+                    {t.close}
+                  </button>
+                </div>
 
-            <button
-              type="button"
-              className="stopScanButton"
-              onClick={stopScanner}
-            >
-              {t.closeCamera}
-            </button>
-          </div>
+                <div className="scannerViewport">
+                  <video
+                    ref={videoRef}
+                    className="scannerVideo"
+                    autoPlay
+                    muted
+                    playsInline
+                  />
+
+                  <div className="scannerShade"></div>
+
+                  <div className="scanFrame">
+                    <span className="corner cornerTopLeft"></span>
+                    <span className="corner cornerTopRight"></span>
+                    <span className="corner cornerBottomLeft"></span>
+                    <span className="corner cornerBottomRight"></span>
+                    <span className="scanLine"></span>
+                  </div>
+                </div>
+
+                <div className="scannerBottom">
+                  {scannerMessage && (
+                    <p className="scannerMessage">{scannerMessage}</p>
+                  )}
+
+                  <p className="scannerHint">{t.cameraHint}</p>
+
+                  <button
+                    type="button"
+                    className="stopScanButton"
+                    onClick={stopScanner}
+                  >
+                    {t.closeCamera}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
 
           {barcodeHistory.length > 0 && (
             <div className="historyBox">

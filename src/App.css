@@ -219,30 +219,182 @@ form button {
   background: linear-gradient(135deg, var(--danger), var(--danger-soft));
 }
 
-.scannerBox {
-  display: none;
-  margin-top: 16px;
-  padding: 13px;
-  background: #111827;
-  border-radius: 18px;
+.scannerOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 14px;
+  background: rgba(0, 0, 0, 0.88);
 }
 
-.scannerBox.open {
+.scannerPanel {
+  width: 100%;
+  max-width: 560px;
+  overflow: hidden;
+  border-radius: 24px;
+  background: #ffffff;
+  box-shadow: 0 26px 70px rgba(0, 0, 0, 0.45);
+}
+
+.scannerTop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px;
+  background: #ffffff;
+  color: var(--text);
+  border-bottom: 1px solid var(--border);
+}
+
+.scannerTop strong {
   display: block;
+  color: var(--primary);
+  font-size: 15px;
+  font-weight: 900;
+}
+
+.scannerTop span {
+  display: block;
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.scannerCloseSmall {
+  width: auto;
+  min-width: 82px;
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, var(--danger), var(--danger-soft));
+  font-size: 13px;
+  box-shadow: none;
+}
+
+.scannerViewport {
+  position: relative;
+  width: 100%;
+  height: 430px;
+  overflow: hidden;
+  background: black;
 }
 
 .scannerVideo {
   width: 100%;
-  max-height: 300px;
+  height: 100%;
+  object-fit: cover;
   background: black;
-  border-radius: 14px;
+}
+
+.scannerShade {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at center, transparent 0, transparent 34%, rgba(0, 0, 0, 0.40) 56%, rgba(0, 0, 0, 0.58) 100%);
+}
+
+.scanFrame {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 82%;
+  height: 190px;
+  transform: translate(-50%, -50%);
+  border: 2px solid rgba(255, 255, 255, 0.88);
+  border-radius: 18px;
+  box-shadow:
+    0 0 0 9999px rgba(0, 0, 0, 0.18),
+    0 0 24px rgba(15, 118, 110, 0.45);
+}
+
+.corner {
+  position: absolute;
+  width: 34px;
+  height: 34px;
+  border-color: #22c55e;
+  border-style: solid;
+}
+
+.cornerTopLeft {
+  top: -3px;
+  left: -3px;
+  border-width: 5px 0 0 5px;
+  border-top-left-radius: 18px;
+}
+
+.cornerTopRight {
+  top: -3px;
+  right: -3px;
+  border-width: 5px 5px 0 0;
+  border-top-right-radius: 18px;
+}
+
+.cornerBottomLeft {
+  bottom: -3px;
+  left: -3px;
+  border-width: 0 0 5px 5px;
+  border-bottom-left-radius: 18px;
+}
+
+.cornerBottomRight {
+  right: -3px;
+  bottom: -3px;
+  border-width: 0 5px 5px 0;
+  border-bottom-right-radius: 18px;
+}
+
+.scanLine {
+  position: absolute;
+  left: 8%;
+  right: 8%;
+  top: 50%;
+  height: 3px;
+  border-radius: 999px;
+  background: #22c55e;
+  box-shadow: 0 0 16px #22c55e;
+  animation: scanMove 1.55s infinite ease-in-out;
+}
+
+@keyframes scanMove {
+  0% {
+    top: 18%;
+  }
+
+  50% {
+    top: 82%;
+  }
+
+  100% {
+    top: 18%;
+  }
+}
+
+.scannerBottom {
+  padding: 14px;
+  background: #ffffff;
 }
 
 .scannerMessage {
-  margin: 10px 0 0;
-  color: white;
+  margin: 0;
+  color: var(--primary);
   text-align: center;
   font-weight: 900;
+  line-height: 1.4;
+}
+
+.scannerHint {
+  margin: 8px 0 0;
+  color: var(--muted);
+  text-align: center;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.45;
 }
 
 .stopScanButton {
@@ -301,6 +453,40 @@ form button {
 
 [dir="rtl"] .historyItem {
   text-align: right;
+}
+
+@media (max-width: 600px) {
+  .scannerOverlay {
+    padding: 0;
+  }
+
+  .scannerPanel {
+    width: 100%;
+    height: 100%;
+    max-width: none;
+    border-radius: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .scannerViewport {
+    flex: 1;
+    height: auto;
+    min-height: 420px;
+  }
+
+  .scanFrame {
+    width: 86%;
+    height: 178px;
+  }
+
+  .scannerTop {
+    padding-top: calc(env(safe-area-inset-top) + 12px);
+  }
+
+  .scannerBottom {
+    padding-bottom: calc(env(safe-area-inset-bottom) + 14px);
+  }
 }
 
 @media (max-width: 480px) {
