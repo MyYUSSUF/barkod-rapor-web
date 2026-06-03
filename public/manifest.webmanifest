@@ -1,10 +1,25 @@
 {
   "name": "Barkod Rapor Web",
   "short_name": "Barkod Rapor",
-  "description": "Barkod okutma ve rapor açma uygulaması",
+  "description": "Elvan Dyeing barkod okutma ve rapor görüntüleme uygulaması",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
   "background_color": "#f3f4f6",
   "theme_color": "#111827",
-  "orientation": "portrait"
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/app-icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/app-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
 }
