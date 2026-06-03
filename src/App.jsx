@@ -950,11 +950,18 @@ function App() {
         return
       }
 
-      if (reportWindow) {
-        writeReportWindow(reportWindow, reportName, pdfUrl, cleanBarcode)
-      } else {
-        window.location.href = makePdfProxyUrl(pdfUrl)
-      }
+     const safeReportName = sanitizePdfFileName(reportName)
+const safeBarcode = sanitizePdfFileName(cleanBarcode)
+const pdfFileName = `${safeReportName}_${safeBarcode}.pdf`
+
+const pdfFileUrl =
+  `${makePdfProxyUrl(pdfUrl)}&filename=${encodeURIComponent(pdfFileName)}`
+
+if (reportWindow) {
+  reportWindow.location.href = pdfFileUrl
+} else {
+  window.location.href = pdfFileUrl
+}
 
       setMessage(`${reportName} ${t.reportOpened}`)
     } catch (err) {
