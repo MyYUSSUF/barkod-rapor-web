@@ -343,7 +343,7 @@ function App() {
       `${makePdfProxyUrl(pdfUrl)}&filename=${encodeURIComponent(pdfFileName)}`
 
     const pdfViewUrl =
-      `${pdfFileUrl}#view=Fit&zoom=45&toolbar=0&navpanes=0&scrollbar=1`
+      `${pdfFileUrl}#view=FitH&toolbar=1&navpanes=0&scrollbar=1`
 
     const payload = {
       title: t.reportPageTitle,
@@ -367,7 +367,7 @@ function App() {
       <html lang="${language}" dir="${isArabic ? 'rtl' : 'ltr'}">
         <head>
           <title>${payload.reportName}</title>
-          <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
           <style>
             * {
               box-sizing: border-box;
@@ -380,25 +380,21 @@ function App() {
               width: 100%;
               height: 100%;
               font-family: Arial, sans-serif;
-              background: #525659;
+              background: #111827;
               color: #111827;
               overflow: hidden;
             }
 
-            :root {
-              --toolbar-height: 64px;
-              --pdf-scale: 0.68;
-            }
-
             .toolbar {
-              height: var(--toolbar-height);
+              height: 58px;
               display: flex;
               align-items: center;
               justify-content: space-between;
               gap: 10px;
-              padding: 10px 12px;
-              background: #111827;
+              padding: 8px 10px;
+              background: linear-gradient(135deg, #070b14, #111827);
               color: white;
+              border-bottom: 1px solid rgba(255,255,255,0.08);
             }
 
             .title {
@@ -408,7 +404,7 @@ function App() {
 
             .title strong {
               display: block;
-              font-size: 15px;
+              font-size: 14px;
               white-space: nowrap;
               overflow: hidden;
               text-overflow: ellipsis;
@@ -416,25 +412,28 @@ function App() {
 
             .title span {
               display: block;
-              font-size: 12px;
-              color: #d1d5db;
+              font-size: 11px;
+              color: #cbd5e1;
               margin-top: 3px;
+              white-space: nowrap;
+              overflow: hidden;
+              text-overflow: ellipsis;
             }
 
             .actions {
               display: flex;
-              gap: 8px;
+              gap: 7px;
               flex-shrink: 0;
             }
 
             button {
-              border: none;
+              border: 1px solid rgba(255,255,255,0.12);
               border-radius: 10px;
-              padding: 9px 10px;
-              background: white;
+              padding: 8px 9px;
+              background: rgba(255,255,255,0.94);
               color: #111827;
-              font-weight: bold;
-              font-size: 13px;
+              font-weight: 800;
+              font-size: 12px;
               cursor: pointer;
             }
 
@@ -447,39 +446,32 @@ function App() {
               position: fixed;
               left: 0;
               right: 0;
-              top: var(--toolbar-height);
+              top: 58px;
               z-index: 5;
-              padding: 10px;
+              padding: 9px;
               text-align: center;
-              font-size: 14px;
-              color: #374151;
-              background: #f3f4f6;
+              font-size: 13px;
+              color: #111827;
+              background: #f8fafc;
             }
 
             .viewer {
               width: 100%;
-              height: calc(100dvh - var(--toolbar-height));
-              overflow: hidden;
+              height: calc(100dvh - 58px);
               background: #525659;
             }
 
             iframe {
               display: block;
-              width: calc(100% / var(--pdf-scale));
-              height: calc((100dvh - var(--toolbar-height)) / var(--pdf-scale));
-              transform: scale(var(--pdf-scale));
-              transform-origin: top left;
+              width: 100%;
+              height: 100%;
               border: none;
               background: white;
             }
 
             @media (max-width: 480px) {
-              :root {
-                --toolbar-height: 106px;
-                --pdf-scale: 0.56;
-              }
-
               .toolbar {
+                height: 98px;
                 align-items: flex-start;
                 flex-direction: column;
               }
@@ -491,6 +483,14 @@ function App() {
               button {
                 flex: 1;
                 text-align: center;
+              }
+
+              .status {
+                top: 98px;
+              }
+
+              .viewer {
+                height: calc(100dvh - 98px);
               }
             }
           </style>
@@ -513,7 +513,7 @@ function App() {
           <div id="status" class="status">${payload.preparing} ${payload.pleaseWait}</div>
 
           <div class="viewer">
-            <iframe id="pdfFrame" src="${payload.pdfViewUrl}"></iframe>
+            <iframe id="pdfFrame" src="${payload.pdfViewUrl}" allow="fullscreen"></iframe>
           </div>
 
           <script>
@@ -599,7 +599,7 @@ function App() {
                 pdfFileUrl +
                 '&t=' +
                 Date.now() +
-                '#view=Fit&zoom=45&toolbar=0&navpanes=0&scrollbar=1'
+                '#view=FitH&toolbar=1&navpanes=0&scrollbar=1'
             })
 
             closeBtn.addEventListener('click', () => {
@@ -850,7 +850,7 @@ function App() {
         user_id: userId,
         event_type: 'login',
         device_name: getDeviceName(),
-        app_version: 'web-v1.6',
+        app_version: 'web-v1.7',
       })
 
       setUserProfile(profileData)
@@ -981,7 +981,7 @@ function App() {
         report_code: report.code,
         report_name: reportName,
         device_name: getDeviceName(),
-        app_version: 'web-v1.6',
+        app_version: 'web-v1.7',
       })
 
       if (logError) {
@@ -1011,6 +1011,8 @@ function App() {
   if (restoringSession) {
     return (
       <div className="page" dir={isArabic ? 'rtl' : 'ltr'}>
+        <div className="luxuryGlow"></div>
+
         <div className="card">
           <div className="topBar">
             <img src="/elvan-logo.png" alt="Elvan Dyeing" className="appLogo" />
@@ -1026,6 +1028,8 @@ function App() {
   if (userProfile) {
     return (
       <div className="page" dir={isArabic ? 'rtl' : 'ltr'}>
+        <div className="luxuryGlow"></div>
+
         <div className="card">
           <div className="topBar">
             <img src="/elvan-logo.png" alt="Elvan Dyeing" className="appLogo" />
@@ -1042,8 +1046,8 @@ function App() {
           </div>
 
           <div className="welcomeBox">
+            <span className="eyebrow">{t.appSubtitle}</span>
             <h1>{t.welcome}, {displayName}</h1>
-            <p>{t.appSubtitle}</p>
           </div>
 
           <label>{t.barcode}</label>
@@ -1142,6 +1146,8 @@ function App() {
 
   return (
     <div className="page" dir={isArabic ? 'rtl' : 'ltr'}>
+      <div className="luxuryGlow"></div>
+
       <div className="card">
         <div className="topBar">
           <img src="/elvan-logo.png" alt="Elvan Dyeing" className="appLogo" />
@@ -1157,8 +1163,11 @@ function App() {
           </select>
         </div>
 
-        <h1>{t.appTitle}</h1>
-        <p className="subtitle">{t.appSubtitle}</p>
+        <div className="loginHero">
+          <span className="eyebrow">ELVAN DYEING</span>
+          <h1>{t.appTitle}</h1>
+          <p className="subtitle">{t.appSubtitle}</p>
+        </div>
 
         <form onSubmit={handleLogin}>
           <label>{t.username}</label>
