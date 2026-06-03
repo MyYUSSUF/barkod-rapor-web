@@ -18,6 +18,16 @@ function convertInternalUrlToPublicIfNeeded(url) {
     .replace('https://10.64.46.5', BASE_URL)
 }
 
+function sanitizeFileName(value) {
+  const clean = value ? String(value).trim() : 'report.pdf'
+
+  return clean
+    .replace(/[\\/:*?"<>|]/g, '_')
+    .replace(/\s+/g, '_')
+    .replace(/_+/g, '_')
+    .replace(/^_+|_+$/g, '') || 'report.pdf'
+}
+
 export default async function handler(req, res) {
   try {
     if (req.method !== 'GET') {
@@ -25,6 +35,9 @@ export default async function handler(req, res) {
     }
 
     const rawUrl = Array.isArray(req.query.url) ? req.query.url[0] : req.query.url
+    const rawFileName = Array.isArray(req.query.filename)
+      ? req.query.filename[0]
+      : req.query.filename
 
     if (!rawUrl) {
       return res.status(400).send('PDF URL eksik.')
@@ -44,6 +57,12 @@ export default async function handler(req, res) {
 
     pdfUrl = convertInternalUrlToPublicIfNeeded(pdfUrl)
 
+    let fileName = sanitizeFileName(rawFileName || 'report.pdf')
+
+    if (!fileName.toLowerCase().endsWith('.pdf')) {
+      fileName += '.pdf'
+    }
+
     const response = await fetch(pdfUrl, {
       method: 'GET',
       headers: {
@@ -55,12 +74,14 @@ export default async function handler(req, res) {
       return res.status(response.status).send(`PDF alınamadı. HTTP ${response.status}`)
     }
 
-    const contentType = response.headers.get('content-type') || 'application/pdf'
     const arrayBuffer = await response.arrayBuffer()
     const buffer = Buffer.from(arrayBuffer)
 
-    res.setHeader('Content-Type', contentType)
-    res.setHeader('Content-Disposition', 'inline; filename="report.pdf"')
+    res.setHeader('Content-Type', 'application/pdf')
+    res.setHeader(
+      'Content-Disposition',
+      `inline; filename="${fileName}"; filename*=UTF-8''${encodeURIComponent(fileName)}`
+    )
     res.setHeader('Cache-Control', 'no-store')
 
     return res.status(200).send(buffer)

@@ -40,9 +40,6 @@ const LANGUAGES = {
     loggingIn: 'Giriş yapılıyor...',
     checkingSession: 'Oturum kontrol ediliyor...',
     welcome: 'Hoş geldiniz',
-    role: 'Rol',
-    status: 'Durum',
-    active: 'Aktif',
     barcode: 'Barkod',
     barcodePlaceholder: 'Barkodu gir veya okut',
     scanBarcode: 'Kamerayla Barkod Okut',
@@ -81,10 +78,8 @@ const LANGUAGES = {
     share: 'Paylaş',
     refresh: 'Yenile',
     close: 'Kapat',
-    openPdf: 'PDF Aç',
-    shareNotSupported: 'Paylaşım bu tarayıcıda desteklenmiyor.',
+    shareNotSupported: 'PDF paylaşımı desteklenmiyor. Link kopyalandı.',
     reportCouldNotLoad: 'Rapor yüklenemedi.',
-    chooseLanguage: 'Dil',
   },
   en: {
     appTitle: 'Barcode Report Web',
@@ -97,9 +92,6 @@ const LANGUAGES = {
     loggingIn: 'Logging in...',
     checkingSession: 'Checking session...',
     welcome: 'Welcome',
-    role: 'Role',
-    status: 'Status',
-    active: 'Active',
     barcode: 'Barcode',
     barcodePlaceholder: 'Enter or scan barcode',
     scanBarcode: 'Scan Barcode with Camera',
@@ -138,10 +130,8 @@ const LANGUAGES = {
     share: 'Share',
     refresh: 'Refresh',
     close: 'Close',
-    openPdf: 'Open PDF',
-    shareNotSupported: 'Sharing is not supported in this browser.',
+    shareNotSupported: 'PDF sharing is not supported. Link copied.',
     reportCouldNotLoad: 'Report could not be loaded.',
-    chooseLanguage: 'Language',
   },
   ar: {
     appTitle: 'نظام تقارير الباركود',
@@ -154,9 +144,6 @@ const LANGUAGES = {
     loggingIn: 'جارٍ تسجيل الدخول...',
     checkingSession: 'جارٍ التحقق من الجلسة...',
     welcome: 'أهلاً وسهلاً',
-    role: 'الدور',
-    status: 'الحالة',
-    active: 'نشط',
     barcode: 'الباركود',
     barcodePlaceholder: 'أدخل أو امسح الباركود',
     scanBarcode: 'مسح الباركود بالكاميرا',
@@ -195,10 +182,8 @@ const LANGUAGES = {
     share: 'مشاركة',
     refresh: 'تحديث',
     close: 'إغلاق',
-    openPdf: 'فتح PDF',
-    shareNotSupported: 'المشاركة غير مدعومة في هذا المتصفح.',
+    shareNotSupported: 'مشاركة PDF غير مدعومة. تم نسخ الرابط.',
     reportCouldNotLoad: 'تعذر تحميل التقرير.',
-    chooseLanguage: 'اللغة',
   },
 }
 
@@ -247,6 +232,20 @@ function App() {
 
   const clearLocalSession = () => {
     localStorage.removeItem(SESSION_STARTED_AT_KEY)
+  }
+
+  function stopScanner() {
+    try {
+      if (scannerControlsRef.current) {
+        scannerControlsRef.current.stop()
+        scannerControlsRef.current = null
+      }
+    } catch (err) {
+      console.log('Scanner stop error:', err)
+    }
+
+    setScannerOpen(false)
+    setScannerMessage('')
   }
 
   const resetUserState = () => {
@@ -322,26 +321,29 @@ function App() {
     setBarcodeHistory([])
   }
 
-  function stopScanner() {
-    try {
-      if (scannerControlsRef.current) {
-        scannerControlsRef.current.stop()
-        scannerControlsRef.current = null
-      }
-    } catch (err) {
-      console.log('Scanner stop error:', err)
-    }
-
-    setScannerOpen(false)
-    setScannerMessage('')
-  }
-
   const makePdfProxyUrl = (pdfUrl) => {
     return `${window.location.origin}/api/report-pdf?url=${encodeURIComponent(pdfUrl)}`
   }
 
-  const writeReportWindow = (reportWindow, reportName, pdfUrl) => {
-    const proxyUrl = `${makePdfProxyUrl(pdfUrl)}#view=Fit&zoom=page-fit&toolbar=0&navpanes=0&scrollbar=1`
+  const sanitizePdfFileName = (value) => {
+    return String(value || 'report')
+      .trim()
+      .replace(/[\\/:*?"<>|]/g, '_')
+      .replace(/\s+/g, '_')
+      .replace(/_+/g, '_')
+      .replace(/^_+|_+$/g, '')
+  }
+
+  const writeReportWindow = (reportWindow, reportName, pdfUrl, barcodeValue) => {
+    const safeReportName = sanitizePdfFileName(reportName)
+    const safeBarcode = sanitizePdfFileName(barcodeValue)
+    const pdfFileName = `${safeReportName}_${safeBarcode}.pdf`
+
+    const pdfFileUrl =
+      `${makePdfProxyUrl(pdfUrl)}&filename=${encodeURIComponent(pdfFileName)}`
+
+    const pdfViewUrl =
+      `${pdfFileUrl}#view=Fit&zoom=45&toolbar=0&navpanes=0&scrollbar=1`
 
     const payload = {
       title: t.reportPageTitle,
@@ -350,12 +352,12 @@ function App() {
       share: t.share,
       refresh: t.refresh,
       close: t.close,
-      openPdf: t.openPdf,
       shareNotSupported: t.shareNotSupported,
       reportCouldNotLoad: t.reportCouldNotLoad,
       reportName,
-      pdfUrl: proxyUrl,
-      originalPdfUrl: pdfUrl,
+      pdfFileName,
+      pdfFileUrl,
+      pdfViewUrl,
       isArabic,
     }
 
@@ -364,8 +366,8 @@ function App() {
       <!doctype html>
       <html lang="${language}" dir="${isArabic ? 'rtl' : 'ltr'}">
         <head>
-          <title>${payload.title}</title>
-          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>${payload.reportName}</title>
+          <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
           <style>
             * {
               box-sizing: border-box;
@@ -378,13 +380,18 @@ function App() {
               width: 100%;
               height: 100%;
               font-family: Arial, sans-serif;
-              background: #f3f4f6;
+              background: #525659;
               color: #111827;
               overflow: hidden;
             }
 
+            :root {
+              --toolbar-height: 64px;
+              --pdf-scale: 0.68;
+            }
+
             .toolbar {
-              height: 64px;
+              height: var(--toolbar-height);
               display: flex;
               align-items: center;
               justify-content: space-between;
@@ -440,7 +447,7 @@ function App() {
               position: fixed;
               left: 0;
               right: 0;
-              top: 64px;
+              top: var(--toolbar-height);
               z-index: 5;
               padding: 10px;
               text-align: center;
@@ -449,17 +456,30 @@ function App() {
               background: #f3f4f6;
             }
 
+            .viewer {
+              width: 100%;
+              height: calc(100dvh - var(--toolbar-height));
+              overflow: hidden;
+              background: #525659;
+            }
+
             iframe {
               display: block;
-              width: 100%;
-              height: calc(100dvh - 64px);
+              width: calc(100% / var(--pdf-scale));
+              height: calc((100dvh - var(--toolbar-height)) / var(--pdf-scale));
+              transform: scale(var(--pdf-scale));
+              transform-origin: top left;
               border: none;
               background: white;
             }
 
             @media (max-width: 480px) {
+              :root {
+                --toolbar-height: 106px;
+                --pdf-scale: 0.56;
+              }
+
               .toolbar {
-                height: 106px;
                 align-items: flex-start;
                 flex-direction: column;
               }
@@ -472,14 +492,6 @@ function App() {
                 flex: 1;
                 text-align: center;
               }
-
-              .status {
-                top: 106px;
-              }
-
-              iframe {
-                height: calc(100dvh - 106px);
-              }
             }
           </style>
         </head>
@@ -488,7 +500,7 @@ function App() {
           <div class="toolbar">
             <div class="title">
               <strong>${payload.reportName}</strong>
-              <span>${payload.title}</span>
+              <span>${payload.pdfFileName}</span>
             </div>
 
             <div class="actions">
@@ -500,19 +512,41 @@ function App() {
 
           <div id="status" class="status">${payload.preparing} ${payload.pleaseWait}</div>
 
-          <iframe id="pdfFrame" src="${payload.pdfUrl}"></iframe>
+          <div class="viewer">
+            <iframe id="pdfFrame" src="${payload.pdfViewUrl}"></iframe>
+          </div>
 
           <script>
-            const pdfUrl = ${JSON.stringify(payload.pdfUrl)}
+            const pdfFileUrl = ${JSON.stringify(payload.pdfFileUrl)}
+            const pdfViewUrl = ${JSON.stringify(payload.pdfViewUrl)}
+            const pdfFileName = ${JSON.stringify(payload.pdfFileName)}
             const reportName = ${JSON.stringify(payload.reportName)}
             const shareNotSupported = ${JSON.stringify(payload.shareNotSupported)}
             const reportCouldNotLoad = ${JSON.stringify(payload.reportCouldNotLoad)}
+            const preparing = ${JSON.stringify(payload.preparing)}
+
+            let cachedPdfBlob = null
 
             const statusEl = document.getElementById('status')
             const pdfFrame = document.getElementById('pdfFrame')
             const shareBtn = document.getElementById('shareBtn')
             const refreshBtn = document.getElementById('refreshBtn')
             const closeBtn = document.getElementById('closeBtn')
+
+            async function getPdfBlob() {
+              if (cachedPdfBlob) {
+                return cachedPdfBlob
+              }
+
+              const response = await fetch(pdfFileUrl)
+
+              if (!response.ok) {
+                throw new Error(reportCouldNotLoad)
+              }
+
+              cachedPdfBlob = await response.blob()
+              return cachedPdfBlob
+            }
 
             pdfFrame.addEventListener('load', () => {
               statusEl.style.display = 'none'
@@ -525,25 +559,47 @@ function App() {
 
             shareBtn.addEventListener('click', async () => {
               try {
-                if (navigator.share) {
+                statusEl.style.display = 'block'
+                statusEl.textContent = preparing
+
+                const blob = await getPdfBlob()
+                const file = new File([blob], pdfFileName, {
+                  type: 'application/pdf'
+                })
+
+                if (navigator.canShare && navigator.canShare({ files: [file] })) {
                   await navigator.share({
                     title: reportName,
-                    text: reportName,
-                    url: pdfUrl
+                    text: pdfFileName,
+                    files: [file]
+                  })
+                } else if (navigator.share) {
+                  await navigator.share({
+                    title: reportName,
+                    text: pdfFileName,
+                    url: pdfFileUrl
                   })
                 } else {
-                  await navigator.clipboard.writeText(pdfUrl)
+                  await navigator.clipboard.writeText(pdfFileUrl)
                   alert(shareNotSupported)
                 }
+
+                statusEl.style.display = 'none'
               } catch (err) {
-                console.log(err)
+                statusEl.textContent = err.message || reportCouldNotLoad
+                statusEl.style.display = 'block'
               }
             })
 
             refreshBtn.addEventListener('click', () => {
+              cachedPdfBlob = null
               statusEl.style.display = 'block'
-              statusEl.textContent = ${JSON.stringify(payload.preparing)}
-              pdfFrame.src = pdfUrl.split('#')[0] + '&t=' + Date.now() + '#view=Fit&zoom=page-fit&toolbar=0&navpanes=0&scrollbar=1'
+              statusEl.textContent = preparing
+              pdfFrame.src =
+                pdfFileUrl +
+                '&t=' +
+                Date.now() +
+                '#view=Fit&zoom=45&toolbar=0&navpanes=0&scrollbar=1'
             })
 
             closeBtn.addEventListener('click', () => {
@@ -794,7 +850,7 @@ function App() {
         user_id: userId,
         event_type: 'login',
         device_name: getDeviceName(),
-        app_version: 'web-v1.5',
+        app_version: 'web-v1.6',
       })
 
       setUserProfile(profileData)
@@ -925,7 +981,7 @@ function App() {
         report_code: report.code,
         report_name: reportName,
         device_name: getDeviceName(),
-        app_version: 'web-v1.5',
+        app_version: 'web-v1.6',
       })
 
       if (logError) {
@@ -937,7 +993,7 @@ function App() {
       }
 
       if (reportWindow) {
-        writeReportWindow(reportWindow, reportName, pdfUrl)
+        writeReportWindow(reportWindow, reportName, pdfUrl, cleanBarcode)
       } else {
         window.location.href = makePdfProxyUrl(pdfUrl)
       }
@@ -988,11 +1044,6 @@ function App() {
           <div className="welcomeBox">
             <h1>{t.welcome}, {displayName}</h1>
             <p>{t.appSubtitle}</p>
-          </div>
-
-          <div className="infoBox">
-            <p><strong>{t.role}:</strong> {userProfile.role}</p>
-            <p><strong>{t.status}:</strong> {t.active}</p>
           </div>
 
           <label>{t.barcode}</label>
