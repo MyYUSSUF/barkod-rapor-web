@@ -13,6 +13,8 @@ const LANGUAGE_KEY = 'barkod_rapor_language'
 const SESSION_STARTED_AT_KEY = 'barkod_rapor_session_started_at'
 const SESSION_MAX_MS = 60 * 60 * 1000
 const REPORT_TIMEOUT_MS = 45000
+const APP_VERSION = 'v1.10'
+const APP_LOG_VERSION = 'web-v1.10'
 
 const REPORTS = [
   {
@@ -43,6 +45,7 @@ const LANGUAGES = {
     welcome: 'Hoş geldiniz',
     barcode: 'Barkod',
     barcodePlaceholder: 'Barkodu gir veya okut',
+    clearBarcode: 'Temizle',
     scanBarcode: 'Kamerayla Barkod Okut',
     cameraOpen: 'Kamera Açık',
     closeCamera: 'Kamerayı Kapat',
@@ -57,6 +60,7 @@ const LANGUAGES = {
     clear: 'Temizle',
     selectedBarcode: 'Barkod seçildi',
     logout: 'Çıkış Yap',
+    logoutConfirm: 'Çıkış yapmak istediğinize emin misiniz?',
     usernamePasswordRequired: 'Kullanıcı adı ve şifre zorunludur.',
     loginFailed: 'Giriş başarısız',
     profileNotFound: 'Profil bilgisi bulunamadı.',
@@ -89,6 +93,7 @@ const LANGUAGES = {
     shareFailed: 'Paylaşım yapılamadı.',
     shareNotSupported: 'PDF paylaşımı desteklenmiyor. Link kopyalandı.',
     reportCouldNotLoad: 'Rapor yüklenemedi.',
+    versionText: 'Barkod Rapor Web',
   },
   en: {
     appTitle: 'Barcode Report Web',
@@ -103,6 +108,7 @@ const LANGUAGES = {
     welcome: 'Welcome',
     barcode: 'Barcode',
     barcodePlaceholder: 'Enter or scan barcode',
+    clearBarcode: 'Clear',
     scanBarcode: 'Scan Barcode with Camera',
     cameraOpen: 'Camera Open',
     closeCamera: 'Close Camera',
@@ -117,6 +123,7 @@ const LANGUAGES = {
     clear: 'Clear',
     selectedBarcode: 'Barcode selected',
     logout: 'Logout',
+    logoutConfirm: 'Are you sure you want to logout?',
     usernamePasswordRequired: 'Username and password are required.',
     loginFailed: 'Login failed',
     profileNotFound: 'Profile information not found.',
@@ -149,6 +156,7 @@ const LANGUAGES = {
     shareFailed: 'Sharing failed.',
     shareNotSupported: 'PDF sharing is not supported. Link copied.',
     reportCouldNotLoad: 'Report could not be loaded.',
+    versionText: 'Barcode Report Web',
   },
   ar: {
     appTitle: 'نظام تقارير الباركود',
@@ -163,6 +171,7 @@ const LANGUAGES = {
     welcome: 'أهلاً وسهلاً',
     barcode: 'الباركود',
     barcodePlaceholder: 'أدخل أو امسح الباركود',
+    clearBarcode: 'مسح',
     scanBarcode: 'مسح الباركود بالكاميرا',
     cameraOpen: 'الكاميرا مفتوحة',
     closeCamera: 'إغلاق الكاميرا',
@@ -177,6 +186,7 @@ const LANGUAGES = {
     clear: 'مسح',
     selectedBarcode: 'تم اختيار الباركود',
     logout: 'تسجيل الخروج',
+    logoutConfirm: 'هل أنت متأكد أنك تريد تسجيل الخروج؟',
     usernamePasswordRequired: 'اسم المستخدم وكلمة المرور مطلوبان.',
     loginFailed: 'فشل تسجيل الدخول',
     profileNotFound: 'لم يتم العثور على بيانات الملف الشخصي.',
@@ -209,6 +219,7 @@ const LANGUAGES = {
     shareFailed: 'تعذرت المشاركة.',
     shareNotSupported: 'مشاركة PDF غير مدعومة. تم نسخ الرابط.',
     reportCouldNotLoad: 'تعذر تحميل التقرير.',
+    versionText: 'نظام تقارير الباركود',
   },
 }
 
@@ -385,6 +396,11 @@ function App() {
     setBarcodeHistory([])
   }
 
+  const clearBarcodeInput = () => {
+    setBarcode('')
+    setMessage('')
+  }
+
   const makePdfProxyUrl = (pdfUrl) => {
     return `${window.location.origin}/api/report-pdf?url=${encodeURIComponent(pdfUrl)}`
   }
@@ -478,6 +494,7 @@ function App() {
               color: #6b7280;
               line-height: 1.45;
               word-break: break-word;
+              white-space: pre-line;
             }
 
             button {
@@ -1026,7 +1043,7 @@ function App() {
         user_id: userId,
         event_type: 'login',
         device_name: getDeviceName(),
-        app_version: 'web-v1.9',
+        app_version: APP_LOG_VERSION,
       })
 
       setUserProfile(profileData)
@@ -1041,6 +1058,12 @@ function App() {
   }
 
   const handleLogout = async () => {
+    const confirmed = window.confirm(t.logoutConfirm)
+
+    if (!confirmed) {
+      return
+    }
+
     stopScanner()
 
     await supabase.auth.signOut()
@@ -1158,7 +1181,7 @@ function App() {
         report_code: report.code,
         report_name: reportName,
         device_name: getDeviceName(),
-        app_version: 'web-v1.9',
+        app_version: APP_LOG_VERSION,
       })
 
       if (logError) {
@@ -1232,12 +1255,23 @@ function App() {
           </div>
 
           <label>{t.barcode}</label>
-          <input
-            type="text"
-            placeholder={t.barcodePlaceholder}
-            value={barcode}
-            onChange={(e) => setBarcode(e.target.value)}
-          />
+          <div className="barcodeInputRow">
+            <input
+              type="text"
+              placeholder={t.barcodePlaceholder}
+              value={barcode}
+              onChange={(e) => setBarcode(e.target.value)}
+            />
+
+            <button
+              type="button"
+              className="clearBarcodeButton"
+              onClick={clearBarcodeInput}
+              disabled={!barcode || loading}
+            >
+              {t.clearBarcode}
+            </button>
+          </div>
 
           <button
             type="button"
@@ -1356,6 +1390,10 @@ function App() {
           <button className="logoutButton" onClick={handleLogout}>
             {t.logout}
           </button>
+
+          <p className="appFooter">
+            {t.versionText} {APP_VERSION}
+          </p>
         </div>
       </div>
     )
@@ -1407,6 +1445,10 @@ function App() {
         </form>
 
         {message && <p className="message">{message}</p>}
+
+        <p className="appFooter">
+          {t.versionText} {APP_VERSION}
+        </p>
       </div>
     </div>
   )
