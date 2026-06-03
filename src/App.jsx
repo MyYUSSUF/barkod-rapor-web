@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
+import { BrowserCodeReader, BrowserMultiFormatReader } from '@zxing/browser'
 import { supabase } from './lib/supabaseClient'
 import './App.css'
 
@@ -23,6 +24,9 @@ const REPORTS = [
 ]
 
 function App() {
+  const videoRef = useRef(null)
+  const scannerControlsRef = useRef(null)
+
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
@@ -30,9 +34,94 @@ function App() {
   const [userProfile, setUserProfile] = useState(null)
   const [barcode, setBarcode] = useState('')
   const [message, setMessage] = useState('')
+  const [scannerOpen, setScannerOpen] = useState(false)
+  const [scannerMessage, setScannerMessage] = useState('')
 
   const getDeviceName = () => {
     return navigator.userAgent || 'Web Browser'
+  }
+
+  const stopScanner = () => {
+    try {
+      if (scannerControlsRef.current) {
+        scannerControlsRef.current.stop()
+        scannerControlsRef.current = null
+      }
+    } catch (err) {
+      console.log('Scanner stop error:', err)
+    }
+
+    setScannerOpen(false)
+    setScannerMessage('')
+  }
+
+  const startScanner = async () => {
+    if (scannerControlsRef.current) {
+      stopScanner()
+      return
+    }
+
+    setMessage('')
+    setScannerOpen(true)
+    setScannerMessage('Kamera açılıyor...')
+
+    setTimeout(async () => {
+      try {
+        if (!videoRef.current) {
+          setScannerOpen(false)
+          setScannerMessage('')
+          setMessage('Kamera alanı bulunamadı.')
+          return
+        }
+
+        const codeReader = new BrowserMultiFormatReader()
+        const videoInputDevices = await BrowserCodeReader.listVideoInputDevices()
+
+        let selectedDeviceId = undefined
+
+        if (videoInputDevices && videoInputDevices.length > 0) {
+          const backCamera = videoInputDevices.find((device) => {
+            const label = device.label || ''
+            return /back|rear|environment|arka/i.test(label)
+          })
+
+          selectedDeviceId =
+            backCamera?.deviceId ||
+            videoInputDevices[videoInputDevices.length - 1]?.deviceId
+        }
+
+        const controls = await codeReader.decodeFromVideoDevice(
+          selectedDeviceId,
+          videoRef.current,
+          (result, error, controlsFromCallback) => {
+            if (result) {
+              const scannedText = result.getText()
+
+              setBarcode(scannedText)
+              setMessage(`Barkod okundu: ${scannedText}`)
+
+              try {
+                controlsFromCallback.stop()
+              } catch (err) {
+                console.log('Scanner callback stop error:', err)
+              }
+
+              scannerControlsRef.current = null
+              setScannerOpen(false)
+              setScannerMessage('')
+            }
+          }
+        )
+
+        scannerControlsRef.current = controls
+        setScannerMessage('Barkodu kameraya göster.')
+      } catch (err) {
+        scannerControlsRef.current = null
+        setScannerOpen(false)
+        setScannerMessage('')
+        setMessage('Kamera açılamadı: ' + err.message)
+      }
+    }, 300)
   }
 
   const handleLogin = async (e) => {
@@ -88,7 +177,7 @@ function App() {
         user_id: userId,
         event_type: 'login',
         device_name: getDeviceName(),
-        app_version: 'web-v1.0',
+        app_version: 'web-v1.1',
       })
 
       setUserProfile(profileData)
@@ -101,6 +190,8 @@ function App() {
   }
 
   const handleLogout = async () => {
+    stopScanner()
+
     await supabase.auth.signOut()
     setUserProfile(null)
     setUsername('')
@@ -118,11 +209,8 @@ function App() {
       return
     }
 
-    /*
-      iPhone Safari için önemli:
-      Yeni sekme butona basılır basılmaz açılıyor.
-      Rapor linki hazır olunca bu sekme PDF'e yönlendiriliyor.
-    */
+    stopScanner()
+
     const reportWindow = window.open('', '_blank')
 
     if (reportWindow) {
@@ -210,7 +298,7 @@ function App() {
         report_code: report.code,
         report_name: report.name,
         device_name: getDeviceName(),
-        app_version: 'web-v1.0',
+        app_version: 'web-v1.1',
       })
 
       if (logError) {
@@ -259,6 +347,36 @@ function App() {
             value={barcode}
             onChange={(e) => setBarcode(e.target.value)}
           />
+
+          <button
+            type="button"
+            className="scanButton"
+            onClick={startScanner}
+            disabled={loading}
+          >
+            {scannerOpen ? 'Kamera Açık' : 'Kamerayla Barkod Okut'}
+          </button>
+
+          <div className={scannerOpen ? 'scannerBox open' : 'scannerBox'}>
+            <video
+              ref={videoRef}
+              className="scannerVideo"
+              muted
+              playsInline
+            />
+
+            {scannerMessage && (
+              <p className="scannerMessage">{scannerMessage}</p>
+            )}
+
+            <button
+              type="button"
+              className="stopScanButton"
+              onClick={stopScanner}
+            >
+              Kamerayı Kapat
+            </button>
+          </div>
 
           <div className="reportButtons">
             {REPORTS.map((report) => (

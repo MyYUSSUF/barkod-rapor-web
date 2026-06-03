@@ -102,3 +102,37 @@ button:disabled {
 .logoutButton {
   background: #dc2626;
 }
+.scanButton {
+  background: #059669;
+}
+
+.scannerBox {
+  display: none;
+  margin-top: 16px;
+  padding: 12px;
+  background: #111827;
+  border-radius: 14px;
+}
+
+.scannerBox.open {
+  display: block;
+}
+
+.scannerVideo {
+  width: 100%;
+  max-height: 280px;
+  background: black;
+  border-radius: 12px;
+}
+
+.scannerMessage {
+  margin: 10px 0 0;
+  color: white;
+  text-align: center;
+  font-weight: bold;
+}
+
+.stopScanButton {
+  margin-top: 12px;
+  background: #dc2626;
+}
