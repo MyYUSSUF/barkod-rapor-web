@@ -28,6 +28,33 @@ function sanitizeFileName(value) {
     .replace(/^_+|_+$/g, '') || 'report.pdf'
 }
 
+function makeAsciiHeaderFileName(value) {
+  const clean = value ? String(value).trim() : 'report.pdf'
+
+  const withoutTurkishChars = clean
+    .replaceAll('İ', 'I')
+    .replaceAll('İ', 'I')
+    .replaceAll('ı', 'i')
+    .replaceAll('Ş', 'S')
+    .replaceAll('ş', 's')
+    .replaceAll('Ğ', 'G')
+    .replaceAll('ğ', 'g')
+    .replaceAll('Ü', 'U')
+    .replaceAll('ü', 'u')
+    .replaceAll('Ö', 'O')
+    .replaceAll('ö', 'o')
+    .replaceAll('Ç', 'C')
+    .replaceAll('ç', 'c')
+
+  return withoutTurkishChars
+    .normalize('NFKD')
+    .replace(/[^\x20-\x7E]/g, '_')
+    .replace(/[\\/:*?"<>|]/g, '_')
+    .replace(/\s+/g, '_')
+    .replace(/_+/g, '_')
+    .replace(/^_+|_+$/g, '') || 'report.pdf'
+}
+
 export default async function handler(req, res) {
   try {
     if (req.method !== 'GET') {
@@ -63,6 +90,12 @@ export default async function handler(req, res) {
       fileName += '.pdf'
     }
 
+    let asciiHeaderFileName = makeAsciiHeaderFileName(fileName)
+
+    if (!asciiHeaderFileName.toLowerCase().endsWith('.pdf')) {
+      asciiHeaderFileName += '.pdf'
+    }
+
     const response = await fetch(pdfUrl, {
       method: 'GET',
       headers: {
@@ -80,7 +113,7 @@ export default async function handler(req, res) {
     res.setHeader('Content-Type', 'application/pdf')
     res.setHeader(
       'Content-Disposition',
-      `inline; filename="${fileName}"; filename*=UTF-8''${encodeURIComponent(fileName)}`
+      `inline; filename="${asciiHeaderFileName}"; filename*=UTF-8''${encodeURIComponent(fileName)}`
     )
     res.setHeader('Cache-Control', 'no-store')
 
