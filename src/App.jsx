@@ -13,8 +13,8 @@ const LANGUAGE_KEY = 'barkod_rapor_language'
 const SESSION_STARTED_AT_KEY = 'barkod_rapor_session_started_at'
 const SESSION_MAX_MS = 60 * 60 * 1000
 const REPORT_TIMEOUT_MS = 45000
-const APP_VERSION = 'v1.10'
-const APP_LOG_VERSION = 'web-v1.10'
+const APP_VERSION = 'v1.11'
+const APP_LOG_VERSION = 'web-v1.11'
 
 const REPORTS = [
   {
@@ -1065,6 +1065,22 @@ function App() {
     }
 
     stopScanner()
+
+    try {
+      const { data: sessionData } = await supabase.auth.getSession()
+      const userId = sessionData?.session?.user?.id || userProfile?.id
+
+      if (userId) {
+        await supabase.from('login_logs').insert({
+          user_id: userId,
+          event_type: 'logout',
+          device_name: getDeviceName(),
+          app_version: APP_LOG_VERSION,
+        })
+      }
+    } catch (err) {
+      console.log('Çıkış log kaydı hatası:', err)
+    }
 
     await supabase.auth.signOut()
     clearLocalSession()
