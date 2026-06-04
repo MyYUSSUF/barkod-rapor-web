@@ -13,21 +13,29 @@ const LANGUAGE_KEY = 'barkod_rapor_language'
 const SESSION_STARTED_AT_KEY = 'barkod_rapor_session_started_at'
 const SESSION_MAX_MS = 60 * 60 * 1000
 const REPORT_TIMEOUT_MS = 45000
-const APP_VERSION = 'v1.11'
-const APP_LOG_VERSION = 'web-v1.11'
+const APP_VERSION = 'v1.12'
+const APP_LOG_VERSION = 'web-v1.12'
 
 const REPORTS = [
   {
     code: 'RAR00032',
     key: 'inspection',
+    requiresBarcode: true,
   },
   {
     code: 'RAR00033',
     key: 'workOrder',
+    requiresBarcode: true,
   },
   {
     code: 'RAR00034',
     key: 'surfaceControl',
+    requiresBarcode: true,
+  },
+  {
+    code: 'RAR00035',
+    key: 'fixingWaiting',
+    requiresBarcode: false,
   },
 ]
 
@@ -80,6 +88,7 @@ const LANGUAGES = {
     inspection: 'Inspection Raporu',
     workOrder: 'İş Emri Raporu',
     surfaceControl: 'Yüzey Kontrol Raporu',
+    fixingWaiting: 'Fikse Bekleyenler',
     reportPageTitle: 'Rapor Görüntüleyici',
     reportPagePreparing: 'Rapor hazırlanıyor...',
     pleaseWait: 'Lütfen bekleyin.',
@@ -143,6 +152,7 @@ const LANGUAGES = {
     inspection: 'Inspection Report',
     workOrder: 'Work Order Report',
     surfaceControl: 'Surface Control Report',
+    fixingWaiting: 'Fixing Waiting List',
     reportPageTitle: 'Report Viewer',
     reportPagePreparing: 'Report is preparing...',
     pleaseWait: 'Please wait.',
@@ -206,6 +216,7 @@ const LANGUAGES = {
     inspection: 'تقرير الفحص',
     workOrder: 'تقرير أمر العمل',
     surfaceControl: 'تقرير مراقبة السطح',
+    fixingWaiting: 'قائمة انتظار التثبيت',
     reportPageTitle: 'عارض التقرير',
     reportPagePreparing: 'جارٍ تجهيز التقرير...',
     pleaseWait: 'يرجى الانتظار.',
@@ -432,9 +443,7 @@ function App() {
           <title>${safeTitle}</title>
           <meta name="viewport" content="width=device-width, initial-scale=1.0">
           <style>
-            * {
-              box-sizing: border-box;
-            }
+            * { box-sizing: border-box; }
 
             body {
               margin: 0;
@@ -512,9 +521,7 @@ function App() {
             }
 
             @keyframes spin {
-              to {
-                transform: rotate(360deg);
-              }
+              to { transform: rotate(360deg); }
             }
           </style>
         </head>
@@ -538,7 +545,7 @@ function App() {
 
   const writeShareWindow = (reportWindow, reportName, pdfUrl, barcodeValue) => {
     const safeReportName = sanitizePdfFileName(reportName)
-    const safeBarcode = sanitizePdfFileName(barcodeValue)
+    const safeBarcode = sanitizePdfFileName(barcodeValue || 'Barkodsuz')
     const pdfFileName = `${safeReportName}_${safeBarcode}.pdf`
 
     const pdfFileUrl =
@@ -557,9 +564,7 @@ function App() {
           <title>${escapeHtml(reportName)}</title>
           <meta name="viewport" content="width=device-width, initial-scale=1.0">
           <style>
-            * {
-              box-sizing: border-box;
-            }
+            * { box-sizing: border-box; }
 
             body {
               margin: 0;
@@ -623,17 +628,9 @@ function App() {
               cursor: pointer;
             }
 
-            .openBtn {
-              background: #17324d;
-            }
-
-            .shareBtn {
-              background: #0f766e;
-            }
-
-            .closeBtn {
-              background: #b91c1c;
-            }
+            .openBtn { background: #17324d; }
+            .shareBtn { background: #0f766e; }
+            .closeBtn { background: #b91c1c; }
 
             .status {
               min-height: 20px;
@@ -1091,8 +1088,9 @@ function App() {
   const openReport = async (report) => {
     const cleanBarcode = barcode.trim()
     const reportName = getReportName(report)
+    const requiresBarcode = report.requiresBarcode !== false
 
-    if (!cleanBarcode) {
+    if (requiresBarcode && !cleanBarcode) {
       setMessage(t.barcodeRequired)
       return
     }
@@ -1105,7 +1103,10 @@ function App() {
       return
     }
 
-    saveBarcodeToHistory(cleanBarcode)
+    if (cleanBarcode) {
+      saveBarcodeToHistory(cleanBarcode)
+    }
+
     stopScanner()
 
     const reportWindow = window.open('', '_blank')
@@ -1144,8 +1145,9 @@ function App() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          barcode: cleanBarcode,
+          barcode: requiresBarcode ? cleanBarcode : '',
           reportCode: report.code,
+          requiresBarcode,
         }),
       })
 
@@ -1164,7 +1166,7 @@ function App() {
         const errorText =
           t.reportUrlFailed +
           (result.error || 'Unknown error') +
-          ` (${report.code} - ${cleanBarcode})`
+          ` (${report.code}${cleanBarcode ? ' - ' + cleanBarcode : ''})`
 
         if (reportWindow) {
           writeReportStatusWindow(reportWindow, t.reportCouldNotLoad, errorText, 'error')
@@ -1179,7 +1181,7 @@ function App() {
       const pdfUrl = result.pdfUrl
 
       if (!pdfUrl) {
-        const errorText = `${t.pdfUrlEmpty} (${report.code} - ${cleanBarcode})`
+        const errorText = `${t.pdfUrlEmpty} (${report.code}${cleanBarcode ? ' - ' + cleanBarcode : ''})`
 
         if (reportWindow) {
           writeReportStatusWindow(reportWindow, t.reportCouldNotLoad, errorText, 'error')
@@ -1193,7 +1195,7 @@ function App() {
 
       const { error: logError } = await supabase.from('report_logs').insert({
         user_id: userId,
-        barcode: cleanBarcode,
+        barcode: cleanBarcode || 'Barkodsuz',
         report_code: report.code,
         report_name: reportName,
         device_name: getDeviceName(),
@@ -1213,12 +1215,12 @@ function App() {
         return
       }
 
-      writeShareWindow(reportWindow, reportName, pdfUrl, cleanBarcode)
+      writeShareWindow(reportWindow, reportName, pdfUrl, cleanBarcode || 'Barkodsuz')
       setMessage(`${reportName} ${t.reportOpened}`)
     } catch (err) {
       const errorText =
         err.name === 'AbortError'
-          ? `${t.reportRequestTimeout} (${report.code} - ${cleanBarcode})`
+          ? `${t.reportRequestTimeout} (${report.code}${cleanBarcode ? ' - ' + cleanBarcode : ''})`
           : `${t.unexpectedError}${err.message}`
 
       if (reportWindow) {
@@ -1362,6 +1364,11 @@ function App() {
                 className="mainButton"
                 onClick={() => openReport(report)}
                 disabled={loading}
+                style={
+                  report.code === 'RAR00035'
+                    ? { background: 'linear-gradient(135deg, #4b5563, #111827)' }
+                    : undefined
+                }
               >
                 {loading && selectedReportCode === report.code
                   ? `${getReportName(report)} ${t.reportPreparing}`

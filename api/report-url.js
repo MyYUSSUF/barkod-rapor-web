@@ -174,17 +174,18 @@ export default async function handler(req, res) {
       return res.status(405).json({ error: 'Sadece POST isteği desteklenir.' })
     }
 
-    const { barcode, reportCode } = req.body || {}
-
-    if (!isNotBlank(barcode)) {
-      return res.status(400).json({ error: 'Barkod zorunludur.' })
-    }
+    const { barcode, reportCode, requiresBarcode } = req.body || {}
+    const mustHaveBarcode = requiresBarcode !== false
 
     if (!isNotBlank(reportCode)) {
       return res.status(400).json({ error: 'Rapor kodu zorunludur.' })
     }
 
-    const pdfUrl = await getReportPdfUrl(reportCode, barcode)
+    if (mustHaveBarcode && !isNotBlank(barcode)) {
+      return res.status(400).json({ error: 'Barkod zorunludur.' })
+    }
+
+    const pdfUrl = await getReportPdfUrl(reportCode, mustHaveBarcode ? barcode : '')
 
     return res.status(200).json({ pdfUrl })
   } catch (error) {
