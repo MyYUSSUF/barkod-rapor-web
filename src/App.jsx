@@ -10,13 +10,10 @@ const API_BASE_URL =
 
 const HISTORY_KEY = 'barkod_rapor_history'
 const LANGUAGE_KEY = 'barkod_rapor_language'
-const NOTIFICATION_AUTO_ASKED_KEY = 'barkod_rapor_notification_auto_asked'
+const NOTIFICATION_PERMISSION_ASKED_KEY = 'barkod_rapor_notification_permission_asked_v2'
 const REPORT_TIMEOUT_MS = 45000
-const APP_VERSION = 'v1.15'
-const APP_LOG_VERSION = 'web-v1.15'
-
-const FALLBACK_VAPID_PUBLIC_KEY =
-  'BM9_gghUvmDN_KMmsiDOL3HzumEA1vheTO3BcQhtyyLnbIFgE4EExPzOECbHODO5zBX-BaN-M0dwhI5QX9EckVk'
+const APP_VERSION = 'v1.16'
+const APP_LOG_VERSION = 'web-v1.16'
 
 const REPORTS = [
   {
@@ -100,7 +97,6 @@ const LANGUAGES = {
     shareNotSupported: 'PDF paylaşımı desteklenmiyor. Link kopyalandı.',
     reportCouldNotLoad: 'Rapor yüklenemedi.',
     versionText: 'Barkod Rapor Web',
-    notificationsEnabled: 'Bildirimler açık',
     notificationUnsupported: 'Bu cihaz veya tarayıcı bildirimleri desteklemiyor.',
     notificationDenied: 'Bildirim izni verilmedi.',
     notificationKeyMissing: 'Bildirim anahtarı eksik. Vercel ayarlarını kontrol edin.',
@@ -174,7 +170,6 @@ const LANGUAGES = {
     shareNotSupported: 'PDF sharing is not supported. Link copied.',
     reportCouldNotLoad: 'Report could not be loaded.',
     versionText: 'Barcode Report Web',
-    notificationsEnabled: 'Notifications enabled',
     notificationUnsupported: 'This device or browser does not support notifications.',
     notificationDenied: 'Notification permission was not granted.',
     notificationKeyMissing: 'Notification key is missing. Check Vercel settings.',
@@ -248,7 +243,6 @@ const LANGUAGES = {
     shareNotSupported: 'مشاركة PDF غير مدعومة. تم نسخ الرابط.',
     reportCouldNotLoad: 'تعذر تحميل التقرير.',
     versionText: 'نظام تقارير الباركود',
-    notificationsEnabled: 'الإشعارات مفعلة',
     notificationUnsupported: 'هذا الجهاز أو المتصفح لا يدعم الإشعارات.',
     notificationDenied: 'لم يتم السماح بالإشعارات.',
     notificationKeyMissing: 'مفتاح الإشعارات غير موجود. تحقق من إعدادات Vercel.',
@@ -304,14 +298,7 @@ const cleanVapidPublicKey = (value) => {
 }
 
 const getVapidPublicKey = () => {
-  const envKey = cleanVapidPublicKey(import.meta.env.VITE_VAPID_PUBLIC_KEY)
-  const fallbackKey = cleanVapidPublicKey(FALLBACK_VAPID_PUBLIC_KEY)
-
-  if (envKey.length > 50) {
-    return envKey
-  }
-
-  return fallbackKey
+  return cleanVapidPublicKey(import.meta.env.VITE_VAPID_PUBLIC_KEY)
 }
 
 const urlBase64ToUint8Array = (base64String) => {
@@ -494,18 +481,22 @@ function App() {
       .replace(/^_+|_+$/g, '') || 'report'
   }
 
-  const enableNotifications = async (options = {}) => {
-    const { showMessage = true } = options
+  const canUseNotifications = () => {
+    return 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window
+  }
 
-    if (showMessage) {
-      setMessage('')
-    }
+  const registerPushSubscription = async (userId, options = {}) => {
+    const { forceRenew = false, showMessage = false } = options
 
     try {
-      if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) {
+      if (!canUseNotifications()) {
         if (showMessage) {
           setMessage(t.notificationUnsupported)
         }
+        return false
+      }
+
+      if (Notification.permission !== 'granted') {
         return false
       }
 
@@ -524,56 +515,45 @@ function App() {
         throw new Error(`Public Key uzunluğu geçersiz. Beklenen 65 byte, gelen ${applicationServerKey.length} byte.`)
       }
 
-      const permission = await Notification.requestPermission()
-
-      if (permission !== 'granted') {
-        if (showMessage) {
-          setMessage(t.notificationDenied)
-        }
-        return false
-      }
-
-      const { data: sessionData } = await supabase.auth.getSession()
-      const userId = sessionData?.session?.user?.id
-
-      if (!userId) {
-        if (showMessage) {
-          setMessage(t.sessionMissing)
-        }
-        return false
-      }
-
-      const registration = await navigator.serviceWorker.register('/sw.js')
+      await navigator.serviceWorker.register('/sw.js')
       const readyRegistration = await navigator.serviceWorker.ready
 
-      const oldSubscription = await readyRegistration.pushManager.getSubscription()
+      let subscription = await readyRegistration.pushManager.getSubscription()
 
-      if (oldSubscription) {
+      if (subscription && forceRenew) {
+        const oldEndpoint = subscription.endpoint
+
         try {
-          await oldSubscription.unsubscribe()
+          await subscription.unsubscribe()
         } catch (unsubscribeError) {
           console.log('Eski bildirim aboneliği iptal edilemedi:', unsubscribeError)
         }
+
+        if (oldEndpoint) {
+          await supabase
+            .from('push_subscriptions')
+            .delete()
+            .eq('endpoint', oldEndpoint)
+        }
+
+        subscription = null
       }
 
-      await supabase
-        .from('push_subscriptions')
-        .delete()
-        .eq('user_id', userId)
+      if (!subscription) {
+        subscription = await readyRegistration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey,
+        })
+      }
 
-      const newSubscription = await readyRegistration.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey,
-      })
-
-      const subscriptionJson = newSubscription.toJSON()
+      const subscriptionJson = subscription.toJSON()
 
       const { error } = await supabase
         .from('push_subscriptions')
         .upsert(
           {
             user_id: userId,
-            endpoint: newSubscription.endpoint,
+            endpoint: subscription.endpoint,
             subscription: subscriptionJson,
             user_agent: getDeviceName(),
             updated_at: new Date().toISOString(),
@@ -598,10 +578,41 @@ function App() {
       if (showMessage) {
         setMessage(t.notificationError + err.message)
       } else {
-        console.log('Otomatik bildirim izni hatası:', err)
+        console.log('Bildirim kaydı hatası:', err)
       }
 
       return false
+    }
+  }
+
+  const requestNotificationPermissionOnce = async () => {
+    try {
+      if (!canUseNotifications()) {
+        return 'unsupported'
+      }
+
+      if (Notification.permission === 'granted') {
+        return 'granted'
+      }
+
+      if (Notification.permission === 'denied') {
+        localStorage.setItem(NOTIFICATION_PERMISSION_ASKED_KEY, 'true')
+        return 'denied'
+      }
+
+      const alreadyAsked = localStorage.getItem(NOTIFICATION_PERMISSION_ASKED_KEY)
+
+      if (alreadyAsked === 'true') {
+        return Notification.permission
+      }
+
+      localStorage.setItem(NOTIFICATION_PERMISSION_ASKED_KEY, 'true')
+      const permission = await Notification.requestPermission()
+
+      return permission
+    } catch (err) {
+      console.log('Bildirim izni isteme hatası:', err)
+      return 'error'
     }
   }
 
@@ -1053,17 +1064,16 @@ function App() {
       return
     }
 
-    const alreadyAsked = localStorage.getItem(NOTIFICATION_AUTO_ASKED_KEY)
-
-    if (alreadyAsked === 'true') {
+    if (!canUseNotifications()) {
       return
     }
 
-    localStorage.setItem(NOTIFICATION_AUTO_ASKED_KEY, 'true')
-
-    setTimeout(() => {
-      enableNotifications({ showMessage: true })
-    }, 800)
+    if (Notification.permission === 'granted') {
+      registerPushSubscription(userProfile.id, {
+        forceRenew: false,
+        showMessage: false,
+      })
+    }
   }, [userProfile?.id])
 
   const improveCameraTrack = async () => {
@@ -1220,6 +1230,7 @@ function App() {
         return
       }
 
+      const notificationPermission = await requestNotificationPermissionOnce()
       const hiddenEmail = `${cleanUsername}@app.local`
 
       const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
@@ -1266,6 +1277,13 @@ function App() {
       setDisplayName(makeDisplayName(profileData, cleanUsername))
       setBarcodeHistory(loadBarcodeHistory())
       setMessage('')
+
+      if (notificationPermission === 'granted') {
+        await registerPushSubscription(userId, {
+          forceRenew: true,
+          showMessage: false,
+        })
+      }
     } catch (err) {
       setMessage(t.unexpectedError + err.message)
     }
