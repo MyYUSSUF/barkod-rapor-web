@@ -12,8 +12,8 @@ const HISTORY_KEY = 'barkod_rapor_history'
 const LANGUAGE_KEY = 'barkod_rapor_language'
 const NOTIFICATION_PERMISSION_ASKED_KEY = 'barkod_rapor_notification_permission_asked_v2'
 const REPORT_TIMEOUT_MS = 45000
-const APP_VERSION = 'v1.16'
-const APP_LOG_VERSION = 'web-v1.16'
+const APP_VERSION = 'v1.17'
+const APP_LOG_VERSION = 'web-v1.17'
 
 const REPORTS = [
   {
@@ -102,15 +102,6 @@ const LANGUAGES = {
     notificationKeyMissing: 'Bildirim anahtarı eksik. Vercel ayarlarını kontrol edin.',
     notificationSaved: 'Bildirimler açıldı. Bu cihaza bildirim gelebilir.',
     notificationError: 'Bildirim açılırken hata oluştu: ',
-    adminNotificationTitle: 'Bildirim Gönder',
-    adminNotificationSubject: 'Bildirim Başlığı',
-    adminNotificationBody: 'Bildirim Mesajı',
-    adminNotificationBodyPlaceholder: 'Gönderilecek mesajı yaz',
-    adminNotificationSend: 'Bildirimi Gönder',
-    adminNotificationSending: 'Gönderiliyor...',
-    adminNotificationEmpty: 'Bildirim mesajı boş olamaz.',
-    adminNotificationSuccess: 'Bildirim gönderildi.',
-    adminNotificationFailed: 'Bildirim gönderilemedi: ',
   },
   en: {
     appTitle: 'Barcode Report Web',
@@ -175,15 +166,6 @@ const LANGUAGES = {
     notificationKeyMissing: 'Notification key is missing. Check Vercel settings.',
     notificationSaved: 'Notifications enabled. This device can receive notifications.',
     notificationError: 'Notification setup failed: ',
-    adminNotificationTitle: 'Send Notification',
-    adminNotificationSubject: 'Notification Title',
-    adminNotificationBody: 'Notification Message',
-    adminNotificationBodyPlaceholder: 'Write the message to send',
-    adminNotificationSend: 'Send Notification',
-    adminNotificationSending: 'Sending...',
-    adminNotificationEmpty: 'Notification message cannot be empty.',
-    adminNotificationSuccess: 'Notification sent.',
-    adminNotificationFailed: 'Notification could not be sent: ',
   },
   ar: {
     appTitle: 'نظام تقارير الباركود',
@@ -248,15 +230,6 @@ const LANGUAGES = {
     notificationKeyMissing: 'مفتاح الإشعارات غير موجود. تحقق من إعدادات Vercel.',
     notificationSaved: 'تم تفعيل الإشعارات. يمكن لهذا الجهاز استقبال الإشعارات.',
     notificationError: 'حدث خطأ أثناء تفعيل الإشعارات: ',
-    adminNotificationTitle: 'إرسال إشعار',
-    adminNotificationSubject: 'عنوان الإشعار',
-    adminNotificationBody: 'رسالة الإشعار',
-    adminNotificationBodyPlaceholder: 'اكتب الرسالة المراد إرسالها',
-    adminNotificationSend: 'إرسال الإشعار',
-    adminNotificationSending: 'جارٍ الإرسال...',
-    adminNotificationEmpty: 'لا يمكن أن تكون رسالة الإشعار فارغة.',
-    adminNotificationSuccess: 'تم إرسال الإشعار.',
-    adminNotificationFailed: 'تعذر إرسال الإشعار: ',
   },
 }
 
@@ -318,6 +291,79 @@ const urlBase64ToUint8Array = (base64String) => {
   return outputArray
 }
 
+const formatDateTime = (value) => {
+  if (!value) {
+    return '-'
+  }
+
+  try {
+    return new Intl.DateTimeFormat('tr-TR', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    }).format(new Date(value))
+  } catch (err) {
+    return value
+  }
+}
+
+const tableWrapStyle = {
+  width: '100%',
+  overflowX: 'auto',
+  border: '1px solid #e5e7eb',
+  borderRadius: '16px',
+  marginTop: '12px',
+}
+
+const tableStyle = {
+  width: '100%',
+  borderCollapse: 'collapse',
+  fontSize: '13px',
+}
+
+const thStyle = {
+  textAlign: 'left',
+  padding: '10px',
+  borderBottom: '1px solid #e5e7eb',
+  background: '#f9fafb',
+  color: '#17324d',
+  whiteSpace: 'nowrap',
+}
+
+const tdStyle = {
+  padding: '10px',
+  borderBottom: '1px solid #f3f4f6',
+  verticalAlign: 'top',
+  whiteSpace: 'nowrap',
+}
+
+const adminGridStyle = {
+  display: 'grid',
+  gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
+  gap: '12px',
+  marginTop: '14px',
+}
+
+const statBoxStyle = {
+  border: '1px solid #e5e7eb',
+  borderRadius: '16px',
+  padding: '14px',
+  background: '#ffffff',
+}
+
+const smallButtonStyle = {
+  padding: '9px 12px',
+  border: 'none',
+  borderRadius: '10px',
+  color: '#ffffff',
+  fontWeight: 800,
+  cursor: 'pointer',
+  marginRight: '6px',
+  marginTop: '4px',
+}
+
 function App() {
   const videoRef = useRef(null)
   const scannerControlsRef = useRef(null)
@@ -343,11 +389,21 @@ function App() {
   const [scannerOpen, setScannerOpen] = useState(false)
   const [scannerMessage, setScannerMessage] = useState('')
   const [notificationsEnabled, setNotificationsEnabled] = useState(false)
+  const [screen, setScreen] = useState('main')
 
   const [adminNotificationTitle, setAdminNotificationTitle] = useState('Elvan Barkod Rapor')
   const [adminNotificationBody, setAdminNotificationBody] = useState('')
   const [adminNotificationSending, setAdminNotificationSending] = useState(false)
   const [adminNotificationMessage, setAdminNotificationMessage] = useState('')
+
+  const [adminLoading, setAdminLoading] = useState(false)
+  const [adminMessage, setAdminMessage] = useState('')
+  const [adminData, setAdminData] = useState({
+    users: [],
+    loginLogs: [],
+    reportLogs: [],
+    subscriptionCount: 0,
+  })
 
   const changeLanguage = (value) => {
     setLanguage(value)
@@ -398,6 +454,8 @@ function App() {
     setNotificationsEnabled(false)
     setAdminNotificationBody('')
     setAdminNotificationMessage('')
+    setAdminMessage('')
+    setScreen('main')
   }
 
   const makeDisplayName = (profile, fallbackUsername) => {
@@ -616,6 +674,91 @@ function App() {
     }
   }
 
+  const getAccessToken = async () => {
+    const { data: sessionData } = await supabase.auth.getSession()
+    return sessionData?.session?.access_token || ''
+  }
+
+  const loadAdminPanelData = async () => {
+    setAdminLoading(true)
+    setAdminMessage('')
+
+    try {
+      const accessToken = await getAccessToken()
+
+      if (!accessToken) {
+        setAdminMessage(t.sessionMissing)
+        setAdminLoading(false)
+        return
+      }
+
+      const response = await fetch(`${API_BASE_URL}/api/admin-panel`, {
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      })
+
+      const result = await response.json().catch(() => ({}))
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Admin panel verisi alınamadı.')
+      }
+
+      setAdminData({
+        users: result.users || [],
+        loginLogs: result.loginLogs || [],
+        reportLogs: result.reportLogs || [],
+        subscriptionCount: result.subscriptionCount || 0,
+      })
+    } catch (err) {
+      setAdminMessage(err.message)
+    }
+
+    setAdminLoading(false)
+  }
+
+  const openAdminPanel = async () => {
+    setScreen('admin')
+    await loadAdminPanelData()
+  }
+
+  const updateAdminUser = async (userId, patch) => {
+    setAdminMessage('')
+
+    try {
+      const accessToken = await getAccessToken()
+
+      if (!accessToken) {
+        setAdminMessage(t.sessionMissing)
+        return
+      }
+
+      const response = await fetch(`${API_BASE_URL}/api/admin-panel`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({
+          userId,
+          ...patch,
+        }),
+      })
+
+      const result = await response.json().catch(() => ({}))
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Kullanıcı güncellenemedi.')
+      }
+
+      setAdminMessage('Kullanıcı güncellendi.')
+      await loadAdminPanelData()
+    } catch (err) {
+      setAdminMessage(err.message)
+    }
+  }
+
   const sendAdminNotification = async () => {
     setAdminNotificationMessage('')
     setAdminNotificationSending(true)
@@ -625,13 +768,12 @@ function App() {
       const cleanBody = adminNotificationBody.trim()
 
       if (!cleanBody) {
-        setAdminNotificationMessage(t.adminNotificationEmpty)
+        setAdminNotificationMessage('Bildirim mesajı boş olamaz.')
         setAdminNotificationSending(false)
         return
       }
 
-      const { data: sessionData } = await supabase.auth.getSession()
-      const accessToken = sessionData?.session?.access_token
+      const accessToken = await getAccessToken()
 
       if (!accessToken) {
         setAdminNotificationMessage(t.sessionMissing)
@@ -659,11 +801,11 @@ function App() {
       }
 
       setAdminNotificationMessage(
-        `${t.adminNotificationSuccess} Başarılı: ${result.sent || 0}, Başarısız: ${result.failed || 0}, Toplam: ${result.total || 0}`
+        `Bildirim gönderildi. Başarılı: ${result.sent || 0}, Başarısız: ${result.failed || 0}, Toplam: ${result.total || 0}`
       )
       setAdminNotificationBody('')
     } catch (err) {
-      setAdminNotificationMessage(t.adminNotificationFailed + err.message)
+      setAdminNotificationMessage('Bildirim gönderilemedi: ' + err.message)
     }
 
     setAdminNotificationSending(false)
@@ -1476,6 +1618,267 @@ function App() {
     )
   }
 
+  if (userProfile && screen === 'admin' && userProfile.role === 'admin') {
+    return (
+      <div className="page" dir={isArabic ? 'rtl' : 'ltr'}>
+        <div className="card" style={{ maxWidth: '980px' }}>
+          <div className="topBar">
+            <img src="/elvan-logo.png" alt="Elvan Dyeing" className="appLogo" />
+
+            <button
+              type="button"
+              className="clearBarcodeButton"
+              onClick={() => setScreen('main')}
+            >
+              Ana Ekrana Dön
+            </button>
+          </div>
+
+          <div className="welcomeBox">
+            <span className="eyebrow">YÖNETİCİ PANELİ</span>
+            <h1>Admin Panel</h1>
+          </div>
+
+          <div style={adminGridStyle}>
+            <div style={statBoxStyle}>
+              <strong>Kullanıcı</strong>
+              <p className="subtitle" style={{ margin: '8px 0 0' }}>
+                {adminData.users.length}
+              </p>
+            </div>
+
+            <div style={statBoxStyle}>
+              <strong>Bildirim Cihazı</strong>
+              <p className="subtitle" style={{ margin: '8px 0 0' }}>
+                {adminData.subscriptionCount}
+              </p>
+            </div>
+
+            <div style={statBoxStyle}>
+              <strong>Login Log</strong>
+              <p className="subtitle" style={{ margin: '8px 0 0' }}>
+                {adminData.loginLogs.length}
+              </p>
+            </div>
+
+            <div style={statBoxStyle}>
+              <strong>Rapor Log</strong>
+              <p className="subtitle" style={{ margin: '8px 0 0' }}>
+                {adminData.reportLogs.length}
+              </p>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            className="scanButton"
+            onClick={loadAdminPanelData}
+            disabled={adminLoading}
+          >
+            {adminLoading ? 'Yenileniyor...' : 'Admin Verilerini Yenile'}
+          </button>
+
+          {adminMessage && <p className="message">{adminMessage}</p>}
+
+          <div className="historyBox">
+            <div className="historyHeader">
+              <strong>Bildirim Gönder</strong>
+            </div>
+
+            <label>Bildirim Başlığı</label>
+            <input
+              type="text"
+              value={adminNotificationTitle}
+              onChange={(e) => setAdminNotificationTitle(e.target.value)}
+              placeholder="Elvan Barkod Rapor"
+              disabled={adminNotificationSending}
+            />
+
+            <label>Bildirim Mesajı</label>
+            <textarea
+              value={adminNotificationBody}
+              onChange={(e) => setAdminNotificationBody(e.target.value)}
+              placeholder="Gönderilecek mesajı yaz"
+              disabled={adminNotificationSending}
+              rows={4}
+              style={{
+                width: '100%',
+                minHeight: '100px',
+                padding: '14px',
+                borderRadius: '14px',
+                border: '1px solid #d1d5db',
+                resize: 'vertical',
+                fontSize: '15px',
+                fontFamily: 'inherit',
+              }}
+            />
+
+            <button
+              type="button"
+              className="mainButton"
+              onClick={sendAdminNotification}
+              disabled={adminNotificationSending}
+            >
+              {adminNotificationSending ? 'Gönderiliyor...' : 'Bildirimi Gönder'}
+            </button>
+
+            {adminNotificationMessage && (
+              <p className="message">{adminNotificationMessage}</p>
+            )}
+          </div>
+
+          <div className="historyBox">
+            <div className="historyHeader">
+              <strong>Kullanıcılar</strong>
+            </div>
+
+            <div style={tableWrapStyle}>
+              <table style={tableStyle}>
+                <thead>
+                  <tr>
+                    <th style={thStyle}>Kullanıcı</th>
+                    <th style={thStyle}>Ad Soyad</th>
+                    <th style={thStyle}>Rol</th>
+                    <th style={thStyle}>Durum</th>
+                    <th style={thStyle}>İşlem</th>
+                  </tr>
+                </thead>
+
+                <tbody>
+                  {adminData.users.map((user) => (
+                    <tr key={user.id}>
+                      <td style={tdStyle}>{user.email}</td>
+                      <td style={tdStyle}>{user.full_name || '-'}</td>
+                      <td style={tdStyle}>{user.role || 'user'}</td>
+                      <td style={tdStyle}>{user.is_active === false ? 'Pasif' : 'Aktif'}</td>
+                      <td style={tdStyle}>
+                        <button
+                          type="button"
+                          style={{
+                            ...smallButtonStyle,
+                            background: user.is_active === false ? '#0f766e' : '#b91c1c',
+                          }}
+                          onClick={() => updateAdminUser(user.id, { is_active: user.is_active === false })}
+                        >
+                          {user.is_active === false ? 'Aktif Yap' : 'Pasif Yap'}
+                        </button>
+
+                        <button
+                          type="button"
+                          style={{
+                            ...smallButtonStyle,
+                            background: user.role === 'admin' ? '#4b5563' : '#17324d',
+                          }}
+                          onClick={() => updateAdminUser(user.id, { role: user.role === 'admin' ? 'user' : 'admin' })}
+                        >
+                          {user.role === 'admin' ? 'User Yap' : 'Admin Yap'}
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+
+                  {adminData.users.length === 0 && (
+                    <tr>
+                      <td style={tdStyle} colSpan={5}>
+                        Kullanıcı bulunamadı.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div className="historyBox">
+            <div className="historyHeader">
+              <strong>Son Giriş / Çıkış Logları</strong>
+            </div>
+
+            <div style={tableWrapStyle}>
+              <table style={tableStyle}>
+                <thead>
+                  <tr>
+                    <th style={thStyle}>Tarih</th>
+                    <th style={thStyle}>Kullanıcı</th>
+                    <th style={thStyle}>İşlem</th>
+                    <th style={thStyle}>Cihaz</th>
+                  </tr>
+                </thead>
+
+                <tbody>
+                  {adminData.loginLogs.map((log) => (
+                    <tr key={log.id}>
+                      <td style={tdStyle}>{formatDateTime(log.created_at)}</td>
+                      <td style={tdStyle}>{log.user_name || log.user_email || '-'}</td>
+                      <td style={tdStyle}>{log.event_type || '-'}</td>
+                      <td style={tdStyle}>{log.device_name || '-'}</td>
+                    </tr>
+                  ))}
+
+                  {adminData.loginLogs.length === 0 && (
+                    <tr>
+                      <td style={tdStyle} colSpan={4}>
+                        Log bulunamadı.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div className="historyBox">
+            <div className="historyHeader">
+              <strong>Son Rapor Logları</strong>
+            </div>
+
+            <div style={tableWrapStyle}>
+              <table style={tableStyle}>
+                <thead>
+                  <tr>
+                    <th style={thStyle}>Tarih</th>
+                    <th style={thStyle}>Kullanıcı</th>
+                    <th style={thStyle}>Barkod</th>
+                    <th style={thStyle}>Rapor</th>
+                    <th style={thStyle}>Cihaz</th>
+                  </tr>
+                </thead>
+
+                <tbody>
+                  {adminData.reportLogs.map((log) => (
+                    <tr key={log.id}>
+                      <td style={tdStyle}>{formatDateTime(log.created_at)}</td>
+                      <td style={tdStyle}>{log.user_name || log.user_email || '-'}</td>
+                      <td style={tdStyle}>{log.barcode || '-'}</td>
+                      <td style={tdStyle}>{log.report_name || log.report_code || '-'}</td>
+                      <td style={tdStyle}>{log.device_name || '-'}</td>
+                    </tr>
+                  ))}
+
+                  {adminData.reportLogs.length === 0 && (
+                    <tr>
+                      <td style={tdStyle} colSpan={5}>
+                        Rapor logu bulunamadı.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <button className="logoutButton" onClick={handleLogout}>
+            {t.logout}
+          </button>
+
+          <p className="appFooter">
+            {t.versionText} {APP_VERSION}
+          </p>
+        </div>
+      </div>
+    )
+  }
+
   if (userProfile) {
     return (
       <div className="page" dir={isArabic ? 'rtl' : 'ltr'}>
@@ -1500,52 +1903,13 @@ function App() {
           </div>
 
           {userProfile?.role === 'admin' && (
-            <div className="historyBox">
-              <div className="historyHeader">
-                <strong>{t.adminNotificationTitle}</strong>
-              </div>
-
-              <label>{t.adminNotificationSubject}</label>
-              <input
-                type="text"
-                value={adminNotificationTitle}
-                onChange={(e) => setAdminNotificationTitle(e.target.value)}
-                placeholder="Elvan Barkod Rapor"
-                disabled={adminNotificationSending}
-              />
-
-              <label>{t.adminNotificationBody}</label>
-              <textarea
-                value={adminNotificationBody}
-                onChange={(e) => setAdminNotificationBody(e.target.value)}
-                placeholder={t.adminNotificationBodyPlaceholder}
-                disabled={adminNotificationSending}
-                rows={4}
-                style={{
-                  width: '100%',
-                  minHeight: '100px',
-                  padding: '14px',
-                  borderRadius: '14px',
-                  border: '1px solid #d1d5db',
-                  resize: 'vertical',
-                  fontSize: '15px',
-                  fontFamily: 'inherit',
-                }}
-              />
-
-              <button
-                type="button"
-                className="mainButton"
-                onClick={sendAdminNotification}
-                disabled={adminNotificationSending}
-              >
-                {adminNotificationSending ? t.adminNotificationSending : t.adminNotificationSend}
-              </button>
-
-              {adminNotificationMessage && (
-                <p className="message">{adminNotificationMessage}</p>
-              )}
-            </div>
+            <button
+              type="button"
+              className="scanButton"
+              onClick={openAdminPanel}
+            >
+              Admin Panel
+            </button>
           )}
 
           <label>{t.barcode}</label>
