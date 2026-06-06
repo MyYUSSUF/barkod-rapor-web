@@ -37,11 +37,25 @@ function getVapidPrivateKey() {
 function getVapidSubject() {
   const subject = String(process.env.VAPID_SUBJECT || '').trim()
 
-  if (subject.startsWith('http://') || subject.startsWith('https://') || subject.startsWith('mailto:')) {
+  if (
+    subject.startsWith('http://') ||
+    subject.startsWith('https://') ||
+    subject.startsWith('mailto:')
+  ) {
     return subject
   }
 
   return 'https://barkod-rapor-web.vercel.app'
+}
+
+function getBearerToken(req) {
+  const authHeader = req.headers.authorization || req.headers.Authorization || ''
+
+  if (!authHeader || !String(authHeader).startsWith('Bearer ')) {
+    return ''
+  }
+
+  return String(authHeader).replace('Bearer ', '').trim()
 }
 
 function createSupabaseAdminClient() {
@@ -59,6 +73,74 @@ function createSupabaseAdminClient() {
       autoRefreshToken: false,
     },
   })
+}
+
+async function verifyAdminRequest(req, supabaseAdmin, secret) {
+  const secretIsValid =
+    isNotBlank(secret) &&
+    isNotBlank(NOTIFICATION_ADMIN_SECRET) &&
+    secret === NOTIFICATION_ADMIN_SECRET
+
+  if (secretIsValid) {
+    return {
+      ok: true,
+      method: 'secret',
+      userId: null,
+    }
+  }
+
+  const bearerToken = getBearerToken(req)
+
+  if (!isNotBlank(bearerToken)) {
+    return {
+      ok: false,
+      error: 'Yetkisiz istek. Yönetici oturumu bulunamadı.',
+    }
+  }
+
+  const { data: userData, error: userError } = await supabaseAdmin.auth.getUser(bearerToken)
+
+  if (userError || !userData?.user?.id) {
+    return {
+      ok: false,
+      error: 'Yetkisiz istek. Kullanıcı doğrulanamadı.',
+    }
+  }
+
+  const userId = userData.user.id
+
+  const { data: profileData, error: profileError } = await supabaseAdmin
+    .from('profiles')
+    .select('id, role, is_active')
+    .eq('id', userId)
+    .single()
+
+  if (profileError || !profileData) {
+    return {
+      ok: false,
+      error: 'Yetkisiz istek. Profil bulunamadı.',
+    }
+  }
+
+  if (profileData.is_active === false) {
+    return {
+      ok: false,
+      error: 'Yetkisiz istek. Kullanıcı pasif.',
+    }
+  }
+
+  if (profileData.role !== 'admin') {
+    return {
+      ok: false,
+      error: 'Yetkisiz istek. Bu işlem için admin yetkisi gerekir.',
+    }
+  }
+
+  return {
+    ok: true,
+    method: 'supabase_admin',
+    userId,
+  }
 }
 
 function makeSafeError(sendError) {
@@ -80,18 +162,6 @@ export default async function handler(req, res) {
 
     const { secret, title, body, url } = req.body || {}
 
-    if (!isNotBlank(NOTIFICATION_ADMIN_SECRET)) {
-      return res.status(500).json({
-        error: 'NOTIFICATION_ADMIN_SECRET Vercel ortam değişkeninde eksik.',
-      })
-    }
-
-    if (secret !== NOTIFICATION_ADMIN_SECRET) {
-      return res.status(401).json({
-        error: 'Yetkisiz istek.',
-      })
-    }
-
     const vapidPublicKey = getVapidPublicKey()
     const vapidPrivateKey = getVapidPrivateKey()
     const vapidSubject = getVapidSubject()
@@ -108,13 +178,20 @@ export default async function handler(req, res) {
       })
     }
 
+    const supabaseAdmin = createSupabaseAdminClient()
+    const authResult = await verifyAdminRequest(req, supabaseAdmin, secret)
+
+    if (!authResult.ok) {
+      return res.status(401).json({
+        error: authResult.error || 'Yetkisiz istek.',
+      })
+    }
+
     webPush.setVapidDetails(
       vapidSubject,
       vapidPublicKey,
       vapidPrivateKey
     )
-
-    const supabaseAdmin = createSupabaseAdminClient()
 
     const { data: subscriptions, error } = await supabaseAdmin
       .from('push_subscriptions')
@@ -183,6 +260,7 @@ export default async function handler(req, res) {
       sent,
       failed,
       deleted: deletedIds.length,
+      authMethod: authResult.method,
       vapidPublicKeyLength: vapidPublicKey.length,
       vapidSubject,
       failedDetails,

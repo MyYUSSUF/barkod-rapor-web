@@ -10,11 +10,10 @@ const API_BASE_URL =
 
 const HISTORY_KEY = 'barkod_rapor_history'
 const LANGUAGE_KEY = 'barkod_rapor_language'
-const SESSION_STARTED_AT_KEY = 'barkod_rapor_session_started_at'
-const SESSION_MAX_MS = 60 * 60 * 1000
+const NOTIFICATION_AUTO_ASKED_KEY = 'barkod_rapor_notification_auto_asked'
 const REPORT_TIMEOUT_MS = 45000
-const APP_VERSION = 'v1.14'
-const APP_LOG_VERSION = 'web-v1.14'
+const APP_VERSION = 'v1.15'
+const APP_LOG_VERSION = 'web-v1.15'
 
 const FALLBACK_VAPID_PUBLIC_KEY =
   'BM9_gghUvmDN_KMmsiDOL3HzumEA1vheTO3BcQhtyyLnbIFgE4EExPzOECbHODO5zBX-BaN-M0dwhI5QX9EckVk'
@@ -76,7 +75,6 @@ const LANGUAGES = {
     profileNotFound: 'Profil bilgisi bulunamadı.',
     inactiveBlocked: 'Bu kullanıcı pasif durumda. Giriş engellendi.',
     inactiveAutoLogout: 'Bu kullanıcı pasif yapıldı. Oturum kapatıldı.',
-    sessionExpired: 'Oturum süresi doldu. Lütfen tekrar giriş yap.',
     logoutSuccess: 'Çıkış yapıldı.',
     barcodeRequired: 'Önce barkod girilmelidir.',
     reportPreparing: 'hazırlanıyor...',
@@ -102,13 +100,21 @@ const LANGUAGES = {
     shareNotSupported: 'PDF paylaşımı desteklenmiyor. Link kopyalandı.',
     reportCouldNotLoad: 'Rapor yüklenemedi.',
     versionText: 'Barkod Rapor Web',
-    enableNotifications: 'Bildirimleri Aç',
     notificationsEnabled: 'Bildirimler açık',
     notificationUnsupported: 'Bu cihaz veya tarayıcı bildirimleri desteklemiyor.',
     notificationDenied: 'Bildirim izni verilmedi.',
     notificationKeyMissing: 'Bildirim anahtarı eksik. Vercel ayarlarını kontrol edin.',
     notificationSaved: 'Bildirimler açıldı. Bu cihaza bildirim gelebilir.',
     notificationError: 'Bildirim açılırken hata oluştu: ',
+    adminNotificationTitle: 'Bildirim Gönder',
+    adminNotificationSubject: 'Bildirim Başlığı',
+    adminNotificationBody: 'Bildirim Mesajı',
+    adminNotificationBodyPlaceholder: 'Gönderilecek mesajı yaz',
+    adminNotificationSend: 'Bildirimi Gönder',
+    adminNotificationSending: 'Gönderiliyor...',
+    adminNotificationEmpty: 'Bildirim mesajı boş olamaz.',
+    adminNotificationSuccess: 'Bildirim gönderildi.',
+    adminNotificationFailed: 'Bildirim gönderilemedi: ',
   },
   en: {
     appTitle: 'Barcode Report Web',
@@ -143,7 +149,6 @@ const LANGUAGES = {
     profileNotFound: 'Profile information not found.',
     inactiveBlocked: 'This user is inactive. Login blocked.',
     inactiveAutoLogout: 'This user was deactivated. Session closed.',
-    sessionExpired: 'Session expired. Please login again.',
     logoutSuccess: 'Logged out.',
     barcodeRequired: 'Barcode is required first.',
     reportPreparing: 'is preparing...',
@@ -169,13 +174,21 @@ const LANGUAGES = {
     shareNotSupported: 'PDF sharing is not supported. Link copied.',
     reportCouldNotLoad: 'Report could not be loaded.',
     versionText: 'Barcode Report Web',
-    enableNotifications: 'Enable Notifications',
     notificationsEnabled: 'Notifications enabled',
     notificationUnsupported: 'This device or browser does not support notifications.',
     notificationDenied: 'Notification permission was not granted.',
     notificationKeyMissing: 'Notification key is missing. Check Vercel settings.',
     notificationSaved: 'Notifications enabled. This device can receive notifications.',
     notificationError: 'Notification setup failed: ',
+    adminNotificationTitle: 'Send Notification',
+    adminNotificationSubject: 'Notification Title',
+    adminNotificationBody: 'Notification Message',
+    adminNotificationBodyPlaceholder: 'Write the message to send',
+    adminNotificationSend: 'Send Notification',
+    adminNotificationSending: 'Sending...',
+    adminNotificationEmpty: 'Notification message cannot be empty.',
+    adminNotificationSuccess: 'Notification sent.',
+    adminNotificationFailed: 'Notification could not be sent: ',
   },
   ar: {
     appTitle: 'نظام تقارير الباركود',
@@ -210,7 +223,6 @@ const LANGUAGES = {
     profileNotFound: 'لم يتم العثور على بيانات الملف الشخصي.',
     inactiveBlocked: 'هذا المستخدم غير نشط. تم منع الدخول.',
     inactiveAutoLogout: 'تم تعطيل هذا المستخدم. تم إغلاق الجلسة.',
-    sessionExpired: 'انتهت مدة الجلسة. يرجى تسجيل الدخول مرة أخرى.',
     logoutSuccess: 'تم تسجيل الخروج.',
     barcodeRequired: 'يجب إدخال الباركود أولاً.',
     reportPreparing: 'قيد التحضير...',
@@ -236,13 +248,21 @@ const LANGUAGES = {
     shareNotSupported: 'مشاركة PDF غير مدعومة. تم نسخ الرابط.',
     reportCouldNotLoad: 'تعذر تحميل التقرير.',
     versionText: 'نظام تقارير الباركود',
-    enableNotifications: 'تفعيل الإشعارات',
     notificationsEnabled: 'الإشعارات مفعلة',
     notificationUnsupported: 'هذا الجهاز أو المتصفح لا يدعم الإشعارات.',
     notificationDenied: 'لم يتم السماح بالإشعارات.',
     notificationKeyMissing: 'مفتاح الإشعارات غير موجود. تحقق من إعدادات Vercel.',
     notificationSaved: 'تم تفعيل الإشعارات. يمكن لهذا الجهاز استقبال الإشعارات.',
     notificationError: 'حدث خطأ أثناء تفعيل الإشعارات: ',
+    adminNotificationTitle: 'إرسال إشعار',
+    adminNotificationSubject: 'عنوان الإشعار',
+    adminNotificationBody: 'رسالة الإشعار',
+    adminNotificationBodyPlaceholder: 'اكتب الرسالة المراد إرسالها',
+    adminNotificationSend: 'إرسال الإشعار',
+    adminNotificationSending: 'جارٍ الإرسال...',
+    adminNotificationEmpty: 'لا يمكن أن تكون رسالة الإشعار فارغة.',
+    adminNotificationSuccess: 'تم إرسال الإشعار.',
+    adminNotificationFailed: 'تعذر إرسال الإشعار: ',
   },
 }
 
@@ -337,6 +357,11 @@ function App() {
   const [scannerMessage, setScannerMessage] = useState('')
   const [notificationsEnabled, setNotificationsEnabled] = useState(false)
 
+  const [adminNotificationTitle, setAdminNotificationTitle] = useState('Elvan Barkod Rapor')
+  const [adminNotificationBody, setAdminNotificationBody] = useState('')
+  const [adminNotificationSending, setAdminNotificationSending] = useState(false)
+  const [adminNotificationMessage, setAdminNotificationMessage] = useState('')
+
   const changeLanguage = (value) => {
     setLanguage(value)
     localStorage.setItem(LANGUAGE_KEY, value)
@@ -344,20 +369,6 @@ function App() {
 
   const getDeviceName = () => {
     return navigator.userAgent || 'Web Browser'
-  }
-
-  const isSessionExpired = () => {
-    const startedAt = Number(localStorage.getItem(SESSION_STARTED_AT_KEY))
-
-    if (!startedAt) {
-      return false
-    }
-
-    return Date.now() - startedAt >= SESSION_MAX_MS
-  }
-
-  const clearLocalSession = () => {
-    localStorage.removeItem(SESSION_STARTED_AT_KEY)
   }
 
   function stopScanner(options = {}) {
@@ -398,6 +409,8 @@ function App() {
     setSelectedReportCode('')
     setDisplayName('')
     setNotificationsEnabled(false)
+    setAdminNotificationBody('')
+    setAdminNotificationMessage('')
   }
 
   const makeDisplayName = (profile, fallbackUsername) => {
@@ -481,20 +494,28 @@ function App() {
       .replace(/^_+|_+$/g, '') || 'report'
   }
 
-  const enableNotifications = async () => {
-    setMessage('')
+  const enableNotifications = async (options = {}) => {
+    const { showMessage = true } = options
+
+    if (showMessage) {
+      setMessage('')
+    }
 
     try {
       if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) {
-        setMessage(t.notificationUnsupported)
-        return
+        if (showMessage) {
+          setMessage(t.notificationUnsupported)
+        }
+        return false
       }
 
       const publicKey = getVapidPublicKey()
 
       if (!publicKey) {
-        setMessage(t.notificationKeyMissing)
-        return
+        if (showMessage) {
+          setMessage(t.notificationKeyMissing)
+        }
+        return false
       }
 
       const applicationServerKey = urlBase64ToUint8Array(publicKey)
@@ -506,16 +527,20 @@ function App() {
       const permission = await Notification.requestPermission()
 
       if (permission !== 'granted') {
-        setMessage(t.notificationDenied)
-        return
+        if (showMessage) {
+          setMessage(t.notificationDenied)
+        }
+        return false
       }
 
       const { data: sessionData } = await supabase.auth.getSession()
       const userId = sessionData?.session?.user?.id
 
       if (!userId) {
-        setMessage(t.sessionMissing)
-        return
+        if (showMessage) {
+          setMessage(t.sessionMissing)
+        }
+        return false
       }
 
       const registration = await navigator.serviceWorker.register('/sw.js')
@@ -563,10 +588,74 @@ function App() {
       }
 
       setNotificationsEnabled(true)
-      setMessage(t.notificationSaved)
+
+      if (showMessage) {
+        setMessage(t.notificationSaved)
+      }
+
+      return true
     } catch (err) {
-      setMessage(t.notificationError + err.message)
+      if (showMessage) {
+        setMessage(t.notificationError + err.message)
+      } else {
+        console.log('Otomatik bildirim izni hatası:', err)
+      }
+
+      return false
     }
+  }
+
+  const sendAdminNotification = async () => {
+    setAdminNotificationMessage('')
+    setAdminNotificationSending(true)
+
+    try {
+      const cleanTitle = adminNotificationTitle.trim() || 'Elvan Barkod Rapor'
+      const cleanBody = adminNotificationBody.trim()
+
+      if (!cleanBody) {
+        setAdminNotificationMessage(t.adminNotificationEmpty)
+        setAdminNotificationSending(false)
+        return
+      }
+
+      const { data: sessionData } = await supabase.auth.getSession()
+      const accessToken = sessionData?.session?.access_token
+
+      if (!accessToken) {
+        setAdminNotificationMessage(t.sessionMissing)
+        setAdminNotificationSending(false)
+        return
+      }
+
+      const response = await fetch(`${API_BASE_URL}/api/send-notification`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({
+          title: cleanTitle,
+          body: cleanBody,
+          url: '/',
+        }),
+      })
+
+      const result = await response.json().catch(() => ({}))
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Bildirim gönderilemedi.')
+      }
+
+      setAdminNotificationMessage(
+        `${t.adminNotificationSuccess} Başarılı: ${result.sent || 0}, Başarısız: ${result.failed || 0}, Toplam: ${result.total || 0}`
+      )
+      setAdminNotificationBody('')
+    } catch (err) {
+      setAdminNotificationMessage(t.adminNotificationFailed + err.message)
+    }
+
+    setAdminNotificationSending(false)
   }
 
   const writeReportStatusWindow = (reportWindow, title, detail, type = 'loading') => {
@@ -887,22 +976,6 @@ function App() {
         const session = data?.session
 
         if (!session?.user?.id) {
-          clearLocalSession()
-          setRestoringSession(false)
-          return
-        }
-
-        let startedAt = Number(localStorage.getItem(SESSION_STARTED_AT_KEY))
-
-        if (!startedAt) {
-          startedAt = Date.now()
-          localStorage.setItem(SESSION_STARTED_AT_KEY, String(startedAt))
-        }
-
-        if (Date.now() - startedAt >= SESSION_MAX_MS) {
-          await supabase.auth.signOut()
-          clearLocalSession()
-          setMessage(t.sessionExpired)
           setRestoringSession(false)
           return
         }
@@ -915,7 +988,6 @@ function App() {
 
         if (profileError || !profileData) {
           await supabase.auth.signOut()
-          clearLocalSession()
           setMessage(t.profileNotFound)
           setRestoringSession(false)
           return
@@ -923,7 +995,6 @@ function App() {
 
         if (profileData.is_active === false) {
           await supabase.auth.signOut()
-          clearLocalSession()
           setMessage(t.inactiveBlocked)
           setRestoringSession(false)
           return
@@ -949,15 +1020,6 @@ function App() {
 
     const checkUserActiveStatus = async () => {
       try {
-        if (isSessionExpired()) {
-          stopScanner()
-          await supabase.auth.signOut()
-          clearLocalSession()
-          resetUserState()
-          setMessage(t.sessionExpired)
-          return
-        }
-
         const { data, error } = await supabase
           .from('profiles')
           .select('id, is_active')
@@ -971,7 +1033,6 @@ function App() {
         if (data.is_active === false) {
           stopScanner()
           await supabase.auth.signOut()
-          clearLocalSession()
           resetUserState()
           setMessage(t.inactiveAutoLogout)
         }
@@ -986,6 +1047,24 @@ function App() {
 
     return () => clearInterval(intervalId)
   }, [userProfile?.id, language])
+
+  useEffect(() => {
+    if (!userProfile?.id) {
+      return
+    }
+
+    const alreadyAsked = localStorage.getItem(NOTIFICATION_AUTO_ASKED_KEY)
+
+    if (alreadyAsked === 'true') {
+      return
+    }
+
+    localStorage.setItem(NOTIFICATION_AUTO_ASKED_KEY, 'true')
+
+    setTimeout(() => {
+      enableNotifications({ showMessage: true })
+    }, 800)
+  }, [userProfile?.id])
 
   const improveCameraTrack = async () => {
     try {
@@ -1164,7 +1243,6 @@ function App() {
 
       if (profileError || !profileData) {
         await supabase.auth.signOut()
-        clearLocalSession()
         setMessage(t.profileNotFound)
         setLoading(false)
         return
@@ -1172,13 +1250,10 @@ function App() {
 
       if (profileData.is_active === false) {
         await supabase.auth.signOut()
-        clearLocalSession()
         setMessage(t.inactiveBlocked)
         setLoading(false)
         return
       }
-
-      localStorage.setItem(SESSION_STARTED_AT_KEY, String(Date.now()))
 
       await supabase.from('login_logs').insert({
         user_id: userId,
@@ -1224,7 +1299,6 @@ function App() {
     }
 
     await supabase.auth.signOut()
-    clearLocalSession()
     resetUserState()
     setMessage(t.logoutSuccess)
   }
@@ -1236,14 +1310,6 @@ function App() {
 
     if (requiresBarcode && !cleanBarcode) {
       setMessage(t.barcodeRequired)
-      return
-    }
-
-    if (isSessionExpired()) {
-      await supabase.auth.signOut()
-      clearLocalSession()
-      resetUserState()
-      setMessage(t.sessionExpired)
       return
     }
 
@@ -1275,7 +1341,6 @@ function App() {
           writeReportStatusWindow(reportWindow, t.reportCouldNotLoad, t.sessionMissing, 'error')
         }
 
-        clearLocalSession()
         setMessage(t.sessionMissing)
         setUserProfile(null)
         setLoading(false)
@@ -1416,14 +1481,54 @@ function App() {
             <h1>{t.welcome}, {displayName}</h1>
           </div>
 
-          <button
-            type="button"
-            className="scanButton"
-            onClick={enableNotifications}
-            disabled={notificationsEnabled}
-          >
-            {notificationsEnabled ? t.notificationsEnabled : t.enableNotifications}
-          </button>
+          {userProfile?.role === 'admin' && (
+            <div className="historyBox">
+              <div className="historyHeader">
+                <strong>{t.adminNotificationTitle}</strong>
+              </div>
+
+              <label>{t.adminNotificationSubject}</label>
+              <input
+                type="text"
+                value={adminNotificationTitle}
+                onChange={(e) => setAdminNotificationTitle(e.target.value)}
+                placeholder="Elvan Barkod Rapor"
+                disabled={adminNotificationSending}
+              />
+
+              <label>{t.adminNotificationBody}</label>
+              <textarea
+                value={adminNotificationBody}
+                onChange={(e) => setAdminNotificationBody(e.target.value)}
+                placeholder={t.adminNotificationBodyPlaceholder}
+                disabled={adminNotificationSending}
+                rows={4}
+                style={{
+                  width: '100%',
+                  minHeight: '100px',
+                  padding: '14px',
+                  borderRadius: '14px',
+                  border: '1px solid #d1d5db',
+                  resize: 'vertical',
+                  fontSize: '15px',
+                  fontFamily: 'inherit',
+                }}
+              />
+
+              <button
+                type="button"
+                className="mainButton"
+                onClick={sendAdminNotification}
+                disabled={adminNotificationSending}
+              >
+                {adminNotificationSending ? t.adminNotificationSending : t.adminNotificationSend}
+              </button>
+
+              {adminNotificationMessage && (
+                <p className="message">{adminNotificationMessage}</p>
+              )}
+            </div>
+          )}
 
           <label>{t.barcode}</label>
           <div className="barcodeInputRow">
