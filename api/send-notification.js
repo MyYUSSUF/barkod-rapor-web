@@ -3,13 +3,45 @@ import { createClient } from '@supabase/supabase-js'
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
-const VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY
-const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY
-const VAPID_SUBJECT = process.env.VAPID_SUBJECT || 'mailto:muhammetyusuf2506@gmail.com'
 const NOTIFICATION_ADMIN_SECRET = process.env.NOTIFICATION_ADMIN_SECRET
 
 function isNotBlank(value) {
   return value !== null && value !== undefined && String(value).trim() !== ''
+}
+
+function cleanKey(value) {
+  return String(value || '')
+    .replace('Public Key:', '')
+    .replace('Private Key:', '')
+    .replace('Public key:', '')
+    .replace('Private key:', '')
+    .replace('PUBLIC KEY:', '')
+    .replace('PRIVATE KEY:', '')
+    .replaceAll('"', '')
+    .replaceAll("'", '')
+    .replaceAll(' ', '')
+    .replaceAll('\n', '')
+    .replaceAll('\r', '')
+    .replaceAll('=', '')
+    .trim()
+}
+
+function getVapidPublicKey() {
+  return cleanKey(process.env.VAPID_PUBLIC_KEY)
+}
+
+function getVapidPrivateKey() {
+  return cleanKey(process.env.VAPID_PRIVATE_KEY)
+}
+
+function getVapidSubject() {
+  const subject = String(process.env.VAPID_SUBJECT || '').trim()
+
+  if (subject.startsWith('http://') || subject.startsWith('https://') || subject.startsWith('mailto:')) {
+    return subject
+  }
+
+  return 'https://barkod-rapor-web.vercel.app'
 }
 
 function createSupabaseAdminClient() {
@@ -27,6 +59,15 @@ function createSupabaseAdminClient() {
       autoRefreshToken: false,
     },
   })
+}
+
+function makeSafeError(sendError) {
+  return {
+    statusCode: sendError.statusCode || null,
+    message: sendError.message || 'Bilinmeyen gönderim hatası',
+    body: sendError.body ? String(sendError.body).slice(0, 500) : null,
+    endpoint: sendError.endpoint || null,
+  }
 }
 
 export default async function handler(req, res) {
@@ -51,23 +92,33 @@ export default async function handler(req, res) {
       })
     }
 
-    if (!isNotBlank(VAPID_PUBLIC_KEY) || !isNotBlank(VAPID_PRIVATE_KEY)) {
+    const vapidPublicKey = getVapidPublicKey()
+    const vapidPrivateKey = getVapidPrivateKey()
+    const vapidSubject = getVapidSubject()
+
+    if (!isNotBlank(vapidPublicKey)) {
       return res.status(500).json({
-        error: 'VAPID anahtarları eksik.',
+        error: 'VAPID_PUBLIC_KEY eksik.',
+      })
+    }
+
+    if (!isNotBlank(vapidPrivateKey)) {
+      return res.status(500).json({
+        error: 'VAPID_PRIVATE_KEY eksik.',
       })
     }
 
     webPush.setVapidDetails(
-      VAPID_SUBJECT,
-      VAPID_PUBLIC_KEY,
-      VAPID_PRIVATE_KEY
+      vapidSubject,
+      vapidPublicKey,
+      vapidPrivateKey
     )
 
     const supabaseAdmin = createSupabaseAdminClient()
 
     const { data: subscriptions, error } = await supabaseAdmin
       .from('push_subscriptions')
-      .select('id, endpoint, subscription')
+      .select('id, endpoint, subscription, user_agent, created_at')
 
     if (error) {
       throw new Error(error.message)
@@ -78,6 +129,7 @@ export default async function handler(req, res) {
         total: 0,
         sent: 0,
         failed: 0,
+        deleted: 0,
         message: 'Kayıtlı bildirim cihazı yok.',
       })
     }
@@ -91,6 +143,7 @@ export default async function handler(req, res) {
     let sent = 0
     let failed = 0
     const deletedIds = []
+    const failedDetails = []
 
     for (const item of subscriptions) {
       try {
@@ -99,7 +152,20 @@ export default async function handler(req, res) {
       } catch (sendError) {
         failed += 1
 
-        if (sendError.statusCode === 404 || sendError.statusCode === 410) {
+        failedDetails.push({
+          id: item.id,
+          endpointStart: item.endpoint ? String(item.endpoint).slice(0, 80) : null,
+          userAgent: item.user_agent || null,
+          createdAt: item.created_at || null,
+          error: makeSafeError(sendError),
+        })
+
+        if (
+          sendError.statusCode === 404 ||
+          sendError.statusCode === 410 ||
+          sendError.statusCode === 400 ||
+          sendError.statusCode === 403
+        ) {
           deletedIds.push(item.id)
         }
       }
@@ -117,6 +183,9 @@ export default async function handler(req, res) {
       sent,
       failed,
       deleted: deletedIds.length,
+      vapidPublicKeyLength: vapidPublicKey.length,
+      vapidSubject,
+      failedDetails,
     })
   } catch (error) {
     return res.status(500).json({
