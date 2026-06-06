@@ -13,8 +13,8 @@ const LANGUAGE_KEY = 'barkod_rapor_language'
 const SESSION_STARTED_AT_KEY = 'barkod_rapor_session_started_at'
 const SESSION_MAX_MS = 60 * 60 * 1000
 const REPORT_TIMEOUT_MS = 45000
-const APP_VERSION = 'v1.12'
-const APP_LOG_VERSION = 'web-v1.12'
+const APP_VERSION = 'v1.13'
+const APP_LOG_VERSION = 'web-v1.13'
 
 const REPORTS = [
   {
@@ -58,7 +58,6 @@ const LANGUAGES = {
     cameraOpen: 'Kamera Açık',
     closeCamera: 'Kamerayı Kapat',
     cameraOpening: 'Kamera açılıyor...',
-    showBarcode: 'Barkodu kameraya göster.',
     alignBarcode: 'Barkodu çerçevenin içine hizalayın.',
     cameraHint: 'Net okuma için barkodu ışık alan yerde, çerçeveye paralel tutun.',
     cameraAreaMissing: 'Kamera alanı bulunamadı.',
@@ -89,13 +88,10 @@ const LANGUAGES = {
     workOrder: 'İş Emri Raporu',
     surfaceControl: 'Yüzey Kontrol Raporu',
     fixingWaiting: 'Fikse Bekleyenler',
-    reportPageTitle: 'Rapor Görüntüleyici',
     reportPagePreparing: 'Rapor hazırlanıyor...',
     pleaseWait: 'Lütfen bekleyin.',
     openPdf: 'PDF’i Aç',
     sharePdf: 'PDF Olarak Paylaş',
-    share: 'Paylaş',
-    refresh: 'Yenile',
     close: 'Kapat',
     pdfPreparing: 'PDF hazırlanıyor...',
     pdfFetchFailed: 'PDF alınamadı.',
@@ -103,6 +99,13 @@ const LANGUAGES = {
     shareNotSupported: 'PDF paylaşımı desteklenmiyor. Link kopyalandı.',
     reportCouldNotLoad: 'Rapor yüklenemedi.',
     versionText: 'Barkod Rapor Web',
+    enableNotifications: 'Bildirimleri Aç',
+    notificationsEnabled: 'Bildirimler açık',
+    notificationUnsupported: 'Bu cihaz veya tarayıcı bildirimleri desteklemiyor.',
+    notificationDenied: 'Bildirim izni verilmedi.',
+    notificationKeyMissing: 'Bildirim anahtarı eksik. Vercel ayarlarını kontrol edin.',
+    notificationSaved: 'Bildirimler açıldı. Bu cihaza bildirim gelebilir.',
+    notificationError: 'Bildirim açılırken hata oluştu: ',
   },
   en: {
     appTitle: 'Barcode Report Web',
@@ -122,7 +125,6 @@ const LANGUAGES = {
     cameraOpen: 'Camera Open',
     closeCamera: 'Close Camera',
     cameraOpening: 'Opening camera...',
-    showBarcode: 'Show the barcode to the camera.',
     alignBarcode: 'Align the barcode inside the frame.',
     cameraHint: 'For clear scanning, keep the barcode parallel to the frame in good light.',
     cameraAreaMissing: 'Camera area not found.',
@@ -153,13 +155,10 @@ const LANGUAGES = {
     workOrder: 'Work Order Report',
     surfaceControl: 'Surface Control Report',
     fixingWaiting: 'Fixing Waiting List',
-    reportPageTitle: 'Report Viewer',
     reportPagePreparing: 'Report is preparing...',
     pleaseWait: 'Please wait.',
     openPdf: 'Open PDF',
     sharePdf: 'Share as PDF',
-    share: 'Share',
-    refresh: 'Refresh',
     close: 'Close',
     pdfPreparing: 'Preparing PDF...',
     pdfFetchFailed: 'PDF could not be received.',
@@ -167,6 +166,13 @@ const LANGUAGES = {
     shareNotSupported: 'PDF sharing is not supported. Link copied.',
     reportCouldNotLoad: 'Report could not be loaded.',
     versionText: 'Barcode Report Web',
+    enableNotifications: 'Enable Notifications',
+    notificationsEnabled: 'Notifications enabled',
+    notificationUnsupported: 'This device or browser does not support notifications.',
+    notificationDenied: 'Notification permission was not granted.',
+    notificationKeyMissing: 'Notification key is missing. Check Vercel settings.',
+    notificationSaved: 'Notifications enabled. This device can receive notifications.',
+    notificationError: 'Notification setup failed: ',
   },
   ar: {
     appTitle: 'نظام تقارير الباركود',
@@ -186,7 +192,6 @@ const LANGUAGES = {
     cameraOpen: 'الكاميرا مفتوحة',
     closeCamera: 'إغلاق الكاميرا',
     cameraOpening: 'جارٍ فتح الكاميرا...',
-    showBarcode: 'اعرض الباركود أمام الكاميرا.',
     alignBarcode: 'ضع الباركود داخل الإطار.',
     cameraHint: 'للقراءة بوضوح، اجعل الباركود موازيًا للإطار وفي إضاءة جيدة.',
     cameraAreaMissing: 'لم يتم العثور على مساحة الكاميرا.',
@@ -217,13 +222,10 @@ const LANGUAGES = {
     workOrder: 'تقرير أمر العمل',
     surfaceControl: 'تقرير مراقبة السطح',
     fixingWaiting: 'قائمة انتظار التثبيت',
-    reportPageTitle: 'عارض التقرير',
     reportPagePreparing: 'جارٍ تجهيز التقرير...',
     pleaseWait: 'يرجى الانتظار.',
     openPdf: 'فتح PDF',
     sharePdf: 'مشاركة كملف PDF',
-    share: 'مشاركة',
-    refresh: 'تحديث',
     close: 'إغلاق',
     pdfPreparing: 'جارٍ تجهيز PDF...',
     pdfFetchFailed: 'تعذر الحصول على PDF.',
@@ -231,6 +233,13 @@ const LANGUAGES = {
     shareNotSupported: 'مشاركة PDF غير مدعومة. تم نسخ الرابط.',
     reportCouldNotLoad: 'تعذر تحميل التقرير.',
     versionText: 'نظام تقارير الباركود',
+    enableNotifications: 'تفعيل الإشعارات',
+    notificationsEnabled: 'الإشعارات مفعلة',
+    notificationUnsupported: 'هذا الجهاز أو المتصفح لا يدعم الإشعارات.',
+    notificationDenied: 'لم يتم السماح بالإشعارات.',
+    notificationKeyMissing: 'مفتاح الإشعارات غير موجود. تحقق من إعدادات Vercel.',
+    notificationSaved: 'تم تفعيل الإشعارات. يمكن لهذا الجهاز استقبال الإشعارات.',
+    notificationError: 'حدث خطأ أثناء تفعيل الإشعارات: ',
   },
 }
 
@@ -257,6 +266,22 @@ const fetchWithTimeout = async (url, options = {}, timeoutMs = REPORT_TIMEOUT_MS
   }
 }
 
+const urlBase64ToUint8Array = (base64String) => {
+  const padding = '='.repeat((4 - (base64String.length % 4)) % 4)
+  const base64 = (base64String + padding)
+    .replaceAll('-', '+')
+    .replaceAll('_', '/')
+
+  const rawData = window.atob(base64)
+  const outputArray = new Uint8Array(rawData.length)
+
+  for (let i = 0; i < rawData.length; i += 1) {
+    outputArray[i] = rawData.charCodeAt(i)
+  }
+
+  return outputArray
+}
+
 function App() {
   const videoRef = useRef(null)
   const scannerControlsRef = useRef(null)
@@ -281,6 +306,7 @@ function App() {
   const [message, setMessage] = useState('')
   const [scannerOpen, setScannerOpen] = useState(false)
   const [scannerMessage, setScannerMessage] = useState('')
+  const [notificationsEnabled, setNotificationsEnabled] = useState(false)
 
   const changeLanguage = (value) => {
     setLanguage(value)
@@ -342,6 +368,7 @@ function App() {
     setBarcode('')
     setSelectedReportCode('')
     setDisplayName('')
+    setNotificationsEnabled(false)
   }
 
   const makeDisplayName = (profile, fallbackUsername) => {
@@ -423,6 +450,79 @@ function App() {
       .replace(/\s+/g, '_')
       .replace(/_+/g, '_')
       .replace(/^_+|_+$/g, '') || 'report'
+  }
+
+  const enableNotifications = async () => {
+    setMessage('')
+
+    try {
+      if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) {
+        setMessage(t.notificationUnsupported)
+        return
+      }
+
+      const publicKey = import.meta.env.VITE_VAPID_PUBLIC_KEY
+
+      if (!publicKey) {
+        setMessage(t.notificationKeyMissing)
+        return
+      }
+
+      const permission = await Notification.requestPermission()
+
+      if (permission !== 'granted') {
+        setMessage(t.notificationDenied)
+        return
+      }
+
+      const { data: sessionData } = await supabase.auth.getSession()
+      const userId = sessionData?.session?.user?.id
+
+      if (!userId) {
+        setMessage(t.sessionMissing)
+        return
+      }
+
+      const registration = await navigator.serviceWorker.register('/sw.js')
+      const readyRegistration = await navigator.serviceWorker.ready
+
+      let subscription = await readyRegistration.pushManager.getSubscription()
+
+      if (!subscription) {
+        subscription = await readyRegistration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(publicKey),
+        })
+      }
+
+      const subscriptionJson = subscription.toJSON()
+
+      const { error } = await supabase
+        .from('push_subscriptions')
+        .upsert(
+          {
+            user_id: userId,
+            endpoint: subscription.endpoint,
+            subscription: subscriptionJson,
+            user_agent: getDeviceName(),
+            updated_at: new Date().toISOString(),
+          },
+          {
+            onConflict: 'endpoint',
+          }
+        )
+
+      if (error) {
+        throw new Error(error.message)
+      }
+
+      setNotificationsEnabled(true)
+      setMessage(t.notificationSaved)
+
+      console.log('Service worker registration:', registration)
+    } catch (err) {
+      setMessage(t.notificationError + err.message)
+    }
   }
 
   const writeReportStatusWindow = (reportWindow, title, detail, type = 'loading') => {
@@ -1271,6 +1371,15 @@ function App() {
             <span className="eyebrow">{t.appSubtitle}</span>
             <h1>{t.welcome}, {displayName}</h1>
           </div>
+
+          <button
+            type="button"
+            className="scanButton"
+            onClick={enableNotifications}
+            disabled={notificationsEnabled}
+          >
+            {notificationsEnabled ? t.notificationsEnabled : t.enableNotifications}
+          </button>
 
           <label>{t.barcode}</label>
           <div className="barcodeInputRow">
