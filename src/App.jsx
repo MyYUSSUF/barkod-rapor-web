@@ -13,8 +13,11 @@ const LANGUAGE_KEY = 'barkod_rapor_language'
 const SESSION_STARTED_AT_KEY = 'barkod_rapor_session_started_at'
 const SESSION_MAX_MS = 60 * 60 * 1000
 const REPORT_TIMEOUT_MS = 45000
-const APP_VERSION = 'v1.13'
-const APP_LOG_VERSION = 'web-v1.13'
+const APP_VERSION = 'v1.14'
+const APP_LOG_VERSION = 'web-v1.14'
+
+const FALLBACK_VAPID_PUBLIC_KEY =
+  'BM9_gghUvmDN_KMmsiDOL3HzumEA1vheTO3BcQhtyyLnbIFgE4EExPzOECbHODO5zBX-BaN-M0dwhI5QX9EckVk'
 
 const REPORTS = [
   {
@@ -266,9 +269,35 @@ const fetchWithTimeout = async (url, options = {}, timeoutMs = REPORT_TIMEOUT_MS
   }
 }
 
+const cleanVapidPublicKey = (value) => {
+  return String(value || '')
+    .replace('Public Key:', '')
+    .replace('Public key:', '')
+    .replace('PUBLIC KEY:', '')
+    .replaceAll('"', '')
+    .replaceAll("'", '')
+    .replaceAll(' ', '')
+    .replaceAll('\n', '')
+    .replaceAll('\r', '')
+    .replaceAll('=', '')
+    .trim()
+}
+
+const getVapidPublicKey = () => {
+  const envKey = cleanVapidPublicKey(import.meta.env.VITE_VAPID_PUBLIC_KEY)
+  const fallbackKey = cleanVapidPublicKey(FALLBACK_VAPID_PUBLIC_KEY)
+
+  if (envKey.length > 50) {
+    return envKey
+  }
+
+  return fallbackKey
+}
+
 const urlBase64ToUint8Array = (base64String) => {
-  const padding = '='.repeat((4 - (base64String.length % 4)) % 4)
-  const base64 = (base64String + padding)
+  const cleanBase64String = cleanVapidPublicKey(base64String)
+  const padding = '='.repeat((4 - (cleanBase64String.length % 4)) % 4)
+  const base64 = (cleanBase64String + padding)
     .replaceAll('-', '+')
     .replaceAll('_', '/')
 
@@ -461,11 +490,17 @@ function App() {
         return
       }
 
-      const publicKey = import.meta.env.VITE_VAPID_PUBLIC_KEY
+      const publicKey = getVapidPublicKey()
 
       if (!publicKey) {
         setMessage(t.notificationKeyMissing)
         return
+      }
+
+      const applicationServerKey = urlBase64ToUint8Array(publicKey)
+
+      if (applicationServerKey.length !== 65) {
+        throw new Error(`Public Key uzunluğu geçersiz. Beklenen 65 byte, gelen ${applicationServerKey.length} byte.`)
       }
 
       const permission = await Notification.requestPermission()
@@ -486,23 +521,34 @@ function App() {
       const registration = await navigator.serviceWorker.register('/sw.js')
       const readyRegistration = await navigator.serviceWorker.ready
 
-      let subscription = await readyRegistration.pushManager.getSubscription()
+      const oldSubscription = await readyRegistration.pushManager.getSubscription()
 
-      if (!subscription) {
-        subscription = await readyRegistration.pushManager.subscribe({
-          userVisibleOnly: true,
-          applicationServerKey: urlBase64ToUint8Array(publicKey),
-        })
+      if (oldSubscription) {
+        try {
+          await oldSubscription.unsubscribe()
+        } catch (unsubscribeError) {
+          console.log('Eski bildirim aboneliği iptal edilemedi:', unsubscribeError)
+        }
       }
 
-      const subscriptionJson = subscription.toJSON()
+      await supabase
+        .from('push_subscriptions')
+        .delete()
+        .eq('user_id', userId)
+
+      const newSubscription = await readyRegistration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey,
+      })
+
+      const subscriptionJson = newSubscription.toJSON()
 
       const { error } = await supabase
         .from('push_subscriptions')
         .upsert(
           {
             user_id: userId,
-            endpoint: subscription.endpoint,
+            endpoint: newSubscription.endpoint,
             subscription: subscriptionJson,
             user_agent: getDeviceName(),
             updated_at: new Date().toISOString(),
@@ -518,8 +564,6 @@ function App() {
 
       setNotificationsEnabled(true)
       setMessage(t.notificationSaved)
-
-      console.log('Service worker registration:', registration)
     } catch (err) {
       setMessage(t.notificationError + err.message)
     }
