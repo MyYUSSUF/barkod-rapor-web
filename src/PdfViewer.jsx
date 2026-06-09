@@ -27,9 +27,8 @@ function PdfViewer({
   const renderIdRef = useRef(0)
   const pdfDocumentRef = useRef(null)
   const pdfBlobRef = useRef(null)
-  const previousScrollRef = useRef(0)
 
-  const [fitVersion, setFitVersion] = useState(0)
+  const [renderVersion, setRenderVersion] = useState(0)
   const [loading, setLoading] = useState(true)
   const [sharing, setSharing] = useState(false)
   const [error, setError] = useState('')
@@ -76,59 +75,6 @@ function PdfViewer({
       : `${fileName || reportName || 'rapor'}.pdf`
   )
 
-  useEffect(() => {
-    previousScrollRef.current =
-      window.scrollY ||
-      document.documentElement.scrollTop ||
-      document.body.scrollTop ||
-      0
-
-    const htmlElement = document.documentElement
-    const bodyElement = document.body
-
-    const previousHtmlOverflow = htmlElement.style.overflow
-    const previousHtmlHeight = htmlElement.style.height
-    const previousBodyOverflow = bodyElement.style.overflow
-    const previousBodyPosition = bodyElement.style.position
-    const previousBodyTop = bodyElement.style.top
-    const previousBodyLeft = bodyElement.style.left
-    const previousBodyRight = bodyElement.style.right
-    const previousBodyWidth = bodyElement.style.width
-    const previousBodyHeight = bodyElement.style.height
-
-    htmlElement.style.overflow = 'hidden'
-    htmlElement.style.height = '100%'
-
-    bodyElement.style.overflow = 'hidden'
-    bodyElement.style.position = 'fixed'
-    bodyElement.style.top = `-${previousScrollRef.current}px`
-    bodyElement.style.left = '0'
-    bodyElement.style.right = '0'
-    bodyElement.style.width = '100%'
-    bodyElement.style.height = '100%'
-
-    return () => {
-      htmlElement.style.overflow = previousHtmlOverflow
-      htmlElement.style.height = previousHtmlHeight
-
-      bodyElement.style.overflow = previousBodyOverflow
-      bodyElement.style.position = previousBodyPosition
-      bodyElement.style.top = previousBodyTop
-      bodyElement.style.left = previousBodyLeft
-      bodyElement.style.right = previousBodyRight
-      bodyElement.style.width = previousBodyWidth
-      bodyElement.style.height = previousBodyHeight
-
-      requestAnimationFrame(() => {
-        window.scrollTo(0, previousScrollRef.current)
-      })
-
-      setTimeout(() => {
-        window.scrollTo(0, previousScrollRef.current)
-      }, 100)
-    }
-  }, [])
-
   const loadPdfBlob = useCallback(async () => {
     if (pdfBlobRef.current) {
       return pdfBlobRef.current
@@ -152,6 +98,20 @@ function PdfViewer({
     pdfBlobRef.current = blob
     return blob
   }, [pdfUrl])
+
+  const destroyCurrentPdf = useCallback(async () => {
+    if (!pdfDocumentRef.current) {
+      return
+    }
+
+    try {
+      await pdfDocumentRef.current.destroy()
+    } catch (destroyError) {
+      console.log('PDF kapatma hatası:', destroyError)
+    }
+
+    pdfDocumentRef.current = null
+  }, [])
 
   const renderPdf = useCallback(async () => {
     const currentRenderId = renderIdRef.current + 1
@@ -177,13 +137,7 @@ function PdfViewer({
         return
       }
 
-      if (pdfDocumentRef.current) {
-        try {
-          await pdfDocumentRef.current.destroy()
-        } catch (destroyError) {
-          console.log('Eski PDF kapatma hatası:', destroyError)
-        }
-      }
+      await destroyCurrentPdf()
 
       pdfDocumentRef.current = pdfDocument
       setPageCount(pdfDocument.numPages)
@@ -196,9 +150,18 @@ function PdfViewer({
       }
 
       container.innerHTML = ''
+      container.scrollTop = 0
+      container.scrollLeft = 0
 
-      const availableWidth = Math.max(container.clientWidth - 24, 280)
-      const devicePixelRatio = Math.min(window.devicePixelRatio || 1, 2)
+      const availableWidth = Math.max(
+        container.clientWidth - 24,
+        280
+      )
+
+      const devicePixelRatio = Math.min(
+        window.devicePixelRatio || 1,
+        2
+      )
 
       for (
         let pageNumber = 1;
@@ -210,34 +173,58 @@ function PdfViewer({
         }
 
         const page = await pdfDocument.getPage(pageNumber)
-        const originalViewport = page.getViewport({ scale: 1 })
+        const originalViewport = page.getViewport({
+          scale: 1,
+        })
 
-        const fitScale = availableWidth / originalViewport.width
-        const viewport = page.getViewport({ scale: fitScale })
+        const fitScale =
+          availableWidth / originalViewport.width
 
-        const pageWrapper = document.createElement('section')
+        const viewport = page.getViewport({
+          scale: fitScale,
+        })
+
+        const pageWrapper =
+          document.createElement('section')
+
         pageWrapper.className = 'pdfViewerPage'
-        pageWrapper.dataset.pageNumber = String(pageNumber)
+        pageWrapper.dataset.pageNumber =
+          String(pageNumber)
 
-        const pageLabel = document.createElement('div')
+        const pageLabel =
+          document.createElement('div')
+
         pageLabel.className = 'pdfViewerPageLabel'
         pageLabel.textContent =
           `${t.page} ${pageNumber} / ${pdfDocument.numPages}`
 
-        const canvas = document.createElement('canvas')
+        const canvas =
+          document.createElement('canvas')
+
         const context = canvas.getContext('2d', {
           alpha: false,
           willReadFrequently: false,
         })
 
         if (!context) {
-          throw new Error('PDF çizim alanı oluşturulamadı.')
+          throw new Error(
+            'PDF çizim alanı oluşturulamadı.'
+          )
         }
 
-        canvas.width = Math.floor(viewport.width * devicePixelRatio)
-        canvas.height = Math.floor(viewport.height * devicePixelRatio)
-        canvas.style.width = `${Math.floor(viewport.width)}px`
-        canvas.style.height = `${Math.floor(viewport.height)}px`
+        canvas.width = Math.floor(
+          viewport.width * devicePixelRatio
+        )
+
+        canvas.height = Math.floor(
+          viewport.height * devicePixelRatio
+        )
+
+        canvas.style.width =
+          `${Math.floor(viewport.width)}px`
+
+        canvas.style.height =
+          `${Math.floor(viewport.height)}px`
 
         pageWrapper.appendChild(pageLabel)
         pageWrapper.appendChild(canvas)
@@ -249,7 +236,14 @@ function PdfViewer({
           transform:
             devicePixelRatio === 1
               ? null
-              : [devicePixelRatio, 0, 0, devicePixelRatio, 0, 0],
+              : [
+                  devicePixelRatio,
+                  0,
+                  0,
+                  devicePixelRatio,
+                  0,
+                  0,
+                ],
           background: '#ffffff',
         }).promise
       }
@@ -262,14 +256,18 @@ function PdfViewer({
 
       if (currentRenderId === renderIdRef.current) {
         setError(
-          `${t.loadError} ${renderError.message || ''}`.trim()
+          `${t.loadError} ${
+            renderError.message || ''
+          }`.trim()
         )
+
         setLoading(false)
       }
     }
   }, [
-    fitVersion,
+    destroyCurrentPdf,
     loadPdfBlob,
+    renderVersion,
     t.loadError,
     t.page,
   ])
@@ -279,13 +277,9 @@ function PdfViewer({
 
     return () => {
       renderIdRef.current += 1
-
-      if (pdfDocumentRef.current) {
-        pdfDocumentRef.current.destroy().catch(() => {})
-        pdfDocumentRef.current = null
-      }
+      destroyCurrentPdf()
     }
-  }, [renderPdf])
+  }, [destroyCurrentPdf, renderPdf])
 
   useEffect(() => {
     const container = containerRef.current
@@ -305,11 +299,16 @@ function PdfViewer({
 
       const toolbarHeight = 64
       let closestPage = 1
-      let closestDistance = Number.POSITIVE_INFINITY
+      let closestDistance =
+        Number.POSITIVE_INFINITY
 
       pages.forEach((pageElement) => {
-        const rect = pageElement.getBoundingClientRect()
-        const distance = Math.abs(rect.top - toolbarHeight)
+        const rect =
+          pageElement.getBoundingClientRect()
+
+        const distance = Math.abs(
+          rect.top - toolbarHeight
+        )
 
         if (distance < closestDistance) {
           closestDistance = distance
@@ -322,9 +321,13 @@ function PdfViewer({
       setCurrentPage(closestPage)
     }
 
-    container.addEventListener('scroll', updateCurrentPage, {
-      passive: true,
-    })
+    container.addEventListener(
+      'scroll',
+      updateCurrentPage,
+      {
+        passive: true,
+      }
+    )
 
     return () => {
       container.removeEventListener(
@@ -341,8 +344,8 @@ function PdfViewer({
       clearTimeout(resizeTimer)
 
       resizeTimer = setTimeout(() => {
-        setFitVersion((value) => value + 1)
-      }, 250)
+        setRenderVersion((value) => value + 1)
+      }, 300)
     }
 
     window.addEventListener('resize', handleResize)
@@ -353,7 +356,12 @@ function PdfViewer({
 
     return () => {
       clearTimeout(resizeTimer)
-      window.removeEventListener('resize', handleResize)
+
+      window.removeEventListener(
+        'resize',
+        handleResize
+      )
+
       window.removeEventListener(
         'orientationchange',
         handleResize
@@ -379,7 +387,9 @@ function PdfViewer({
       if (
         navigator.share &&
         navigator.canShare &&
-        navigator.canShare({ files: [file] })
+        navigator.canShare({
+          files: [file],
+        })
       ) {
         await navigator.share({
           title: reportName || finalFileName,
@@ -400,7 +410,9 @@ function PdfViewer({
     } catch (shareError) {
       if (shareError?.name !== 'AbortError') {
         setError(
-          `${t.shareError} ${shareError.message || ''}`.trim()
+          `${t.shareError} ${
+            shareError.message || ''
+          }`.trim()
         )
       }
     } finally {
@@ -408,17 +420,41 @@ function PdfViewer({
     }
   }
 
-  const handleClose = () => {
+  const handleClose = async () => {
     renderIdRef.current += 1
 
     if (containerRef.current) {
       containerRef.current.scrollTop = 0
       containerRef.current.scrollLeft = 0
+      containerRef.current.innerHTML = ''
     }
+
+    await destroyCurrentPdf()
+
+    document.documentElement.style.overflow = ''
+    document.documentElement.style.height = ''
+
+    document.body.style.overflow = ''
+    document.body.style.position = ''
+    document.body.style.top = ''
+    document.body.style.left = ''
+    document.body.style.right = ''
+    document.body.style.width = ''
+    document.body.style.height = ''
+
+    window.scrollTo(0, 0)
 
     if (typeof onClose === 'function') {
       onClose()
     }
+
+    requestAnimationFrame(() => {
+      window.scrollTo(0, 0)
+    })
+
+    setTimeout(() => {
+      window.scrollTo(0, 0)
+    }, 100)
   }
 
   return (
@@ -462,7 +498,9 @@ function PdfViewer({
       {loading && (
         <div
           className="pdfViewerLoading"
-          style={{ inset: '56px 0 0' }}
+          style={{
+            inset: '56px 0 0',
+          }}
         >
           <div className="pdfViewerSpinner" />
           <strong>{t.loading}</strong>
