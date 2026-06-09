@@ -5,6 +5,11 @@ import './PdfViewer.css'
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl
 
+const HIGH_QUALITY_DPR_LIMIT = 2
+const LOW_QUALITY_DPR_LIMIT = 1.25
+const FIRST_PAGE_TIMEOUT_MS = 12000
+const OTHER_PAGE_TIMEOUT_MS = 15000
+
 function sanitizeFileName(value) {
   return (
     String(value || 'rapor.pdf')
@@ -14,6 +19,12 @@ function sanitizeFileName(value) {
       .replace(/_+/g, '_')
       .replace(/^_+|_+$/g, '') || 'rapor.pdf'
   )
+}
+
+function createTimeoutError() {
+  const error = new Error('PDF sayfası hazırlanırken cihaz zaman aşımına uğradı.')
+  error.name = 'PdfRenderTimeoutError'
+  return error
 }
 
 function PdfViewer({
@@ -27,7 +38,8 @@ function PdfViewer({
   const renderIdRef = useRef(0)
   const pdfDocumentRef = useRef(null)
   const pdfBlobRef = useRef(null)
-  const useLinkShareRef = useRef(false)
+  const activeRenderTaskRef = useRef(null)
+  const adaptiveDprLimitRef = useRef(HIGH_QUALITY_DPR_LIMIT)
 
   const [renderVersion, setRenderVersion] = useState(0)
   const [loading, setLoading] = useState(true)
@@ -47,12 +59,11 @@ function PdfViewer({
       loadError: 'Rapor görüntülenemedi.',
       shareError: 'PDF paylaşılamadı.',
       shareNotSupported:
-        'Bu cihaz paylaşım özelliğini desteklemiyor.',
-      shareLinkRetry:
-        'Bu telefon PDF dosyasını doğrudan paylaşmayı engelledi. Paylaş butonuna tekrar basın; rapor bağlantısı paylaşılacak.',
+        'Bu telefon PDF dosyası paylaşımını desteklemiyor.',
       pdfNotReady:
         'PDF henüz hazır değil. Birkaç saniye sonra tekrar deneyin.',
       page: 'Sayfa',
+      pageError: 'Bu sayfa görüntülenemedi.',
     },
     en: {
       close: 'Close',
@@ -62,12 +73,11 @@ function PdfViewer({
       loadError: 'Report could not be displayed.',
       shareError: 'PDF could not be shared.',
       shareNotSupported:
-        'This device does not support sharing.',
-      shareLinkRetry:
-        'This phone blocked direct PDF sharing. Press Share again to share the report link.',
+        'This phone does not support sharing PDF files.',
       pdfNotReady:
         'The PDF is not ready yet. Try again in a few seconds.',
       page: 'Page',
+      pageError: 'This page could not be displayed.',
     },
     ar: {
       close: 'إغلاق',
@@ -77,12 +87,11 @@ function PdfViewer({
       loadError: 'تعذر عرض التقرير.',
       shareError: 'تعذرت مشاركة ملف PDF.',
       shareNotSupported:
-        'هذا الجهاز لا يدعم المشاركة.',
-      shareLinkRetry:
-        'منع هذا الهاتف مشاركة ملف PDF مباشرة. اضغط على مشاركة مرة أخرى لمشاركة رابط التقرير.',
+        'هذا الهاتف لا يدعم مشاركة ملفات PDF.',
       pdfNotReady:
         'ملف PDF غير جاهز بعد. حاول مرة أخرى بعد لحظات.',
       page: 'صفحة',
+      pageError: 'تعذر عرض هذه الصفحة.',
     },
   }
 
@@ -119,6 +128,16 @@ function PdfViewer({
   }, [pdfUrl])
 
   const destroyCurrentPdf = useCallback(async () => {
+    if (activeRenderTaskRef.current) {
+      try {
+        activeRenderTaskRef.current.cancel()
+      } catch (cancelError) {
+        console.log('PDF render iptal hatası:', cancelError)
+      }
+
+      activeRenderTaskRef.current = null
+    }
+
     if (!pdfDocumentRef.current) {
       return
     }
@@ -132,12 +151,258 @@ function PdfViewer({
     pdfDocumentRef.current = null
   }, [])
 
+  const renderCanvasWithTimeout = useCallback(
+    async ({
+      page,
+      viewport,
+      canvas,
+      context,
+      devicePixelRatio,
+      timeoutMs,
+    }) => {
+      canvas.width = Math.max(
+        1,
+        Math.floor(viewport.width * devicePixelRatio)
+      )
+
+      canvas.height = Math.max(
+        1,
+        Math.floor(viewport.height * devicePixelRatio)
+      )
+
+      canvas.style.width = `${Math.floor(viewport.width)}px`
+      canvas.style.height = `${Math.floor(viewport.height)}px`
+
+      const renderTask = page.render({
+        canvasContext: context,
+        viewport,
+        transform:
+          devicePixelRatio === 1
+            ? null
+            : [
+                devicePixelRatio,
+                0,
+                0,
+                devicePixelRatio,
+                0,
+                0,
+              ],
+        background: '#ffffff',
+      })
+
+      activeRenderTaskRef.current = renderTask
+
+      let timeoutId
+
+      const timeoutPromise = new Promise((resolve, reject) => {
+        timeoutId = setTimeout(() => {
+          try {
+            renderTask.cancel()
+          } catch (cancelError) {
+            console.log('Zaman aşımı render iptal hatası:', cancelError)
+          }
+
+          reject(createTimeoutError())
+        }, timeoutMs)
+      })
+
+      try {
+        await Promise.race([
+          renderTask.promise,
+          timeoutPromise,
+        ])
+      } finally {
+        clearTimeout(timeoutId)
+
+        if (activeRenderTaskRef.current === renderTask) {
+          activeRenderTaskRef.current = null
+        }
+      }
+    },
+    []
+  )
+
+  const renderSinglePage = useCallback(
+    async ({
+      pdfDocument,
+      pageNumber,
+      container,
+      availableWidth,
+      currentRenderId,
+    }) => {
+      const page = await pdfDocument.getPage(pageNumber)
+
+      if (currentRenderId !== renderIdRef.current) {
+        return false
+      }
+
+      const originalViewport = page.getViewport({
+        scale: 1,
+      })
+
+      const fitScale =
+        availableWidth / originalViewport.width
+
+      const viewport = page.getViewport({
+        scale: fitScale,
+      })
+
+      const pageWrapper =
+        document.createElement('section')
+
+      pageWrapper.className = 'pdfViewerPage'
+      pageWrapper.dataset.pageNumber = String(pageNumber)
+
+      const pageLabel =
+        document.createElement('div')
+
+      pageLabel.className = 'pdfViewerPageLabel'
+      pageLabel.textContent =
+        `${t.page} ${pageNumber} / ${pdfDocument.numPages}`
+
+      const canvas =
+        document.createElement('canvas')
+
+      const context = canvas.getContext('2d', {
+        alpha: false,
+        willReadFrequently: false,
+      })
+
+      if (!context) {
+        throw new Error(
+          'PDF çizim alanı oluşturulamadı.'
+        )
+      }
+
+      pageWrapper.appendChild(pageLabel)
+      pageWrapper.appendChild(canvas)
+      container.appendChild(pageWrapper)
+
+      const nativeDpr = window.devicePixelRatio || 1
+
+      const highQualityDpr = Math.min(
+        nativeDpr,
+        adaptiveDprLimitRef.current
+      )
+
+      const timeoutMs =
+        pageNumber === 1
+          ? FIRST_PAGE_TIMEOUT_MS
+          : OTHER_PAGE_TIMEOUT_MS
+
+      try {
+        await renderCanvasWithTimeout({
+          page,
+          viewport,
+          canvas,
+          context,
+          devicePixelRatio: highQualityDpr,
+          timeoutMs,
+        })
+
+        return true
+      } catch (firstRenderError) {
+        if (
+          currentRenderId !== renderIdRef.current ||
+          firstRenderError?.name === 'RenderingCancelledException'
+        ) {
+          return false
+        }
+
+        console.log(
+          `Sayfa ${pageNumber} yüksek kalite render başarısız:`,
+          firstRenderError
+        )
+
+        adaptiveDprLimitRef.current =
+          LOW_QUALITY_DPR_LIMIT
+
+        const lowQualityDpr = Math.min(
+          nativeDpr,
+          LOW_QUALITY_DPR_LIMIT
+        )
+
+        canvas.width = 1
+        canvas.height = 1
+
+        try {
+          await renderCanvasWithTimeout({
+            page,
+            viewport,
+            canvas,
+            context,
+            devicePixelRatio: lowQualityDpr,
+            timeoutMs: OTHER_PAGE_TIMEOUT_MS,
+          })
+
+          return true
+        } catch (secondRenderError) {
+          if (
+            currentRenderId !== renderIdRef.current ||
+            secondRenderError?.name ===
+              'RenderingCancelledException'
+          ) {
+            return false
+          }
+
+          console.error(
+            `Sayfa ${pageNumber} hafif render başarısız:`,
+            secondRenderError
+          )
+
+          pageWrapper.innerHTML = ''
+
+          const failedPageLabel =
+            document.createElement('div')
+
+          failedPageLabel.className =
+            'pdfViewerPageLabel'
+
+          failedPageLabel.textContent =
+            `${t.page} ${pageNumber} / ${pdfDocument.numPages}`
+
+          const failedMessage =
+            document.createElement('div')
+
+          failedMessage.style.width =
+            `${Math.floor(viewport.width)}px`
+
+          failedMessage.style.minHeight = '180px'
+          failedMessage.style.padding = '30px 20px'
+          failedMessage.style.background = '#ffffff'
+          failedMessage.style.color = '#991b1b'
+          failedMessage.style.display = 'flex'
+          failedMessage.style.alignItems = 'center'
+          failedMessage.style.justifyContent = 'center'
+          failedMessage.style.textAlign = 'center'
+          failedMessage.style.fontWeight = '700'
+          failedMessage.textContent = t.pageError
+
+          pageWrapper.appendChild(failedPageLabel)
+          pageWrapper.appendChild(failedMessage)
+
+          return false
+        }
+      }
+    },
+    [
+      renderCanvasWithTimeout,
+      t.page,
+      t.pageError,
+    ]
+  )
+
   const renderPdf = useCallback(async () => {
     const currentRenderId = renderIdRef.current + 1
     renderIdRef.current = currentRenderId
 
+    adaptiveDprLimitRef.current =
+      HIGH_QUALITY_DPR_LIMIT
+
     setLoading(true)
     setError('')
+    setPageCount(0)
+    setCurrentPage(1)
 
     try {
       const blob = await loadPdfBlob()
@@ -160,12 +425,13 @@ function PdfViewer({
 
       pdfDocumentRef.current = pdfDocument
       setPageCount(pdfDocument.numPages)
-      setCurrentPage(1)
 
       const container = containerRef.current
 
       if (!container) {
-        throw new Error('PDF görüntüleme alanı bulunamadı.')
+        throw new Error(
+          'PDF görüntüleme alanı bulunamadı.'
+        )
       }
 
       container.innerHTML = ''
@@ -177,11 +443,6 @@ function PdfViewer({
         280
       )
 
-      const devicePixelRatio = Math.min(
-        window.devicePixelRatio || 1,
-        2
-      )
-
       for (
         let pageNumber = 1;
         pageNumber <= pdfDocument.numPages;
@@ -191,81 +452,31 @@ function PdfViewer({
           return
         }
 
-        const page = await pdfDocument.getPage(pageNumber)
-
-        const originalViewport = page.getViewport({
-          scale: 1,
+        const pageRendered = await renderSinglePage({
+          pdfDocument,
+          pageNumber,
+          container,
+          availableWidth,
+          currentRenderId,
         })
 
-        const fitScale =
-          availableWidth / originalViewport.width
-
-        const viewport = page.getViewport({
-          scale: fitScale,
-        })
-
-        const pageWrapper =
-          document.createElement('section')
-
-        pageWrapper.className = 'pdfViewerPage'
-        pageWrapper.dataset.pageNumber =
-          String(pageNumber)
-
-        const pageLabel =
-          document.createElement('div')
-
-        pageLabel.className = 'pdfViewerPageLabel'
-        pageLabel.textContent =
-          `${t.page} ${pageNumber} / ${pdfDocument.numPages}`
-
-        const canvas =
-          document.createElement('canvas')
-
-        const context = canvas.getContext('2d', {
-          alpha: false,
-          willReadFrequently: false,
-        })
-
-        if (!context) {
-          throw new Error(
-            'PDF çizim alanı oluşturulamadı.'
-          )
+        if (currentRenderId !== renderIdRef.current) {
+          return
         }
 
-        canvas.width = Math.floor(
-          viewport.width * devicePixelRatio
-        )
+        if (pageNumber === 1) {
+          if (!pageRendered) {
+            throw new Error(
+              'İlk PDF sayfası görüntülenemedi.'
+            )
+          }
 
-        canvas.height = Math.floor(
-          viewport.height * devicePixelRatio
-        )
+          setLoading(false)
+        }
 
-        canvas.style.width =
-          `${Math.floor(viewport.width)}px`
-
-        canvas.style.height =
-          `${Math.floor(viewport.height)}px`
-
-        pageWrapper.appendChild(pageLabel)
-        pageWrapper.appendChild(canvas)
-        container.appendChild(pageWrapper)
-
-        await page.render({
-          canvasContext: context,
-          viewport,
-          transform:
-            devicePixelRatio === 1
-              ? null
-              : [
-                  devicePixelRatio,
-                  0,
-                  0,
-                  devicePixelRatio,
-                  0,
-                  0,
-                ],
-          background: '#ffffff',
-        }).promise
+        await new Promise((resolve) => {
+          setTimeout(resolve, 25)
+        })
       }
 
       if (currentRenderId === renderIdRef.current) {
@@ -287,9 +498,9 @@ function PdfViewer({
   }, [
     destroyCurrentPdf,
     loadPdfBlob,
+    renderSinglePage,
     renderVersion,
     t.loadError,
-    t.page,
   ])
 
   useEffect(() => {
@@ -297,6 +508,20 @@ function PdfViewer({
 
     return () => {
       renderIdRef.current += 1
+
+      if (activeRenderTaskRef.current) {
+        try {
+          activeRenderTaskRef.current.cancel()
+        } catch (cancelError) {
+          console.log(
+            'PDF render temizleme hatası:',
+            cancelError
+          )
+        }
+
+        activeRenderTaskRef.current = null
+      }
+
       destroyCurrentPdf()
     }
   }, [destroyCurrentPdf, renderPdf])
@@ -332,6 +557,7 @@ function PdfViewer({
 
         if (distance < closestDistance) {
           closestDistance = distance
+
           closestPage = Number(
             pageElement.dataset.pageNumber || 1
           )
@@ -365,10 +591,9 @@ function PdfViewer({
 
       resizeTimer = setTimeout(() => {
         setRenderVersion((value) => value + 1)
-      }, 300)
+      }, 350)
     }
 
-    window.addEventListener('resize', handleResize)
     window.addEventListener(
       'orientationchange',
       handleResize
@@ -378,69 +603,27 @@ function PdfViewer({
       clearTimeout(resizeTimer)
 
       window.removeEventListener(
-        'resize',
-        handleResize
-      )
-
-      window.removeEventListener(
         'orientationchange',
         handleResize
       )
     }
   }, [])
 
-  const finishSharing = () => {
-    setSharing(false)
-  }
-
-  const handleShareError = (shareError) => {
-    if (shareError?.name === 'AbortError') {
-      finishSharing()
-      return
-    }
-
-    console.log('PDF paylaşım hatası:', shareError)
-
-    useLinkShareRef.current = true
-    setError(t.shareLinkRetry)
-    finishSharing()
-  }
-
   const sharePdf = () => {
     setError('')
-
-    if (!navigator.share) {
-      setError(t.shareNotSupported)
-      return
-    }
-
-    if (useLinkShareRef.current) {
-      setSharing(true)
-
-      navigator
-        .share({
-          title: reportName || finalFileName,
-          text: reportName || finalFileName,
-          url: pdfUrl,
-        })
-        .catch((shareError) => {
-          if (shareError?.name !== 'AbortError') {
-            setError(
-              `${t.shareError} ${
-                shareError.message || ''
-              }`.trim()
-            )
-          }
-        })
-        .finally(finishSharing)
-
-      return
-    }
 
     const blob = pdfBlobRef.current
 
     if (!blob) {
       setError(t.pdfNotReady)
+      return
+    }
+
+    if (
+      typeof navigator.share !== 'function' ||
+      typeof navigator.canShare !== 'function'
+    ) {
+      setError(t.shareNotSupported)
       return
     }
 
@@ -452,32 +635,8 @@ function PdfViewer({
       }
     )
 
-    if (
-      !navigator.canShare ||
-      !navigator.canShare({
-        files: [file],
-      })
-    ) {
-      useLinkShareRef.current = true
-      setSharing(true)
-
-      navigator
-        .share({
-          title: reportName || finalFileName,
-          text: reportName || finalFileName,
-          url: pdfUrl,
-        })
-        .catch((shareError) => {
-          if (shareError?.name !== 'AbortError') {
-            setError(
-              `${t.shareError} ${
-                shareError.message || ''
-              }`.trim()
-            )
-          }
-        })
-        .finally(finishSharing)
-
+    if (!navigator.canShare({ files: [file] })) {
+      setError(t.shareNotSupported)
       return
     }
 
@@ -488,16 +647,40 @@ function PdfViewer({
         files: [file],
         title: reportName || finalFileName,
       })
-      .catch(handleShareError)
-      .finally(() => {
-        if (!useLinkShareRef.current) {
-          finishSharing()
+      .catch((shareError) => {
+        if (shareError?.name !== 'AbortError') {
+          console.error(
+            'PDF paylaşım hatası:',
+            shareError
+          )
+
+          setError(
+            `${t.shareError} ${
+              shareError.message || ''
+            }`.trim()
+          )
         }
+      })
+      .finally(() => {
+        setSharing(false)
       })
   }
 
   const handleClose = async () => {
     renderIdRef.current += 1
+
+    if (activeRenderTaskRef.current) {
+      try {
+        activeRenderTaskRef.current.cancel()
+      } catch (cancelError) {
+        console.log(
+          'PDF kapatılırken render iptal hatası:',
+          cancelError
+        )
+      }
+
+      activeRenderTaskRef.current = null
+    }
 
     if (containerRef.current) {
       containerRef.current.scrollTop = 0
