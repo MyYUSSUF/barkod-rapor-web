@@ -27,6 +27,7 @@ function PdfViewer({
   const renderIdRef = useRef(0)
   const pdfDocumentRef = useRef(null)
   const pdfBlobRef = useRef(null)
+  const useLinkShareRef = useRef(false)
 
   const [renderVersion, setRenderVersion] = useState(0)
   const [loading, setLoading] = useState(true)
@@ -45,6 +46,12 @@ function PdfViewer({
       loading: 'Rapor hazırlanıyor...',
       loadError: 'Rapor görüntülenemedi.',
       shareError: 'PDF paylaşılamadı.',
+      shareNotSupported:
+        'Bu cihaz paylaşım özelliğini desteklemiyor.',
+      shareLinkRetry:
+        'Bu telefon PDF dosyasını doğrudan paylaşmayı engelledi. Paylaş butonuna tekrar basın; rapor bağlantısı paylaşılacak.',
+      pdfNotReady:
+        'PDF henüz hazır değil. Birkaç saniye sonra tekrar deneyin.',
       page: 'Sayfa',
     },
     en: {
@@ -54,6 +61,12 @@ function PdfViewer({
       loading: 'Preparing report...',
       loadError: 'Report could not be displayed.',
       shareError: 'PDF could not be shared.',
+      shareNotSupported:
+        'This device does not support sharing.',
+      shareLinkRetry:
+        'This phone blocked direct PDF sharing. Press Share again to share the report link.',
+      pdfNotReady:
+        'The PDF is not ready yet. Try again in a few seconds.',
       page: 'Page',
     },
     ar: {
@@ -63,6 +76,12 @@ function PdfViewer({
       loading: 'جارٍ تجهيز التقرير...',
       loadError: 'تعذر عرض التقرير.',
       shareError: 'تعذرت مشاركة ملف PDF.',
+      shareNotSupported:
+        'هذا الجهاز لا يدعم المشاركة.',
+      shareLinkRetry:
+        'منع هذا الهاتف مشاركة ملف PDF مباشرة. اضغط على مشاركة مرة أخرى لمشاركة رابط التقرير.',
+      pdfNotReady:
+        'ملف PDF غير جاهز بعد. حاول مرة أخرى بعد لحظات.',
       page: 'صفحة',
     },
   }
@@ -173,6 +192,7 @@ function PdfViewer({
         }
 
         const page = await pdfDocument.getPage(pageNumber)
+
         const originalViewport = page.getViewport({
           scale: 1,
         })
@@ -369,55 +389,111 @@ function PdfViewer({
     }
   }, [])
 
-  const sharePdf = async () => {
-    setSharing(true)
+  const finishSharing = () => {
+    setSharing(false)
+  }
+
+  const handleShareError = (shareError) => {
+    if (shareError?.name === 'AbortError') {
+      finishSharing()
+      return
+    }
+
+    console.log('PDF paylaşım hatası:', shareError)
+
+    useLinkShareRef.current = true
+    setError(t.shareLinkRetry)
+    finishSharing()
+  }
+
+  const sharePdf = () => {
     setError('')
 
-    try {
-      const blob = await loadPdfBlob()
+    if (!navigator.share) {
+      setError(t.shareNotSupported)
+      return
+    }
 
-      const file = new File(
-        [blob],
-        finalFileName,
-        {
-          type: 'application/pdf',
-        }
-      )
+    if (useLinkShareRef.current) {
+      setSharing(true)
 
-      if (
-        navigator.share &&
-        navigator.canShare &&
-        navigator.canShare({
-          files: [file],
-        })
-      ) {
-        await navigator.share({
-          title: reportName || finalFileName,
-          text: reportName || finalFileName,
-          files: [file],
-        })
-      } else if (navigator.share) {
-        await navigator.share({
+      navigator
+        .share({
           title: reportName || finalFileName,
           text: reportName || finalFileName,
           url: pdfUrl,
         })
-      } else {
-        throw new Error(
-          'Bu cihaz dosya paylaşımını desteklemiyor.'
-        )
-      }
-    } catch (shareError) {
-      if (shareError?.name !== 'AbortError') {
-        setError(
-          `${t.shareError} ${
-            shareError.message || ''
-          }`.trim()
-        )
-      }
-    } finally {
-      setSharing(false)
+        .catch((shareError) => {
+          if (shareError?.name !== 'AbortError') {
+            setError(
+              `${t.shareError} ${
+                shareError.message || ''
+              }`.trim()
+            )
+          }
+        })
+        .finally(finishSharing)
+
+      return
     }
+
+    const blob = pdfBlobRef.current
+
+    if (!blob) {
+      setError(t.pdfNotReady)
+      return
+    }
+
+    const file = new File(
+      [blob],
+      finalFileName,
+      {
+        type: 'application/pdf',
+      }
+    )
+
+    if (
+      !navigator.canShare ||
+      !navigator.canShare({
+        files: [file],
+      })
+    ) {
+      useLinkShareRef.current = true
+      setSharing(true)
+
+      navigator
+        .share({
+          title: reportName || finalFileName,
+          text: reportName || finalFileName,
+          url: pdfUrl,
+        })
+        .catch((shareError) => {
+          if (shareError?.name !== 'AbortError') {
+            setError(
+              `${t.shareError} ${
+                shareError.message || ''
+              }`.trim()
+            )
+          }
+        })
+        .finally(finishSharing)
+
+      return
+    }
+
+    setSharing(true)
+
+    navigator
+      .share({
+        files: [file],
+        title: reportName || finalFileName,
+      })
+      .catch(handleShareError)
+      .finally(() => {
+        if (!useLinkShareRef.current) {
+          finishSharing()
+        }
+      })
   }
 
   const handleClose = async () => {
