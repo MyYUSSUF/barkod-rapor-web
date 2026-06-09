@@ -1,7 +1,6 @@
-﻿import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { BrowserCodeReader, BrowserMultiFormatReader } from '@zxing/browser'
 import { supabase } from './lib/supabaseClient'
-import PdfViewer from './PdfViewer'
 import './App.css'
 
 const API_BASE_URL =
@@ -13,8 +12,8 @@ const HISTORY_KEY = 'barkod_rapor_history'
 const LANGUAGE_KEY = 'barkod_rapor_language'
 const NOTIFICATION_PERMISSION_ASKED_KEY = 'barkod_rapor_notification_permission_asked_v2'
 const REPORT_TIMEOUT_MS = 45000
-const APP_VERSION = 'v1.18'
-const APP_LOG_VERSION = 'web-v1.18'
+const APP_VERSION = 'v1.17'
+const APP_LOG_VERSION = 'web-v1.17'
 
 const REPORTS = [
   {
@@ -391,7 +390,6 @@ function App() {
   const [scannerMessage, setScannerMessage] = useState('')
   const [notificationsEnabled, setNotificationsEnabled] = useState(false)
   const [screen, setScreen] = useState('main')
-  const [pdfViewerData, setPdfViewerData] = useState(null)
 
   const [adminNotificationTitle, setAdminNotificationTitle] = useState('Elvan Barkod Rapor')
   const [adminNotificationBody, setAdminNotificationBody] = useState('')
@@ -458,7 +456,6 @@ function App() {
     setAdminNotificationMessage('')
     setAdminMessage('')
     setScreen('main')
-    setPdfViewerData(null)
   }
 
   const makeDisplayName = (profile, fallbackUsername) => {
@@ -1481,6 +1478,16 @@ function App() {
     }
 
     stopScanner()
+
+    const reportWindow = window.open('', '_blank')
+
+    writeReportStatusWindow(
+      reportWindow,
+      t.reportPagePreparing,
+      `${reportName} ${t.reportPreparing}\n${t.pleaseWait}`,
+      'loading'
+    )
+
     setLoading(true)
     setSelectedReportCode(report.code)
     setMessage(`${reportName} ${t.reportPreparing}`)
@@ -1490,6 +1497,10 @@ function App() {
       const userId = sessionData?.session?.user?.id
 
       if (!userId) {
+        if (reportWindow) {
+          writeReportStatusWindow(reportWindow, t.reportCouldNotLoad, t.sessionMissing, 'error')
+        }
+
         setMessage(t.sessionMissing)
         setUserProfile(null)
         setLoading(false)
@@ -1521,12 +1532,16 @@ function App() {
       }
 
       if (!response.ok) {
-        setMessage(
+        const errorText =
           t.reportUrlFailed +
           (result.error || 'Unknown error') +
           ` (${report.code}${cleanBarcode ? ' - ' + cleanBarcode : ''})`
-        )
 
+        if (reportWindow) {
+          writeReportStatusWindow(reportWindow, t.reportCouldNotLoad, errorText, 'error')
+        }
+
+        setMessage(errorText)
         setLoading(false)
         setSelectedReportCode('')
         return
@@ -1535,10 +1550,13 @@ function App() {
       const pdfUrl = result.pdfUrl
 
       if (!pdfUrl) {
-        setMessage(
-          `${t.pdfUrlEmpty} (${report.code}${cleanBarcode ? ' - ' + cleanBarcode : ''})`
-        )
+        const errorText = `${t.pdfUrlEmpty} (${report.code}${cleanBarcode ? ' - ' + cleanBarcode : ''})`
 
+        if (reportWindow) {
+          writeReportStatusWindow(reportWindow, t.reportCouldNotLoad, errorText, 'error')
+        }
+
+        setMessage(errorText)
         setLoading(false)
         setSelectedReportCode('')
         return
@@ -1554,47 +1572,35 @@ function App() {
       })
 
       if (logError) {
-        setMessage(t.reportLogFailed + logError.message)
+        const errorText = t.reportLogFailed + logError.message
+
+        if (reportWindow) {
+          writeReportStatusWindow(reportWindow, t.reportCouldNotLoad, errorText, 'error')
+        }
+
+        setMessage(errorText)
         setLoading(false)
         setSelectedReportCode('')
         return
       }
 
-      const safeReportName = sanitizePdfFileName(reportName)
-      const safeBarcode = sanitizePdfFileName(cleanBarcode || 'Barkodsuz')
-      const pdfFileName = `${safeReportName}_${safeBarcode}.pdf`
-
-      setPdfViewerData({
-        pdfUrl:
-          `${makePdfProxyUrl(pdfUrl)}&filename=${encodeURIComponent(pdfFileName)}`,
-        fileName: pdfFileName,
-        reportName,
-      })
-
-      setMessage('')
+      writeShareWindow(reportWindow, reportName, pdfUrl, cleanBarcode || 'Barkodsuz')
+      setMessage(`${reportName} ${t.reportOpened}`)
     } catch (err) {
       const errorText =
         err.name === 'AbortError'
           ? `${t.reportRequestTimeout} (${report.code}${cleanBarcode ? ' - ' + cleanBarcode : ''})`
           : `${t.unexpectedError}${err.message}`
 
+      if (reportWindow) {
+        writeReportStatusWindow(reportWindow, t.reportCouldNotLoad, errorText, 'error')
+      }
+
       setMessage(errorText)
     }
 
     setLoading(false)
     setSelectedReportCode('')
-  }
-
-  if (pdfViewerData) {
-    return (
-      <PdfViewer
-        pdfUrl={pdfViewerData.pdfUrl}
-        fileName={pdfViewerData.fileName}
-        reportName={pdfViewerData.reportName}
-        language={language}
-        onClose={() => setPdfViewerData(null)}
-      />
-    )
   }
 
   if (restoringSession) {
