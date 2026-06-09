@@ -5,10 +5,6 @@ import './PdfViewer.css'
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl
 
-const MIN_ZOOM = 0.5
-const MAX_ZOOM = 3
-const ZOOM_STEP = 0.25
-
 function sanitizeFileName(value) {
   return String(value || 'rapor.pdf')
     .trim()
@@ -30,11 +26,9 @@ function PdfViewer({
   const pdfDocumentRef = useRef(null)
   const pdfBlobRef = useRef(null)
 
-  const [zoom, setZoom] = useState(1)
   const [fitVersion, setFitVersion] = useState(0)
   const [loading, setLoading] = useState(true)
   const [sharing, setSharing] = useState(false)
-  const [downloading, setDownloading] = useState(false)
   const [error, setError] = useState('')
   const [pageCount, setPageCount] = useState(0)
   const [currentPage, setCurrentPage] = useState(1)
@@ -46,46 +40,28 @@ function PdfViewer({
       close: 'Kapat',
       share: 'Paylaş',
       sharing: 'Paylaşılıyor...',
-      download: 'İndir',
-      downloading: 'İndiriliyor...',
-      fit: 'Sığdır',
       loading: 'Rapor hazırlanıyor...',
       loadError: 'Rapor görüntülenemedi.',
       shareError: 'PDF paylaşılamadı.',
-      downloadError: 'PDF indirilemedi.',
       page: 'Sayfa',
-      zoomOut: 'Uzaklaştır',
-      zoomIn: 'Yakınlaştır',
     },
     en: {
       close: 'Close',
       share: 'Share',
       sharing: 'Sharing...',
-      download: 'Download',
-      downloading: 'Downloading...',
-      fit: 'Fit',
       loading: 'Preparing report...',
       loadError: 'Report could not be displayed.',
       shareError: 'PDF could not be shared.',
-      downloadError: 'PDF could not be downloaded.',
       page: 'Page',
-      zoomOut: 'Zoom out',
-      zoomIn: 'Zoom in',
     },
     ar: {
       close: 'إغلاق',
       share: 'مشاركة',
       sharing: 'جارٍ المشاركة...',
-      download: 'تنزيل',
-      downloading: 'جارٍ التنزيل...',
-      fit: 'ملاءمة',
       loading: 'جارٍ تجهيز التقرير...',
       loadError: 'تعذر عرض التقرير.',
       shareError: 'تعذرت مشاركة ملف PDF.',
-      downloadError: 'تعذر تنزيل ملف PDF.',
       page: 'صفحة',
-      zoomOut: 'تصغير',
-      zoomIn: 'تكبير',
     },
   }
 
@@ -168,7 +144,11 @@ function PdfViewer({
       const availableWidth = Math.max(container.clientWidth - 24, 280)
       const devicePixelRatio = Math.min(window.devicePixelRatio || 1, 2)
 
-      for (let pageNumber = 1; pageNumber <= pdfDocument.numPages; pageNumber += 1) {
+      for (
+        let pageNumber = 1;
+        pageNumber <= pdfDocument.numPages;
+        pageNumber += 1
+      ) {
         if (currentRenderId !== renderIdRef.current) {
           return
         }
@@ -177,8 +157,7 @@ function PdfViewer({
         const originalViewport = page.getViewport({ scale: 1 })
 
         const fitScale = availableWidth / originalViewport.width
-        const finalScale = fitScale * zoom
-        const viewport = page.getViewport({ scale: finalScale })
+        const viewport = page.getViewport({ scale: fitScale })
 
         const pageWrapper = document.createElement('section')
         pageWrapper.className = 'pdfViewerPage'
@@ -186,7 +165,8 @@ function PdfViewer({
 
         const pageLabel = document.createElement('div')
         pageLabel.className = 'pdfViewerPageLabel'
-        pageLabel.textContent = `${t.page} ${pageNumber} / ${pdfDocument.numPages}`
+        pageLabel.textContent =
+          `${t.page} ${pageNumber} / ${pdfDocument.numPages}`
 
         const canvas = document.createElement('canvas')
         const context = canvas.getContext('2d', {
@@ -221,11 +201,18 @@ function PdfViewer({
       console.error('PDF render hatası:', renderError)
 
       if (currentRenderId === renderIdRef.current) {
-        setError(`${t.loadError} ${renderError.message || ''}`.trim())
+        setError(
+          `${t.loadError} ${renderError.message || ''}`.trim()
+        )
         setLoading(false)
       }
     }
-  }, [fitVersion, loadPdfBlob, t.loadError, t.page, zoom])
+  }, [
+    fitVersion,
+    loadPdfBlob,
+    t.loadError,
+    t.page,
+  ])
 
   useEffect(() => {
     renderPdf()
@@ -256,7 +243,7 @@ function PdfViewer({
         return
       }
 
-      const toolbarHeight = 90
+      const toolbarHeight = 64
       let closestPage = 1
       let closestDistance = Number.POSITIVE_INFINITY
 
@@ -266,7 +253,9 @@ function PdfViewer({
 
         if (distance < closestDistance) {
           closestDistance = distance
-          closestPage = Number(pageElement.dataset.pageNumber || 1)
+          closestPage = Number(
+            pageElement.dataset.pageNumber || 1
+          )
         }
       })
 
@@ -278,7 +267,10 @@ function PdfViewer({
     })
 
     return () => {
-      container.removeEventListener('scroll', updateCurrentPage)
+      container.removeEventListener(
+        'scroll',
+        updateCurrentPage
+      )
     }
   }, [pageCount])
 
@@ -294,27 +286,20 @@ function PdfViewer({
     }
 
     window.addEventListener('resize', handleResize)
-    window.addEventListener('orientationchange', handleResize)
+    window.addEventListener(
+      'orientationchange',
+      handleResize
+    )
 
     return () => {
       clearTimeout(resizeTimer)
       window.removeEventListener('resize', handleResize)
-      window.removeEventListener('orientationchange', handleResize)
+      window.removeEventListener(
+        'orientationchange',
+        handleResize
+      )
     }
   }, [])
-
-  const zoomIn = () => {
-    setZoom((value) => Math.min(MAX_ZOOM, value + ZOOM_STEP))
-  }
-
-  const zoomOut = () => {
-    setZoom((value) => Math.max(MIN_ZOOM, value - ZOOM_STEP))
-  }
-
-  const fitToScreen = () => {
-    setZoom(1)
-    setFitVersion((value) => value + 1)
-  }
 
   const sharePdf = async () => {
     setSharing(true)
@@ -322,9 +307,14 @@ function PdfViewer({
 
     try {
       const blob = await loadPdfBlob()
-      const file = new File([blob], finalFileName, {
-        type: 'application/pdf',
-      })
+
+      const file = new File(
+        [blob],
+        finalFileName,
+        {
+          type: 'application/pdf',
+        }
+      )
 
       if (
         navigator.share &&
@@ -343,41 +333,19 @@ function PdfViewer({
           url: pdfUrl,
         })
       } else {
-        throw new Error('Bu cihaz dosya paylaşımını desteklemiyor.')
+        throw new Error(
+          'Bu cihaz dosya paylaşımını desteklemiyor.'
+        )
       }
     } catch (shareError) {
       if (shareError?.name !== 'AbortError') {
-        setError(`${t.shareError} ${shareError.message || ''}`.trim())
+        setError(
+          `${t.shareError} ${shareError.message || ''}`.trim()
+        )
       }
     }
 
     setSharing(false)
-  }
-
-  const downloadPdf = async () => {
-    setDownloading(true)
-    setError('')
-
-    try {
-      const blob = await loadPdfBlob()
-      const objectUrl = URL.createObjectURL(blob)
-      const anchor = document.createElement('a')
-
-      anchor.href = objectUrl
-      anchor.download = finalFileName
-      anchor.rel = 'noopener'
-      document.body.appendChild(anchor)
-      anchor.click()
-      anchor.remove()
-
-      setTimeout(() => {
-        URL.revokeObjectURL(objectUrl)
-      }, 1500)
-    } catch (downloadError) {
-      setError(`${t.downloadError} ${downloadError.message || ''}`.trim())
-    }
-
-    setDownloading(false)
   }
 
   return (
@@ -396,7 +364,9 @@ function PdfViewer({
           </button>
 
           <div className="pdfViewerTitleArea">
-            <strong>{reportName || finalFileName}</strong>
+            <strong>
+              {reportName || finalFileName}
+            </strong>
 
             {pageCount > 0 && (
               <span>
@@ -414,68 +384,39 @@ function PdfViewer({
             {sharing ? t.sharing : t.share}
           </button>
         </div>
-
-        <div className="pdfViewerToolbarBottom">
-          <button
-            type="button"
-            className="pdfViewerToolButton"
-            onClick={zoomOut}
-            disabled={zoom <= MIN_ZOOM || loading}
-            aria-label={t.zoomOut}
-          >
-            −
-          </button>
-
-          <button
-            type="button"
-            className="pdfViewerFitButton"
-            onClick={fitToScreen}
-            disabled={loading}
-          >
-            {t.fit}
-          </button>
-
-          <span className="pdfViewerZoomValue">
-            %{Math.round(zoom * 100)}
-          </span>
-
-          <button
-            type="button"
-            className="pdfViewerToolButton"
-            onClick={zoomIn}
-            disabled={zoom >= MAX_ZOOM || loading}
-            aria-label={t.zoomIn}
-          >
-            +
-          </button>
-
-          <button
-            type="button"
-            className="pdfViewerDownloadButton"
-            onClick={downloadPdf}
-            disabled={downloading || loading}
-          >
-            {downloading ? t.downloading : t.download}
-          </button>
-        </div>
       </header>
 
       {loading && (
-        <div className="pdfViewerLoading">
+        <div
+          className="pdfViewerLoading"
+          style={{ inset: '56px 0 0' }}
+        >
           <div className="pdfViewerSpinner" />
           <strong>{t.loading}</strong>
         </div>
       )}
 
       {error && (
-        <div className="pdfViewerError">
+        <div
+          className="pdfViewerError"
+          style={{
+            top:
+              'calc(66px + env(safe-area-inset-top, 0px))',
+          }}
+        >
           {error}
         </div>
       )}
 
       <main
         ref={containerRef}
-        className={`pdfViewerContent ${loading ? 'pdfViewerContentHidden' : ''}`}
+        className={
+          `pdfViewerContent ${
+            loading
+              ? 'pdfViewerContentHidden'
+              : ''
+          }`
+        }
       />
     </div>
   )
