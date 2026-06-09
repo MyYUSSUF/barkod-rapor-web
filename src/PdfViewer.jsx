@@ -6,12 +6,14 @@ import './PdfViewer.css'
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl
 
 function sanitizeFileName(value) {
-  return String(value || 'rapor.pdf')
-    .trim()
-    .replace(/[\\/:*?"<>|]/g, '_')
-    .replace(/\s+/g, '_')
-    .replace(/_+/g, '_')
-    .replace(/^_+|_+$/g, '') || 'rapor.pdf'
+  return (
+    String(value || 'rapor.pdf')
+      .trim()
+      .replace(/[\\/:*?"<>|]/g, '_')
+      .replace(/\s+/g, '_')
+      .replace(/_+/g, '_')
+      .replace(/^_+|_+$/g, '') || 'rapor.pdf'
+  )
 }
 
 function PdfViewer({
@@ -25,6 +27,7 @@ function PdfViewer({
   const renderIdRef = useRef(0)
   const pdfDocumentRef = useRef(null)
   const pdfBlobRef = useRef(null)
+  const previousScrollRef = useRef(0)
 
   const [fitVersion, setFitVersion] = useState(0)
   const [loading, setLoading] = useState(true)
@@ -72,6 +75,59 @@ function PdfViewer({
       ? fileName
       : `${fileName || reportName || 'rapor'}.pdf`
   )
+
+  useEffect(() => {
+    previousScrollRef.current =
+      window.scrollY ||
+      document.documentElement.scrollTop ||
+      document.body.scrollTop ||
+      0
+
+    const htmlElement = document.documentElement
+    const bodyElement = document.body
+
+    const previousHtmlOverflow = htmlElement.style.overflow
+    const previousHtmlHeight = htmlElement.style.height
+    const previousBodyOverflow = bodyElement.style.overflow
+    const previousBodyPosition = bodyElement.style.position
+    const previousBodyTop = bodyElement.style.top
+    const previousBodyLeft = bodyElement.style.left
+    const previousBodyRight = bodyElement.style.right
+    const previousBodyWidth = bodyElement.style.width
+    const previousBodyHeight = bodyElement.style.height
+
+    htmlElement.style.overflow = 'hidden'
+    htmlElement.style.height = '100%'
+
+    bodyElement.style.overflow = 'hidden'
+    bodyElement.style.position = 'fixed'
+    bodyElement.style.top = `-${previousScrollRef.current}px`
+    bodyElement.style.left = '0'
+    bodyElement.style.right = '0'
+    bodyElement.style.width = '100%'
+    bodyElement.style.height = '100%'
+
+    return () => {
+      htmlElement.style.overflow = previousHtmlOverflow
+      htmlElement.style.height = previousHtmlHeight
+
+      bodyElement.style.overflow = previousBodyOverflow
+      bodyElement.style.position = previousBodyPosition
+      bodyElement.style.top = previousBodyTop
+      bodyElement.style.left = previousBodyLeft
+      bodyElement.style.right = previousBodyRight
+      bodyElement.style.width = previousBodyWidth
+      bodyElement.style.height = previousBodyHeight
+
+      requestAnimationFrame(() => {
+        window.scrollTo(0, previousScrollRef.current)
+      })
+
+      setTimeout(() => {
+        window.scrollTo(0, previousScrollRef.current)
+      }, 100)
+    }
+  }, [])
 
   const loadPdfBlob = useCallback(async () => {
     if (pdfBlobRef.current) {
@@ -173,6 +229,10 @@ function PdfViewer({
           alpha: false,
           willReadFrequently: false,
         })
+
+        if (!context) {
+          throw new Error('PDF çizim alanı oluşturulamadı.')
+        }
 
         canvas.width = Math.floor(viewport.width * devicePixelRatio)
         canvas.height = Math.floor(viewport.height * devicePixelRatio)
@@ -343,9 +403,22 @@ function PdfViewer({
           `${t.shareError} ${shareError.message || ''}`.trim()
         )
       }
+    } finally {
+      setSharing(false)
+    }
+  }
+
+  const handleClose = () => {
+    renderIdRef.current += 1
+
+    if (containerRef.current) {
+      containerRef.current.scrollTop = 0
+      containerRef.current.scrollLeft = 0
     }
 
-    setSharing(false)
+    if (typeof onClose === 'function') {
+      onClose()
+    }
   }
 
   return (
@@ -358,7 +431,7 @@ function PdfViewer({
           <button
             type="button"
             className="pdfViewerCloseButton"
-            onClick={onClose}
+            onClick={handleClose}
           >
             {t.close}
           </button>
