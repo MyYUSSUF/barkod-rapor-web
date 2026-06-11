@@ -72,7 +72,7 @@ function buildShipmentReportParameters(startDate, endDate) {
   return (
     '<ReportParameter>' +
     '<FieldName>HSI_TarihIrs</FieldName>' +
-    '<Connector></Connector>' +
+    '<Connector>AND</Connector>' +
     '<WhereOperator>&gt;=</WhereOperator>' +
     '<Value>' + esc(cleanStartDate) + '</Value>' +
     '</ReportParameter>' +
@@ -168,7 +168,7 @@ async function getReportPdfUrl(reportCode, options = {}) {
     ? buildShipmentReportParameters(startDate, endDate)
     : buildReportParametersFromBarcode(barcode)
   const userCode = getUserCodeForReport(reportCode, customerCode)
-  const dateFormat = reportCode === 'RAR00036' ? 'dd.MM.yyyy' : 'dd.mm.yyyy'
+  const dateFormat = 'dd.mm.yyyy'
 
   console.log('GetReport request:', {
     reportCode,
