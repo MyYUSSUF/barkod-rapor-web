@@ -35,6 +35,48 @@ function buildReportParametersFromBarcode(barcode) {
   )
 }
 
+function formatErpDate(value) {
+  const cleanValue = value ? String(value).trim() : ''
+
+  if (!cleanValue) {
+    return ''
+  }
+
+  const isoDateMatch = cleanValue.match(/^(\d{4})-(\d{2})-(\d{2})$/)
+
+  if (isoDateMatch) {
+    return `${isoDateMatch[3]}.${isoDateMatch[2]}.${isoDateMatch[1]}`
+  }
+
+  return cleanValue
+}
+
+function buildShipmentReportParameters(startDate, endDate) {
+  const cleanStartDate = formatErpDate(startDate)
+  const cleanEndDate = formatErpDate(endDate)
+
+  return (
+    '<ReportParameter>' +
+    '<FieldName>HSI_TarihIrs</FieldName>' +
+    '<WhereOperator>&gt;=</WhereOperator>' +
+    '<Value>' + esc(cleanStartDate) + '</Value>' +
+    '</ReportParameter>' +
+    '<ReportParameter>' +
+    '<FieldName>HSI_TarihIrs</FieldName>' +
+    '<WhereOperator>&lt;=</WhereOperator>' +
+    '<Value>' + esc(cleanEndDate) + '</Value>' +
+    '</ReportParameter>'
+  )
+}
+
+function getUserCodeForReport(reportCode, customerCode) {
+  if (reportCode === 'RAR00036' && isNotBlank(customerCode)) {
+    return String(customerCode).trim()
+  }
+
+  return 'Admin'
+}
+
 function extractTagText(xml, tagName) {
   if (!xml) return ''
 
@@ -88,8 +130,15 @@ async function ensureWsdlInfoLoaded() {
   }
 }
 
-async function getReportPdfUrl(reportCode, barcode) {
+async function getReportPdfUrl(reportCode, options = {}) {
   await ensureWsdlInfoLoaded()
+
+  const {
+    barcode = '',
+    startDate = '',
+    endDate = '',
+    customerCode = '',
+  } = options
 
   const soapNs = isNotBlank(cachedTargetNs)
     ? cachedTargetNs.trim()
@@ -99,7 +148,17 @@ async function getReportPdfUrl(reportCode, barcode) {
     ? soapNs + 'GetReport'
     : soapNs + '/GetReport'
 
-  const reportParameters = buildReportParametersFromBarcode(barcode)
+  const reportParameters = reportCode === 'RAR00036'
+    ? buildShipmentReportParameters(startDate, endDate)
+    : buildReportParametersFromBarcode(barcode)
+  const userCode = getUserCodeForReport(reportCode, customerCode)
+  const dateFormat = reportCode === 'RAR00036' ? 'dd.MM.yyyy' : 'dd.mm.yyyy'
+
+  console.log('GetReport request:', {
+    reportCode,
+    parameterMode: reportCode === 'RAR00036' ? 'dateRange' : 'barcode',
+    userCode,
+  })
 
   const soap =
     '<?xml version="1.0" encoding="utf-8"?>' +
@@ -116,10 +175,10 @@ async function getReportPdfUrl(reportCode, barcode) {
     '<flagAlternationRowColor>0</flagAlternationRowColor>' +
     '<flagSinglePage>0</flagSinglePage>' +
     '<languageCode>TUR</languageCode>' +
-    '<dateFormat>dd.mm.yyyy</dateFormat>' +
+    '<dateFormat>' + esc(dateFormat) + '</dateFormat>' +
     '<numberDecimalSeperator>.</numberDecimalSeperator>' +
     '<currentCultureName>TR-tr</currentCultureName>' +
-    '<userCode>Admin</userCode>' +
+    '<userCode>' + esc(userCode) + '</userCode>' +
     '<companyCode>YZV-0001</companyCode>' +
     '<plantCode>YZV-0001-01</plantCode>' +
     '<errorMessage></errorMessage>' +
@@ -174,8 +233,9 @@ export default async function handler(req, res) {
       return res.status(405).json({ error: 'Sadece POST isteği desteklenir.' })
     }
 
-    const { barcode, reportCode, requiresBarcode } = req.body || {}
+    const { barcode, reportCode, requiresBarcode, startDate, endDate, customerCode } = req.body || {}
     const mustHaveBarcode = requiresBarcode !== false
+    const isShipmentReport = reportCode === 'RAR00036'
 
     if (!isNotBlank(reportCode)) {
       return res.status(400).json({ error: 'Rapor kodu zorunludur.' })
@@ -185,7 +245,16 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'Barkod zorunludur.' })
     }
 
-    const pdfUrl = await getReportPdfUrl(reportCode, mustHaveBarcode ? barcode : '')
+    if (isShipmentReport && (!isNotBlank(startDate) || !isNotBlank(endDate))) {
+      return res.status(400).json({ error: 'Başlangıç ve bitiş tarihi zorunludur.' })
+    }
+
+    const pdfUrl = await getReportPdfUrl(reportCode, {
+      barcode: mustHaveBarcode ? barcode : '',
+      startDate,
+      endDate,
+      customerCode,
+    })
 
     return res.status(200).json({ pdfUrl })
   } catch (error) {

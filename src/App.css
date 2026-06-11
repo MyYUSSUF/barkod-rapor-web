@@ -333,6 +333,42 @@ form button {
   content: "03";
 }
 
+.reportButtons .mainButton:nth-child(4)::before {
+  content: "04";
+}
+
+.reportButtons .mainButton:nth-child(5) {
+  background: linear-gradient(135deg, #0f766e, #17324d);
+}
+
+.reportButtons .mainButton:nth-child(5)::before {
+  content: "05";
+}
+
+.dateRangeBox {
+  margin: -2px 0 4px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: #ffffff;
+}
+
+.dateInputGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.dateInputGrid label {
+  margin-top: 0;
+  font-size: 13px;
+}
+
+.dateInputGrid input {
+  padding: 13px 12px;
+  border-radius: 14px;
+}
+
 [dir="rtl"] .mainButton {
   padding: 16px 58px 16px 18px;
   text-align: right;
@@ -728,6 +764,10 @@ form button {
 
   .mainButton::before {
     left: 14px;
+  }
+
+  .dateInputGrid {
+    grid-template-columns: 1fr;
   }
 
   [dir="rtl"] .mainButton {

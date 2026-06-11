@@ -1,4 +1,4 @@
-﻿import { useEffect, useRef, useState } from 'react'
+import { Fragment, useEffect, useRef, useState } from 'react'
 import { BrowserCodeReader, BrowserMultiFormatReader } from '@zxing/browser'
 import { supabase } from './lib/supabaseClient'
 import PdfViewer from './PdfViewer'
@@ -36,6 +36,13 @@ const REPORTS = [
     code: 'RAR00035',
     key: 'fixingWaiting',
     requiresBarcode: false,
+  },
+  {
+    code: 'RAR00036',
+    key: 'shipmentTracking',
+    requiresBarcode: false,
+    requiresDateRange: true,
+    customerCode: '61002',
   },
 ]
 
@@ -75,6 +82,8 @@ const LANGUAGES = {
     inactiveAutoLogout: 'Bu kullanıcı pasif yapıldı. Oturum kapatıldı.',
     logoutSuccess: 'Çıkış yapıldı.',
     barcodeRequired: 'Önce barkod girilmelidir.',
+    dateRangeRequired: 'Başlangıç tarihi ve bitiş tarihi zorunludur.',
+    selectDateRange: 'Sevkiyat Takip için tarih aralığını seçin.',
     reportPreparing: 'hazırlanıyor...',
     reportRequestTimeout: 'Rapor hazırlanması çok uzun sürdü. Lütfen tekrar deneyin.',
     sessionMissing: 'Oturum bulunamadı. Tekrar giriş yap.',
@@ -87,6 +96,9 @@ const LANGUAGES = {
     workOrder: 'İş Emri Raporu',
     surfaceControl: 'Yüzey Kontrol Raporu',
     fixingWaiting: 'Fikse Bekleyenler',
+    shipmentTracking: 'Sevkiyat Takip',
+    startDate: 'Başlangıç Tarihi',
+    endDate: 'Bitiş Tarihi',
     reportPagePreparing: 'Rapor hazırlanıyor...',
     pleaseWait: 'Lütfen bekleyin.',
     openPdf: 'PDF’i Aç',
@@ -139,6 +151,8 @@ const LANGUAGES = {
     inactiveAutoLogout: 'This user was deactivated. Session closed.',
     logoutSuccess: 'Logged out.',
     barcodeRequired: 'Barcode is required first.',
+    dateRangeRequired: 'Start date and end date are required.',
+    selectDateRange: 'Select a date range for Shipment Tracking.',
     reportPreparing: 'is preparing...',
     reportRequestTimeout: 'Report preparation took too long. Please try again.',
     sessionMissing: 'Session not found. Please login again.',
@@ -151,6 +165,9 @@ const LANGUAGES = {
     workOrder: 'Work Order Report',
     surfaceControl: 'Surface Control Report',
     fixingWaiting: 'Fixing Waiting List',
+    shipmentTracking: 'Shipment Tracking',
+    startDate: 'Start Date',
+    endDate: 'End Date',
     reportPagePreparing: 'Report is preparing...',
     pleaseWait: 'Please wait.',
     openPdf: 'Open PDF',
@@ -203,6 +220,8 @@ const LANGUAGES = {
     inactiveAutoLogout: 'تم تعطيل هذا المستخدم. تم إغلاق الجلسة.',
     logoutSuccess: 'تم تسجيل الخروج.',
     barcodeRequired: 'يجب إدخال الباركود أولاً.',
+    dateRangeRequired: 'تاريخ البداية وتاريخ النهاية مطلوبان.',
+    selectDateRange: 'اختر نطاق التاريخ لتتبع الشحنات.',
     reportPreparing: 'قيد التحضير...',
     reportRequestTimeout: 'استغرق تجهيز التقرير وقتًا طويلاً. يرجى المحاولة مرة أخرى.',
     sessionMissing: 'لم يتم العثور على الجلسة. سجّل الدخول مرة أخرى.',
@@ -215,6 +234,9 @@ const LANGUAGES = {
     workOrder: 'تقرير أمر العمل',
     surfaceControl: 'تقرير مراقبة السطح',
     fixingWaiting: 'قائمة انتظار التثبيت',
+    shipmentTracking: 'متابعة الشحن',
+    startDate: 'تاريخ البداية',
+    endDate: 'تاريخ النهاية',
     reportPagePreparing: 'جارٍ تجهيز التقرير...',
     pleaseWait: 'يرجى الانتظار.',
     openPdf: 'فتح PDF',
@@ -382,9 +404,12 @@ function App() {
   const [loading, setLoading] = useState(false)
   const [restoringSession, setRestoringSession] = useState(true)
   const [selectedReportCode, setSelectedReportCode] = useState('')
+  const [dateRangeReportCode, setDateRangeReportCode] = useState('')
   const [userProfile, setUserProfile] = useState(null)
   const [displayName, setDisplayName] = useState('')
   const [barcode, setBarcode] = useState('')
+  const [startDate, setStartDate] = useState('')
+  const [endDate, setEndDate] = useState('')
   const [barcodeHistory, setBarcodeHistory] = useState([])
   const [message, setMessage] = useState('')
   const [scannerOpen, setScannerOpen] = useState(false)
@@ -451,6 +476,9 @@ function App() {
     setUsername('')
     setPassword('')
     setBarcode('')
+    setStartDate('')
+    setEndDate('')
+    setDateRangeReportCode('')
     setSelectedReportCode('')
     setDisplayName('')
     setNotificationsEnabled(false)
@@ -1470,10 +1498,29 @@ function App() {
     const cleanBarcode = barcode.trim()
     const reportName = getReportName(report)
     const requiresBarcode = report.requiresBarcode !== false
+    const requiresDateRange = report.requiresDateRange === true
+    const cleanStartDate = startDate.trim()
+    const cleanEndDate = endDate.trim()
 
     if (requiresBarcode && !cleanBarcode) {
       setMessage(t.barcodeRequired)
       return
+    }
+
+    if (requiresDateRange && dateRangeReportCode !== report.code) {
+      setDateRangeReportCode(report.code)
+      setMessage(t.selectDateRange)
+      return
+    }
+
+    if (requiresDateRange && (!cleanStartDate || !cleanEndDate)) {
+      setDateRangeReportCode(report.code)
+      setMessage(t.dateRangeRequired)
+      return
+    }
+
+    if (!requiresDateRange) {
+      setDateRangeReportCode('')
     }
 
     if (cleanBarcode) {
@@ -1506,6 +1553,9 @@ function App() {
           barcode: requiresBarcode ? cleanBarcode : '',
           reportCode: report.code,
           requiresBarcode,
+          startDate: requiresDateRange ? cleanStartDate : undefined,
+          endDate: requiresDateRange ? cleanEndDate : undefined,
+          customerCode: requiresDateRange ? report.customerCode : undefined,
         }),
       })
 
@@ -1546,7 +1596,7 @@ function App() {
 
       const { error: logError } = await supabase.from('report_logs').insert({
         user_id: userId,
-        barcode: cleanBarcode || 'Barkodsuz',
+        barcode: requiresDateRange ? 'Tarihli' : (cleanBarcode || 'Barkodsuz'),
         report_code: report.code,
         report_name: reportName,
         device_name: getDeviceName(),
@@ -1561,7 +1611,11 @@ function App() {
       }
 
       const safeReportName = sanitizePdfFileName(reportName)
-      const safeBarcode = sanitizePdfFileName(cleanBarcode || 'Barkodsuz')
+      const safeBarcode = sanitizePdfFileName(
+        requiresDateRange
+          ? `${cleanStartDate}_${cleanEndDate}`
+          : (cleanBarcode || 'Barkodsuz')
+      )
       const pdfFileName = `${safeReportName}_${safeBarcode}.pdf`
 
       setPdfViewerData({
@@ -1993,21 +2047,50 @@ function App() {
 
           <div className="reportButtons">
             {REPORTS.map((report) => (
-              <button
-                key={report.code}
-                className="mainButton"
-                onClick={() => openReport(report)}
-                disabled={loading}
-                style={
-                  report.code === 'RAR00035'
-                    ? { background: 'linear-gradient(135deg, #4b5563, #111827)' }
-                    : undefined
-                }
-              >
-                {loading && selectedReportCode === report.code
-                  ? `${getReportName(report)} ${t.reportPreparing}`
-                  : getReportName(report)}
-              </button>
+              <Fragment key={report.code}>
+                <button
+                  className="mainButton"
+                  onClick={() => openReport(report)}
+                  disabled={loading}
+                  style={
+                    report.code === 'RAR00035'
+                      ? { background: 'linear-gradient(135deg, #4b5563, #111827)' }
+                      : undefined
+                  }
+                >
+                  {loading && selectedReportCode === report.code
+                    ? `${getReportName(report)} ${t.reportPreparing}`
+                    : getReportName(report)}
+                </button>
+
+                {report.requiresDateRange && dateRangeReportCode === report.code && (
+                  <div className="dateRangeBox">
+                    <div className="dateInputGrid">
+                      <div>
+                        <label htmlFor="shipmentStartDate">{t.startDate}</label>
+                        <input
+                          id="shipmentStartDate"
+                          type="date"
+                          value={startDate}
+                          onChange={(e) => setStartDate(e.target.value)}
+                          disabled={loading}
+                        />
+                      </div>
+
+                      <div>
+                        <label htmlFor="shipmentEndDate">{t.endDate}</label>
+                        <input
+                          id="shipmentEndDate"
+                          type="date"
+                          value={endDate}
+                          onChange={(e) => setEndDate(e.target.value)}
+                          disabled={loading}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </Fragment>
             ))}
           </div>
 
