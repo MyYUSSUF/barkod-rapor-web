@@ -108,7 +108,8 @@ function matchFirst(text, regexText) {
 function convertInternalUrlToPublicIfNeeded(url) {
   if (!url) return ''
 
-  return url
+  return String(url)
+    .replaceAll('\\', '/')
     .replace('http://10.64.46.5', BASE_URL)
     .replace('https://10.64.46.5', BASE_URL)
 }
@@ -223,10 +224,10 @@ async function getReportPdfUrl(reportCode, options = {}) {
   }
 
   if (result.startsWith('/')) {
-    return BASE_URL + result
+    return convertInternalUrlToPublicIfNeeded(BASE_URL + result)
   }
 
-  return BASE_URL + '/' + result
+  return convertInternalUrlToPublicIfNeeded(BASE_URL + '/' + result)
 }
 
 export default async function handler(req, res) {
