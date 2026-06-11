@@ -3,7 +3,7 @@
 }
 
 :root {
-  --page-bg: #f4f6f8;
+  --page-bg: #f3f6f8;
   --surface: #ffffff;
   --surface-soft: #f8fafc;
   --surface-strong: #eef2f6;
@@ -21,8 +21,8 @@
   --danger-soft: #fee2e2;
   --slate: #475467;
   --focus: rgba(15, 118, 110, 0.18);
-  --shadow-small: 0 10px 30px rgba(16, 24, 40, 0.08);
-  --shadow-medium: 0 24px 70px rgba(16, 24, 40, 0.13);
+  --shadow-small: 0 10px 24px rgba(16, 24, 40, 0.08);
+  --shadow-medium: 0 24px 64px rgba(16, 24, 40, 0.13);
 }
 
 html {
@@ -43,6 +43,7 @@ body {
     Arial,
     sans-serif;
   background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.34), transparent 26%),
     linear-gradient(135deg, #f7f9fb 0%, #edf2f6 52%, #f8f5ed 100%);
   color: var(--text);
   -webkit-font-smoothing: antialiased;
@@ -58,16 +59,27 @@ body {
 }
 
 .card {
+  position: relative;
   width: 100%;
   max-width: 560px;
   padding: 28px;
+  overflow: hidden;
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(255, 255, 255, 0.94));
   border: 1px solid rgba(183, 194, 207, 0.72);
-  border-radius: 18px;
+  border-radius: 8px;
   box-shadow:
     var(--shadow-medium),
     inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+
+.card::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  height: 4px;
+  background:
+    linear-gradient(90deg, var(--primary), var(--teal), var(--gold));
 }
 
 .topBar {
@@ -93,7 +105,7 @@ body {
   min-height: 42px;
   padding: 10px 36px 10px 12px;
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: 8px;
   background: var(--surface);
   color: var(--primary);
   font: inherit;
@@ -194,7 +206,7 @@ input {
   min-height: 48px;
   padding: 13px 14px;
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: 8px;
   outline: none;
   background: var(--surface);
   color: var(--text);
@@ -219,7 +231,7 @@ button {
   margin-top: 16px;
   padding: 13px 16px;
   border: 1px solid transparent;
-  border-radius: 10px;
+  border-radius: 8px;
   color: #ffffff;
   font: inherit;
   font-size: 15px;
@@ -252,6 +264,13 @@ button:disabled {
   opacity: 0.72;
 }
 
+button:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 4px var(--focus),
+    0 12px 24px rgba(16, 24, 40, 0.13);
+}
+
 form button,
 .scanButton,
 .mainButton,
@@ -267,23 +286,23 @@ form button {
   animation-delay: 0.1s;
 }
 
-.reportButtons .mainButton:nth-child(1) {
+.reportButton1 {
   animation-delay: 0.06s;
 }
 
-.reportButtons .mainButton:nth-child(2) {
+.reportButton2 {
   animation-delay: 0.12s;
 }
 
-.reportButtons .mainButton:nth-child(3) {
+.reportButton3 {
   animation-delay: 0.18s;
 }
 
-.reportButtons .mainButton:nth-child(4) {
+.reportButton4 {
   animation-delay: 0.24s;
 }
 
-.reportButtons .mainButton:nth-child(5) {
+.reportButton5 {
   animation-delay: 0.3s;
 }
 
@@ -326,7 +345,10 @@ form button {
   form button,
   .scanButton,
   .mainButton,
-  .logoutButton {
+  .logoutButton,
+  .reportProgressRing,
+  .reportButtonLoading .reportButtonMark,
+  .scanLine {
     animation: none;
   }
 }
@@ -338,14 +360,23 @@ form button {
 .message {
   margin-top: 16px;
   padding: 12px 14px;
-  border: 1px solid rgba(185, 28, 28, 0.16);
-  border-radius: 10px;
-  background: #fff7f7;
+  border: 1px solid rgba(185, 28, 28, 0.18);
+  border-left: 4px solid var(--danger);
+  border-radius: 8px;
+  background:
+    linear-gradient(180deg, #fffafa, #fff4f4);
   color: var(--danger);
-  text-align: center;
+  text-align: left;
   font-size: 14px;
   font-weight: 900;
   line-height: 1.45;
+  box-shadow: 0 10px 24px rgba(185, 28, 28, 0.08);
+}
+
+[dir="rtl"] .message {
+  border-right: 4px solid var(--danger);
+  border-left: 1px solid rgba(185, 28, 28, 0.18);
+  text-align: right;
 }
 
 .barcodeInputRow {
@@ -383,6 +414,11 @@ form button {
   border-color: rgba(15, 118, 110, 0.22);
 }
 
+.scanButton:hover:not(:disabled) {
+  border-color: rgba(255, 255, 255, 0.18);
+  background: linear-gradient(135deg, #11877e, #0b5f58);
+}
+
 .scanButton::before {
   content: "";
   position: absolute;
@@ -395,38 +431,108 @@ form button {
 .reportButtons {
   display: grid;
   grid-template-columns: 1fr;
-  gap: 10px;
+  gap: 12px;
   margin-top: 22px;
   padding-top: 18px;
   border-top: 1px solid var(--border);
 }
 
+.reportProgress {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  margin-top: 18px;
+  padding: 13px 14px;
+  border: 1px solid rgba(15, 118, 110, 0.18);
+  border-radius: 8px;
+  background:
+    linear-gradient(135deg, rgba(232, 243, 241, 0.94), rgba(255, 255, 255, 0.98));
+  box-shadow: 0 12px 28px rgba(15, 118, 110, 0.09);
+}
+
+.reportProgressRing {
+  width: 34px;
+  height: 34px;
+  border: 4px solid rgba(15, 118, 110, 0.16);
+  border-top-color: var(--teal);
+  border-radius: 8px;
+  animation: progressSpin 0.85s linear infinite;
+}
+
+.reportProgress strong,
+.reportProgress span {
+  display: block;
+  min-width: 0;
+}
+
+.reportProgress strong {
+  color: var(--primary);
+  font-size: 14px;
+  line-height: 1.3;
+}
+
+.reportProgress span {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+@keyframes progressSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .mainButton {
   position: relative;
-  min-height: 58px;
+  min-height: 68px;
   margin: 0;
-  padding: 15px 52px 15px 58px;
+  padding: 14px;
   overflow: hidden;
   background: var(--surface);
-  border: 1px solid var(--border);
+  border: 1px solid rgba(183, 194, 207, 0.78);
   color: var(--text);
   text-align: left;
   letter-spacing: 0;
-  box-shadow: 0 7px 18px rgba(16, 24, 40, 0.06);
+  box-shadow:
+    0 7px 18px rgba(16, 24, 40, 0.06),
+    inset 0 1px 0 rgba(255, 255, 255, 0.86);
+}
+
+.reportButton {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
 }
 
 .mainButton:hover:not(:disabled) {
-  border-color: var(--border-strong);
+  border-color: rgba(15, 118, 110, 0.30);
   background: #fbfcfe;
+  transform: translateY(-1px) translateX(2px);
 }
 
-.mainButton::before {
-  position: absolute;
-  left: 14px;
-  top: 50%;
+[dir="rtl"] .mainButton:hover:not(:disabled) {
+  transform: translateY(-1px) translateX(-2px);
+}
+
+.mainButton:disabled {
+  background: var(--surface) !important;
+  border-color: rgba(183, 194, 207, 0.72) !important;
+  color: var(--text);
+  opacity: 0.64;
+}
+
+.mainButton::before,
+.mainButton::after {
+  display: none;
+}
+
+.reportButtonMark {
   width: 32px;
   height: 32px;
-  transform: translateY(-50%);
   border-radius: 8px;
   display: flex;
   align-items: center;
@@ -438,49 +544,111 @@ form button {
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.16);
 }
 
-.mainButton::after {
-  content: "";
-  position: absolute;
-  right: 18px;
-  top: 50%;
-  width: 9px;
-  height: 9px;
-  border-top: 2px solid #98a2b3;
-  border-right: 2px solid #98a2b3;
-  transform: translateY(-50%) rotate(45deg);
+.reportButtonBody {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
-.reportButtons .mainButton:nth-child(1)::before {
-  content: "01";
+.reportButtonBody strong {
+  overflow: hidden;
+  color: var(--primary);
+  font-size: 15px;
+  line-height: 1.18;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.reportButtonBody small {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.reportButtonCode {
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: var(--surface-strong);
+  color: var(--slate);
+  font-size: 11px;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.reportButton1 .reportButtonMark {
   background: var(--primary);
 }
 
-.reportButtons .mainButton:nth-child(2)::before {
-  content: "02";
+.reportButton2 .reportButtonMark {
   background: var(--teal);
 }
 
-.reportButtons .mainButton:nth-child(3)::before {
-  content: "03";
+.reportButton3 .reportButtonMark {
   background: var(--gold);
 }
 
-.reportButtons .mainButton:nth-child(4)::before {
-  content: "04";
+.reportButton4 .reportButtonMark {
   background: var(--slate);
 }
 
-.reportButtons .mainButton:nth-child(5)::before {
-  content: "05";
+.reportButton5 .reportButtonMark {
   background: #6c4f1f;
 }
 
+.reportButton5 {
+  border-color: rgba(184, 137, 47, 0.34);
+  background:
+    linear-gradient(180deg, rgba(251, 244, 227, 0.58), rgba(255, 255, 255, 0.96));
+}
+
+.reportButtonLoading {
+  border-color: rgba(15, 118, 110, 0.40) !important;
+  background:
+    linear-gradient(135deg, rgba(232, 243, 241, 0.92), rgba(255, 255, 255, 0.98)) !important;
+  opacity: 1 !important;
+}
+
+.reportButtonLoading .reportButtonMark {
+  animation: reportPulse 1s ease-in-out infinite;
+  background: var(--teal);
+}
+
+.reportButtonLoading .reportButtonCode {
+  background: rgba(15, 118, 110, 0.12);
+  color: var(--teal);
+}
+
+@keyframes reportPulse {
+  0%,
+  100% {
+    transform: scale(1);
+    box-shadow:
+      inset 0 0 0 1px rgba(255, 255, 255, 0.16),
+      0 0 0 rgba(15, 118, 110, 0);
+  }
+
+  50% {
+    transform: scale(1.04);
+    box-shadow:
+      inset 0 0 0 1px rgba(255, 255, 255, 0.16),
+      0 0 0 6px rgba(15, 118, 110, 0.12);
+  }
+}
+
 .dateRangeBox {
-  margin: -2px 0 2px;
-  padding: 14px;
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  background: var(--surface-soft);
+  grid-column: 1 / -1;
+  margin: -1px 0 4px;
+  padding: 15px;
+  border: 1px solid rgba(184, 137, 47, 0.22);
+  border-radius: 8px;
+  background:
+    linear-gradient(135deg, rgba(251, 244, 227, 0.78), rgba(255, 255, 255, 0.98));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.88);
 }
 
 .dateInputGrid {
@@ -497,23 +665,11 @@ form button {
 .dateInputGrid input {
   min-height: 44px;
   padding: 11px 12px;
-  border-radius: 9px;
+  border-radius: 8px;
 }
 
 [dir="rtl"] .mainButton {
-  padding: 15px 58px 15px 52px;
   text-align: right;
-}
-
-[dir="rtl"] .mainButton::before {
-  left: auto;
-  right: 14px;
-}
-
-[dir="rtl"] .mainButton::after {
-  right: auto;
-  left: 18px;
-  transform: translateY(-50%) rotate(225deg);
 }
 
 .logoutButton {
@@ -537,7 +693,7 @@ form button {
   max-width: 560px;
   overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.16);
-  border-radius: 16px;
+  border-radius: 8px;
   background: #ffffff;
   box-shadow: 0 30px 80px rgba(0, 0, 0, 0.42);
 }
@@ -610,7 +766,7 @@ form button {
   height: 190px;
   transform: translate(-50%, -50%);
   border: 2px solid rgba(255, 255, 255, 0.92);
-  border-radius: 14px;
+  border-radius: 8px;
   box-shadow:
     0 0 0 9999px rgba(0, 0, 0, 0.08),
     0 0 24px rgba(15, 118, 110, 0.35);
@@ -628,28 +784,28 @@ form button {
   top: -3px;
   left: -3px;
   border-width: 5px 0 0 5px;
-  border-top-left-radius: 14px;
+  border-top-left-radius: 8px;
 }
 
 .cornerTopRight {
   top: -3px;
   right: -3px;
   border-width: 5px 5px 0 0;
-  border-top-right-radius: 14px;
+  border-top-right-radius: 8px;
 }
 
 .cornerBottomLeft {
   bottom: -3px;
   left: -3px;
   border-width: 0 0 5px 5px;
-  border-bottom-left-radius: 14px;
+  border-bottom-left-radius: 8px;
 }
 
 .cornerBottomRight {
   right: -3px;
   bottom: -3px;
   border-width: 0 5px 5px 0;
-  border-bottom-right-radius: 14px;
+  border-bottom-right-radius: 8px;
 }
 
 .scanLine {
@@ -708,7 +864,7 @@ form button {
 .historyBox {
   margin-top: 18px;
   padding-top: 16px;
-  border-top: 1px solid var(--border);
+  border-top: 1px solid rgba(183, 194, 207, 0.72);
 }
 
 .historyHeader {
@@ -749,15 +905,16 @@ form button {
   min-height: 44px;
   margin: 0;
   padding: 11px 14px 11px 40px;
-  background: #ffffff;
+  background:
+    linear-gradient(180deg, #ffffff, #fbfcfe);
   color: var(--text);
   border: 1px solid var(--border);
   text-align: left;
   font-size: 14px;
   font-weight: 850;
   line-height: 1.35;
-  border-radius: 9px;
-  box-shadow: none;
+  border-radius: 8px;
+  box-shadow: 0 5px 14px rgba(16, 24, 40, 0.04);
   overflow-wrap: anywhere;
 }
 
@@ -805,7 +962,7 @@ form button {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .reportButtons .mainButton:nth-child(5) {
+  .reportButton5 {
     grid-column: 1 / -1;
   }
 }
@@ -891,16 +1048,8 @@ form button {
   }
 
   .mainButton {
-    min-height: 56px;
-    padding: 14px 46px 14px 54px;
-  }
-
-  .mainButton::before {
-    left: 12px;
-  }
-
-  .mainButton::after {
-    right: 16px;
+    min-height: 64px;
+    padding: 13px;
   }
 
   .dateInputGrid {
@@ -908,14 +1057,6 @@ form button {
   }
 
   [dir="rtl"] .mainButton {
-    padding: 14px 54px 14px 46px;
-  }
-
-  [dir="rtl"] .mainButton::before {
-    right: 12px;
-  }
-
-  [dir="rtl"] .mainButton::after {
-    left: 16px;
+    padding: 13px;
   }
 }

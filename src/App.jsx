@@ -509,6 +509,18 @@ function App() {
     return t[report.key] || report.key
   }
 
+  const getReportMeta = (report) => {
+    if (report.requiresDateRange) {
+      return `${t.startDate} / ${t.endDate}`
+    }
+
+    if (report.requiresBarcode) {
+      return t.barcode
+    }
+
+    return report.code
+  }
+
   const loadBarcodeHistory = () => {
     try {
       const saved = localStorage.getItem(HISTORY_KEY)
@@ -1639,6 +1651,10 @@ function App() {
     setSelectedReportCode('')
   }
 
+  const activeReport = selectedReportCode
+    ? REPORTS.find((report) => report.code === selectedReportCode)
+    : null
+
   if (pdfViewerData) {
     return (
       <PdfViewer
@@ -2045,22 +2061,44 @@ function App() {
             </div>
           )}
 
+          {loading && activeReport && (
+            <div className="reportProgress" role="status" aria-live="polite">
+              <span className="reportProgressRing"></span>
+              <div>
+                <strong>{getReportName(activeReport)} {t.reportPreparing}</strong>
+                <span>{t.pleaseWait}</span>
+              </div>
+            </div>
+          )}
+
           <div className="reportButtons">
-            {REPORTS.map((report) => (
+            {REPORTS.map((report, index) => (
               <Fragment key={report.code}>
                 <button
-                  className="mainButton"
+                  className={`mainButton reportButton reportButton${index + 1}${
+                    loading && selectedReportCode === report.code
+                      ? ' reportButtonLoading'
+                      : ''
+                  }`}
                   onClick={() => openReport(report)}
                   disabled={loading}
-                  style={
-                    report.code === 'RAR00035'
-                      ? { background: 'linear-gradient(135deg, #4b5563, #111827)' }
-                      : undefined
-                  }
                 >
-                  {loading && selectedReportCode === report.code
-                    ? `${getReportName(report)} ${t.reportPreparing}`
-                    : getReportName(report)}
+                  <span className="reportButtonMark">
+                    {String(index + 1).padStart(2, '0')}
+                  </span>
+
+                  <span className="reportButtonBody">
+                    <strong>
+                      {loading && selectedReportCode === report.code
+                        ? `${getReportName(report)} ${t.reportPreparing}`
+                        : getReportName(report)}
+                    </strong>
+                    <small>{getReportMeta(report)}</small>
+                  </span>
+
+                  <span className="reportButtonCode">
+                    {report.code}
+                  </span>
                 </button>
 
                 {report.requiresDateRange && dateRangeReportCode === report.code && (
