@@ -72,7 +72,7 @@ function buildShipmentReportParameters(startDate, endDate) {
   return (
     '<ReportParameter>' +
     '<FieldName>HSI_TarihIrs</FieldName>' +
-    '<Connector>AND</Connector>' +
+    '<Connector></Connector>' +
     '<WhereOperator>&gt;=</WhereOperator>' +
     '<Value>' + esc(cleanStartDate) + '</Value>' +
     '</ReportParameter>' +
