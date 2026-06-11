@@ -252,6 +252,85 @@ button:disabled {
   opacity: 0.72;
 }
 
+form button,
+.scanButton,
+.mainButton,
+.logoutButton {
+  animation: buttonEnter 0.48s ease both;
+}
+
+form button {
+  animation-delay: 0.08s;
+}
+
+.scanButton {
+  animation-delay: 0.1s;
+}
+
+.reportButtons .mainButton:nth-child(1) {
+  animation-delay: 0.06s;
+}
+
+.reportButtons .mainButton:nth-child(2) {
+  animation-delay: 0.12s;
+}
+
+.reportButtons .mainButton:nth-child(3) {
+  animation-delay: 0.18s;
+}
+
+.reportButtons .mainButton:nth-child(4) {
+  animation-delay: 0.24s;
+}
+
+.reportButtons .mainButton:nth-child(5) {
+  animation-delay: 0.3s;
+}
+
+.logoutButton {
+  animation-delay: 0.34s;
+}
+
+@keyframes buttonEnter {
+  from {
+    opacity: 0;
+    transform: translateX(-18px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+[dir="rtl"] form button,
+[dir="rtl"] .scanButton,
+[dir="rtl"] .mainButton,
+[dir="rtl"] .logoutButton {
+  animation-name: buttonEnterRtl;
+}
+
+@keyframes buttonEnterRtl {
+  from {
+    opacity: 0;
+    transform: translateX(18px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  form button,
+  .scanButton,
+  .mainButton,
+  .logoutButton {
+    animation: none;
+  }
+}
+
 form button {
   background: linear-gradient(135deg, var(--primary), var(--primary-soft));
 }
