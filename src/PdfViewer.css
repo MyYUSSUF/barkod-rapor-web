@@ -293,25 +293,6 @@
   box-shadow: 0 8px 25px rgba(0, 0, 0, 0.24);
 }
 
-.pdfViewerNotice {
-  position: absolute;
-  z-index: 30;
-  top: calc(118px + env(safe-area-inset-top, 0px));
-  left: 50%;
-  transform: translateX(-50%);
-  width: min(calc(100% - 24px), 520px);
-  padding: 12px 14px;
-  border: 1px solid rgba(15, 118, 110, 0.24);
-  border-radius: 8px;
-  background: #e8f3f1;
-  color: #0b5f58;
-  font-size: 13px;
-  font-weight: 900;
-  line-height: 1.4;
-  text-align: center;
-  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.20);
-}
-
 @keyframes pdfViewerSpin {
   to {
     transform: rotate(360deg);

@@ -628,7 +628,7 @@ form button {
 
 .reportButton {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: auto minmax(0, 1fr);
   align-items: center;
   gap: 12px;
 }
@@ -702,16 +702,6 @@ form button {
   white-space: nowrap;
 }
 
-.reportButtonCode {
-  padding: 6px 8px;
-  border-radius: 8px;
-  background: var(--surface-strong);
-  color: var(--slate);
-  font-size: 11px;
-  font-weight: 900;
-  white-space: nowrap;
-}
-
 .reportButton1 .reportButtonMark {
   background: var(--primary);
 }
@@ -771,11 +761,6 @@ form button {
 .reportButtonLoading .reportButtonMark {
   animation: reportPulse 1s ease-in-out infinite;
   background: var(--teal);
-}
-
-.reportButtonLoading .reportButtonCode {
-  background: rgba(15, 118, 110, 0.12);
-  color: var(--teal);
 }
 
 @keyframes reportPulse {
@@ -1185,8 +1170,7 @@ form button {
   gap: 8px;
 }
 
-.historyItem strong,
-.historyItem small {
+.historyItem strong {
   min-width: 0;
 }
 
@@ -1195,17 +1179,6 @@ form button {
   text-overflow: ellipsis;
   white-space: nowrap;
   overflow-wrap: anywhere;
-}
-
-.historyItem small {
-  flex: 0 0 auto;
-  padding: 3px 6px;
-  border-radius: 8px;
-  background: var(--gold-soft);
-  color: #8a641d;
-  font-size: 10px;
-  font-weight: 900;
-  line-height: 1;
 }
 
 .historyItem::before {
@@ -1340,16 +1313,6 @@ form button {
   .mainButton {
     min-height: 64px;
     padding: 13px;
-  }
-
-  .reportButton {
-    grid-template-columns: auto minmax(0, 1fr);
-  }
-
-  .reportButtonCode {
-    grid-column: 2;
-    width: max-content;
-    max-width: 100%;
   }
 
   .historyItem {

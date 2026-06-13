@@ -46,7 +46,6 @@ function PdfViewer({
   const [loading, setLoading] = useState(true)
   const [sharing, setSharing] = useState(false)
   const [error, setError] = useState('')
-  const [notice, setNotice] = useState('')
   const [pageCount, setPageCount] = useState(0)
   const [currentPage, setCurrentPage] = useState(1)
 
@@ -68,9 +67,6 @@ function PdfViewer({
       pageError: 'Bu sayfa görüntülenemedi.',
       ready: 'PDF hazır',
       reload: 'Yenile',
-      copyLink: 'Linki Kopyala',
-      linkCopied: 'PDF linki kopyalandı.',
-      copyLinkError: 'PDF linki kopyalanamadı.',
     },
     en: {
       close: 'Close',
@@ -87,9 +83,6 @@ function PdfViewer({
       pageError: 'This page could not be displayed.',
       ready: 'PDF ready',
       reload: 'Reload',
-      copyLink: 'Copy Link',
-      linkCopied: 'PDF link copied.',
-      copyLinkError: 'PDF link could not be copied.',
     },
     ar: {
       close: 'إغلاق',
@@ -106,9 +99,6 @@ function PdfViewer({
       pageError: 'تعذر عرض هذه الصفحة.',
       ready: 'ملف PDF جاهز',
       reload: 'تحديث',
-      copyLink: 'نسخ الرابط',
-      linkCopied: 'تم نسخ رابط PDF.',
-      copyLinkError: 'تعذر نسخ رابط PDF.',
     },
   }
 
@@ -628,7 +618,6 @@ function PdfViewer({
 
   const sharePdf = () => {
     setError('')
-    setNotice('')
 
     const blob = pdfBlobRef.current
 
@@ -686,25 +675,7 @@ function PdfViewer({
 
   const reloadPdf = () => {
     setError('')
-    setNotice('')
     setRenderVersion((value) => value + 1)
-  }
-
-  const copyPdfLink = async () => {
-    setError('')
-    setNotice('')
-
-    try {
-      if (!navigator.clipboard?.writeText) {
-        throw new Error('Clipboard API unavailable')
-      }
-
-      await navigator.clipboard.writeText(pdfUrl)
-      setNotice(t.linkCopied)
-    } catch (copyError) {
-      console.error('PDF link kopyalama hatası:', copyError)
-      setError(t.copyLinkError)
-    }
   }
 
   const handleClose = async () => {
@@ -812,14 +783,6 @@ function PdfViewer({
             {t.reload}
           </button>
 
-          <button
-            type="button"
-            className="pdfViewerActionButton"
-            onClick={copyPdfLink}
-          >
-            {t.copyLink}
-          </button>
-
           {pageCount > 0 && !loading && (
             <span className="pdfViewerReadyBadge" role="status">
               {t.ready}
@@ -838,12 +801,6 @@ function PdfViewer({
       {error && (
         <div className="pdfViewerError">
           {error}
-        </div>
-      )}
-
-      {notice && (
-        <div className="pdfViewerNotice" role="status" aria-live="polite">
-          {notice}
         </div>
       )}
 

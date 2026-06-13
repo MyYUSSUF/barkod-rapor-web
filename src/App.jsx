@@ -64,6 +64,7 @@ const LANGUAGES = {
     checkingSession: 'Oturum kontrol ediliyor...',
     welcome: 'Hoş geldiniz',
     barcode: 'Barkod',
+    noBarcodeRequired: 'Barkod gerekmez',
     barcodePlaceholder: 'Barkodu gir veya okut',
     clearBarcode: 'Temizle',
     scanBarcode: 'Kamerayla Barkod Okut',
@@ -78,7 +79,6 @@ const LANGUAGES = {
     recentBarcodes: 'Son Barkodlar',
     clear: 'Temizle',
     selectedBarcode: 'Barkod seçildi',
-    scannedOnly: 'Okutuldu',
     selectedDateRange: 'Seçilen tarih aralığı',
     selectedDayCount: 'gün',
     scannerReady: 'Okutmaya hazır',
@@ -117,7 +117,7 @@ const LANGUAGES = {
     pdfPreparing: 'PDF hazırlanıyor...',
     pdfFetchFailed: 'PDF alınamadı.',
     shareFailed: 'Paylaşım yapılamadı.',
-    shareNotSupported: 'PDF paylaşımı desteklenmiyor. Link kopyalandı.',
+    shareNotSupported: 'PDF paylaşımı bu cihazda desteklenmiyor.',
     reportCouldNotLoad: 'Rapor yüklenemedi.',
     versionText: 'Barkod Rapor Web',
     notificationUnsupported: 'Bu cihaz veya tarayıcı bildirimleri desteklemiyor.',
@@ -138,6 +138,7 @@ const LANGUAGES = {
     checkingSession: 'Checking session...',
     welcome: 'Welcome',
     barcode: 'Barcode',
+    noBarcodeRequired: 'No barcode required',
     barcodePlaceholder: 'Enter or scan barcode',
     clearBarcode: 'Clear',
     scanBarcode: 'Scan Barcode with Camera',
@@ -152,7 +153,6 @@ const LANGUAGES = {
     recentBarcodes: 'Recent Barcodes',
     clear: 'Clear',
     selectedBarcode: 'Barcode selected',
-    scannedOnly: 'Scanned',
     selectedDateRange: 'Selected date range',
     selectedDayCount: 'days',
     scannerReady: 'Ready to scan',
@@ -191,7 +191,7 @@ const LANGUAGES = {
     pdfPreparing: 'Preparing PDF...',
     pdfFetchFailed: 'PDF could not be received.',
     shareFailed: 'Sharing failed.',
-    shareNotSupported: 'PDF sharing is not supported. Link copied.',
+    shareNotSupported: 'PDF sharing is not supported on this device.',
     reportCouldNotLoad: 'Report could not be loaded.',
     versionText: 'Barcode Report Web',
     notificationUnsupported: 'This device or browser does not support notifications.',
@@ -212,6 +212,7 @@ const LANGUAGES = {
     checkingSession: 'جارٍ التحقق من الجلسة...',
     welcome: 'أهلاً وسهلاً',
     barcode: 'الباركود',
+    noBarcodeRequired: 'لا يحتاج إلى باركود',
     barcodePlaceholder: 'أدخل أو امسح الباركود',
     clearBarcode: 'مسح',
     scanBarcode: 'مسح الباركود بالكاميرا',
@@ -226,7 +227,6 @@ const LANGUAGES = {
     recentBarcodes: 'آخر الباركودات',
     clear: 'مسح',
     selectedBarcode: 'تم اختيار الباركود',
-    scannedOnly: 'تم المسح',
     selectedDateRange: 'نطاق التاريخ المحدد',
     selectedDayCount: 'أيام',
     scannerReady: 'جاهز للمسح',
@@ -265,7 +265,7 @@ const LANGUAGES = {
     pdfPreparing: 'جارٍ تجهيز PDF...',
     pdfFetchFailed: 'تعذر الحصول على PDF.',
     shareFailed: 'تعذرت المشاركة.',
-    shareNotSupported: 'مشاركة PDF غير مدعومة. تم نسخ الرابط.',
+    shareNotSupported: 'مشاركة PDF غير مدعومة على هذا الجهاز.',
     reportCouldNotLoad: 'تعذر تحميل التقرير.',
     versionText: 'نظام تقارير الباركود',
     notificationUnsupported: 'هذا الجهاز أو المتصفح لا يدعم الإشعارات.',
@@ -614,7 +614,7 @@ function App() {
       return t.barcode
     }
 
-    return report.code
+    return t.noBarcodeRequired
   }
 
   const loadBarcodeHistory = () => {
@@ -1304,7 +1304,6 @@ function App() {
 
                   statusEl.textContent = ''
                 } else {
-                  await navigator.clipboard.writeText(pdfFileUrl)
                   statusEl.textContent = shareNotSupported
                 }
               } catch (err) {
@@ -1758,8 +1757,7 @@ function App() {
       if (!response.ok) {
         showUserMessage(
           t.reportUrlFailed +
-          (result.error || 'Unknown error') +
-          ` (${report.code}${cleanBarcode ? ' - ' + cleanBarcode : ''})`,
+          (result.error || 'Unknown error'),
           'error'
         )
 
@@ -1772,7 +1770,7 @@ function App() {
 
       if (!pdfUrl) {
         showUserMessage(
-          `${t.pdfUrlEmpty} (${report.code}${cleanBarcode ? ' - ' + cleanBarcode : ''})`,
+          t.pdfUrlEmpty,
           'error'
         )
 
@@ -1822,7 +1820,7 @@ function App() {
     } catch (err) {
       const errorText =
         err.name === 'AbortError'
-          ? `${t.reportRequestTimeout} (${report.code}${cleanBarcode ? ' - ' + cleanBarcode : ''})`
+          ? t.reportRequestTimeout
           : `${t.unexpectedError}${err.message}`
 
       showUserMessage(errorText, 'error')
@@ -2093,7 +2091,7 @@ function App() {
                       <td style={tdStyle}>{formatDateTime(log.created_at)}</td>
                       <td style={tdStyle}>{log.user_name || log.user_email || '-'}</td>
                       <td style={tdStyle}>{log.barcode || '-'}</td>
-                      <td style={tdStyle}>{log.report_name || log.report_code || '-'}</td>
+                      <td style={tdStyle}>{log.report_name || '-'}</td>
                       <td style={tdStyle}>{log.device_name || '-'}</td>
                     </tr>
                   ))}
@@ -2285,10 +2283,6 @@ function App() {
                     <small>{getReportMeta(report)}</small>
                   </span>
 
-                  <span className="reportButtonCode">
-                    {report.code}
-                  </span>
-
                   {loading && selectedReportCode === report.code && (
                     <span className="reportButtonProgressBar"></span>
                   )}
@@ -2362,9 +2356,6 @@ function App() {
                     }}
                   >
                     <strong>{item.value}</strong>
-                    <small>
-                      {item.reportCode || t.scannedOnly}
-                    </small>
                   </button>
                 ))}
               </div>
