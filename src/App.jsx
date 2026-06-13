@@ -83,6 +83,7 @@ const LANGUAGES = {
     logoutSuccess: 'Çıkış yapıldı.',
     barcodeRequired: 'Önce barkod girilmelidir.',
     dateRangeRequired: 'Başlangıç tarihi ve bitiş tarihi zorunludur.',
+    dateRangeInvalid: 'Başlangıç tarihi bitiş tarihinden sonra olamaz.',
     selectDateRange: 'Sevkiyat Takip için tarih aralığını seçin.',
     reportPreparing: 'hazırlanıyor...',
     reportRequestTimeout: 'Rapor hazırlanması çok uzun sürdü. Lütfen tekrar deneyin.',
@@ -152,6 +153,7 @@ const LANGUAGES = {
     logoutSuccess: 'Logged out.',
     barcodeRequired: 'Barcode is required first.',
     dateRangeRequired: 'Start date and end date are required.',
+    dateRangeInvalid: 'Start date cannot be after end date.',
     selectDateRange: 'Select a date range for Shipment Tracking.',
     reportPreparing: 'is preparing...',
     reportRequestTimeout: 'Report preparation took too long. Please try again.',
@@ -221,6 +223,7 @@ const LANGUAGES = {
     logoutSuccess: 'تم تسجيل الخروج.',
     barcodeRequired: 'يجب إدخال الباركود أولاً.',
     dateRangeRequired: 'تاريخ البداية وتاريخ النهاية مطلوبان.',
+    dateRangeInvalid: 'تاريخ البداية لا يمكن أن يكون بعد تاريخ النهاية.',
     selectDateRange: 'اختر نطاق التاريخ لتتبع الشحنات.',
     reportPreparing: 'قيد التحضير...',
     reportRequestTimeout: 'استغرق تجهيز التقرير وقتًا طويلاً. يرجى المحاولة مرة أخرى.',
@@ -412,6 +415,7 @@ function App() {
   const [endDate, setEndDate] = useState('')
   const [barcodeHistory, setBarcodeHistory] = useState([])
   const [message, setMessage] = useState('')
+  const [messageKind, setMessageKind] = useState('error')
   const [scannerOpen, setScannerOpen] = useState(false)
   const [scannerMessage, setScannerMessage] = useState('')
   const [notificationsEnabled, setNotificationsEnabled] = useState(false)
@@ -431,6 +435,16 @@ function App() {
     reportLogs: [],
     subscriptionCount: 0,
   })
+
+  const showUserMessage = (value, kind = 'error') => {
+    setMessageKind(kind)
+    setMessage(value)
+  }
+
+  const clearUserMessage = () => {
+    setMessage('')
+    setMessageKind('info')
+  }
 
   const changeLanguage = (value) => {
     setLanguage(value)
@@ -566,7 +580,7 @@ function App() {
 
   const clearBarcodeInput = () => {
     setBarcode('')
-    setMessage('')
+    clearUserMessage()
   }
 
   const makePdfProxyUrl = (pdfUrl) => {
@@ -582,6 +596,32 @@ function App() {
       .replace(/^_+|_+$/g, '') || 'report'
   }
 
+  const formatDisplayDate = (value) => {
+    const [year, month, day] = String(value || '').split('-')
+
+    if (!year || !month || !day) {
+      return value || ''
+    }
+
+    return `${day}.${month}.${year}`
+  }
+
+  const isInvalidDateRange = (fromDate, toDate) => {
+    if (!fromDate || !toDate) {
+      return false
+    }
+
+    return fromDate > toDate
+  }
+
+  const buildPdfMeta = ({ requiresDateRange, cleanStartDate, cleanEndDate, cleanBarcode }) => {
+    if (requiresDateRange) {
+      return `${t.startDate}: ${formatDisplayDate(cleanStartDate)} · ${t.endDate}: ${formatDisplayDate(cleanEndDate)}`
+    }
+
+    return `${t.barcode}: ${cleanBarcode || 'Barkodsuz'}`
+  }
+
   const canUseNotifications = () => {
     return 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window
   }
@@ -592,7 +632,7 @@ function App() {
     try {
       if (!canUseNotifications()) {
         if (showMessage) {
-          setMessage(t.notificationUnsupported)
+          showUserMessage(t.notificationUnsupported, 'warning')
         }
         return false
       }
@@ -605,7 +645,7 @@ function App() {
 
       if (!publicKey) {
         if (showMessage) {
-          setMessage(t.notificationKeyMissing)
+          showUserMessage(t.notificationKeyMissing, 'warning')
         }
         return false
       }
@@ -671,13 +711,13 @@ function App() {
       setNotificationsEnabled(true)
 
       if (showMessage) {
-        setMessage(t.notificationSaved)
+        showUserMessage(t.notificationSaved, 'success')
       }
 
       return true
     } catch (err) {
       if (showMessage) {
-        setMessage(t.notificationError + err.message)
+        showUserMessage(t.notificationError + err.message, 'error')
       } else {
         console.log('Bildirim kaydı hatası:', err)
       }
@@ -1184,14 +1224,14 @@ function App() {
 
         if (profileError || !profileData) {
           await supabase.auth.signOut()
-          setMessage(t.profileNotFound)
+          showUserMessage(t.profileNotFound, 'error')
           setRestoringSession(false)
           return
         }
 
         if (profileData.is_active === false) {
           await supabase.auth.signOut()
-          setMessage(t.inactiveBlocked)
+          showUserMessage(t.inactiveBlocked, 'error')
           setRestoringSession(false)
           return
         }
@@ -1230,7 +1270,7 @@ function App() {
           stopScanner()
           await supabase.auth.signOut()
           resetUserState()
-          setMessage(t.inactiveAutoLogout)
+          showUserMessage(t.inactiveAutoLogout, 'error')
         }
       } catch (err) {
         console.log('Aktiflik kontrol hatası:', err)
@@ -1300,7 +1340,7 @@ function App() {
       return
     }
 
-    setMessage('')
+    clearUserMessage()
     setScannerOpen(true)
     setScannerMessage(t.cameraOpening)
     scannerResultHandledRef.current = false
@@ -1310,7 +1350,7 @@ function App() {
         if (!videoRef.current) {
           setScannerOpen(false)
           setScannerMessage('')
-          setMessage(t.cameraAreaMissing)
+          showUserMessage(t.cameraAreaMissing, 'error')
           return
         }
 
@@ -1327,7 +1367,7 @@ function App() {
 
           setBarcode(scannedText)
           saveBarcodeToHistory(scannedText)
-          setMessage(`${t.barcodeRead}: ${scannedText}`)
+          showUserMessage(`${t.barcodeRead}: ${scannedText}`, 'success')
 
           if (navigator.vibrate) {
             navigator.vibrate([120, 50, 120])
@@ -1396,21 +1436,21 @@ function App() {
         scannerControlsRef.current = null
         setScannerOpen(false)
         setScannerMessage('')
-        setMessage(t.cameraError + err.message)
+        showUserMessage(t.cameraError + err.message, 'error')
       }
     }, 300)
   }
 
   const handleLogin = async (e) => {
     e.preventDefault()
-    setMessage('')
+    clearUserMessage()
     setLoading(true)
 
     try {
       const cleanUsername = username.trim().toLowerCase()
 
       if (!cleanUsername || !password) {
-        setMessage(t.usernamePasswordRequired)
+        showUserMessage(t.usernamePasswordRequired, 'warning')
         setLoading(false)
         return
       }
@@ -1424,7 +1464,7 @@ function App() {
       })
 
       if (authError) {
-        setMessage(`${t.loginFailed}: ${authError.message}`)
+        showUserMessage(`${t.loginFailed}: ${authError.message}`, 'error')
         setLoading(false)
         return
       }
@@ -1439,14 +1479,14 @@ function App() {
 
       if (profileError || !profileData) {
         await supabase.auth.signOut()
-        setMessage(t.profileNotFound)
+        showUserMessage(t.profileNotFound, 'error')
         setLoading(false)
         return
       }
 
       if (profileData.is_active === false) {
         await supabase.auth.signOut()
-        setMessage(t.inactiveBlocked)
+        showUserMessage(t.inactiveBlocked, 'error')
         setLoading(false)
         return
       }
@@ -1461,7 +1501,7 @@ function App() {
       setUserProfile(profileData)
       setDisplayName(makeDisplayName(profileData, cleanUsername))
       setBarcodeHistory(loadBarcodeHistory())
-      setMessage('')
+      clearUserMessage()
 
       if (notificationPermission === 'granted') {
         await registerPushSubscription(userId, {
@@ -1470,7 +1510,7 @@ function App() {
         })
       }
     } catch (err) {
-      setMessage(t.unexpectedError + err.message)
+      showUserMessage(t.unexpectedError + err.message, 'error')
     }
 
     setLoading(false)
@@ -1503,7 +1543,7 @@ function App() {
 
     await supabase.auth.signOut()
     resetUserState()
-    setMessage(t.logoutSuccess)
+    showUserMessage(t.logoutSuccess, 'success')
   }
 
   const openReport = async (report) => {
@@ -1515,19 +1555,25 @@ function App() {
     const cleanEndDate = endDate.trim()
 
     if (requiresBarcode && !cleanBarcode) {
-      setMessage(t.barcodeRequired)
+      showUserMessage(t.barcodeRequired, 'warning')
       return
     }
 
     if (requiresDateRange && dateRangeReportCode !== report.code) {
       setDateRangeReportCode(report.code)
-      setMessage(t.selectDateRange)
+      showUserMessage(t.selectDateRange, 'info')
       return
     }
 
     if (requiresDateRange && (!cleanStartDate || !cleanEndDate)) {
       setDateRangeReportCode(report.code)
-      setMessage(t.dateRangeRequired)
+      showUserMessage(t.dateRangeRequired, 'warning')
+      return
+    }
+
+    if (requiresDateRange && isInvalidDateRange(cleanStartDate, cleanEndDate)) {
+      setDateRangeReportCode(report.code)
+      showUserMessage(t.dateRangeInvalid, 'warning')
       return
     }
 
@@ -1542,14 +1588,14 @@ function App() {
     stopScanner()
     setLoading(true)
     setSelectedReportCode(report.code)
-    setMessage(`${reportName} ${t.reportPreparing}`)
+    showUserMessage(`${reportName} ${t.reportPreparing}`, 'info')
 
     try {
       const { data: sessionData } = await supabase.auth.getSession()
       const userId = sessionData?.session?.user?.id
 
       if (!userId) {
-        setMessage(t.sessionMissing)
+        showUserMessage(t.sessionMissing, 'error')
         setUserProfile(null)
         setLoading(false)
         setSelectedReportCode('')
@@ -1583,10 +1629,11 @@ function App() {
       }
 
       if (!response.ok) {
-        setMessage(
+        showUserMessage(
           t.reportUrlFailed +
           (result.error || 'Unknown error') +
-          ` (${report.code}${cleanBarcode ? ' - ' + cleanBarcode : ''})`
+          ` (${report.code}${cleanBarcode ? ' - ' + cleanBarcode : ''})`,
+          'error'
         )
 
         setLoading(false)
@@ -1597,8 +1644,9 @@ function App() {
       const pdfUrl = result.pdfUrl
 
       if (!pdfUrl) {
-        setMessage(
-          `${t.pdfUrlEmpty} (${report.code}${cleanBarcode ? ' - ' + cleanBarcode : ''})`
+        showUserMessage(
+          `${t.pdfUrlEmpty} (${report.code}${cleanBarcode ? ' - ' + cleanBarcode : ''})`,
+          'error'
         )
 
         setLoading(false)
@@ -1616,7 +1664,7 @@ function App() {
       })
 
       if (logError) {
-        setMessage(t.reportLogFailed + logError.message)
+        showUserMessage(t.reportLogFailed + logError.message, 'error')
         setLoading(false)
         setSelectedReportCode('')
         return
@@ -1635,16 +1683,22 @@ function App() {
           `${makePdfProxyUrl(pdfUrl)}&filename=${encodeURIComponent(pdfFileName)}`,
         fileName: pdfFileName,
         reportName,
+        reportMeta: buildPdfMeta({
+          requiresDateRange,
+          cleanStartDate,
+          cleanEndDate,
+          cleanBarcode,
+        }),
       })
 
-      setMessage('')
+      clearUserMessage()
     } catch (err) {
       const errorText =
         err.name === 'AbortError'
           ? `${t.reportRequestTimeout} (${report.code}${cleanBarcode ? ' - ' + cleanBarcode : ''})`
           : `${t.unexpectedError}${err.message}`
 
-      setMessage(errorText)
+      showUserMessage(errorText, 'error')
     }
 
     setLoading(false)
@@ -1661,6 +1715,7 @@ function App() {
         pdfUrl={pdfViewerData.pdfUrl}
         fileName={pdfViewerData.fileName}
         reportName={pdfViewerData.reportName}
+        reportMeta={pdfViewerData.reportMeta}
         language={language}
         onClose={() => setPdfViewerData(null)}
       />
@@ -2153,7 +2208,7 @@ function App() {
                     className="historyItem"
                     onClick={() => {
                       setBarcode(item)
-                      setMessage(`${t.selectedBarcode}: ${item}`)
+                      showUserMessage(`${t.selectedBarcode}: ${item}`, 'info')
                     }}
                   >
                     {item}
@@ -2164,7 +2219,11 @@ function App() {
           )}
 
           {message && (
-            <p className="message messageToast" role="alert" aria-live="assertive">
+            <p
+              className={`message messageToast message${messageKind}`}
+              role="alert"
+              aria-live="assertive"
+            >
               {message}
             </p>
           )}
@@ -2227,7 +2286,11 @@ function App() {
         </form>
 
         {message && (
-          <p className="message messageToast" role="alert" aria-live="assertive">
+          <p
+            className={`message messageToast message${messageKind}`}
+            role="alert"
+            aria-live="assertive"
+          >
             {message}
           </p>
         )}

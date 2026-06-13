@@ -31,6 +31,7 @@ function PdfViewer({
   pdfUrl,
   fileName,
   reportName,
+  reportMeta,
   language = 'tr',
   onClose,
 }) {
@@ -736,8 +737,14 @@ function PdfViewer({
               {reportName || finalFileName}
             </strong>
 
+            {reportMeta && (
+              <span className="pdfViewerMeta">
+                {reportMeta}
+              </span>
+            )}
+
             {pageCount > 0 && (
-              <span>
+              <span className="pdfViewerPageStatus">
                 {t.page} {currentPage} / {pageCount}
               </span>
             )}

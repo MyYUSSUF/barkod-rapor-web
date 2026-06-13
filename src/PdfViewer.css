@@ -26,6 +26,7 @@
     linear-gradient(135deg, rgba(15, 23, 42, 0.98), rgba(23, 50, 77, 0.98));
   border-bottom: 1px solid rgba(255, 255, 255, 0.12);
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+  animation: pdfViewerEnter 1.35s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
 .pdfViewerToolbarTop {
@@ -65,6 +66,11 @@
   cursor: pointer;
   white-space: nowrap;
   -webkit-tap-highlight-color: transparent;
+  animation: pdfViewerEnter 1.35s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.pdfViewerShareButton {
+  animation-delay: 0.14s !important;
 }
 
 .pdfViewerToolbar button:disabled {
@@ -107,7 +113,7 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 3px;
+  gap: 4px;
 }
 
 .pdfViewerTitleArea strong {
@@ -121,9 +127,27 @@
 }
 
 .pdfViewerTitleArea span {
+  width: 100%;
+  overflow: hidden;
   color: #cbd5e1;
   font-size: 12px;
   font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pdfViewerMeta {
+  max-width: 100%;
+  padding: 4px 8px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #f8fafc !important;
+  font-size: 11px !important;
+  font-weight: 800 !important;
+}
+
+.pdfViewerPageStatus {
+  color: #cbd5e1 !important;
 }
 
 .pdfViewerZoomValue {
@@ -247,6 +271,26 @@
 @keyframes pdfViewerSpin {
   to {
     transform: rotate(360deg);
+  }
+}
+
+@keyframes pdfViewerEnter {
+  from {
+    opacity: 0;
+    transform: translateX(-18px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pdfViewerToolbar,
+  .pdfViewerToolbar button,
+  .pdfViewerSpinner {
+    animation: none;
   }
 }
 
