@@ -275,7 +275,7 @@ form button,
 .scanButton,
 .mainButton,
 .logoutButton {
-  animation: buttonEnter 0.92s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation: buttonEnter 1.35s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
 form button {
@@ -287,27 +287,27 @@ form button {
 }
 
 .reportButton1 {
-  animation-delay: 0.1s;
+  animation-delay: 0.14s;
 }
 
 .reportButton2 {
-  animation-delay: 0.2s;
+  animation-delay: 0.28s;
 }
 
 .reportButton3 {
-  animation-delay: 0.3s;
+  animation-delay: 0.42s;
 }
 
 .reportButton4 {
-  animation-delay: 0.4s;
+  animation-delay: 0.56s;
 }
 
 .reportButton5 {
-  animation-delay: 0.5s;
+  animation-delay: 0.7s;
 }
 
 .logoutButton {
-  animation-delay: 0.58s;
+  animation-delay: 0.82s;
 }
 
 @keyframes buttonEnter {
