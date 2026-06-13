@@ -474,6 +474,8 @@ function ReportIcon({ type }) {
 
 function App() {
   const videoRef = useRef(null)
+  const shipmentDateBoxRef = useRef(null)
+  const shipmentStartInputRef = useRef(null)
   const scannerControlsRef = useRef(null)
   const scannerResultHandledRef = useRef(false)
 
@@ -693,6 +695,19 @@ function App() {
   const clearBarcodeInput = () => {
     setBarcode('')
     clearUserMessage()
+  }
+
+  const focusShipmentDateRange = () => {
+    window.setTimeout(() => {
+      shipmentDateBoxRef.current?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'center',
+      })
+
+      shipmentStartInputRef.current?.focus({
+        preventScroll: true,
+      })
+    }, 80)
   }
 
   const makePdfProxyUrl = (pdfUrl) => {
@@ -1685,21 +1700,24 @@ function App() {
       return
     }
 
-    if (requiresDateRange && dateRangeReportCode !== report.code) {
+    if (requiresDateRange) {
       setDateRangeReportCode(report.code)
-      showUserMessage(t.selectDateRange, 'info')
-      return
     }
 
     if (requiresDateRange && (!cleanStartDate || !cleanEndDate)) {
-      setDateRangeReportCode(report.code)
-      showUserMessage(t.dateRangeRequired, 'warning')
+      showUserMessage(
+        dateRangeReportCode !== report.code
+          ? t.selectDateRange
+          : t.dateRangeRequired,
+        dateRangeReportCode !== report.code ? 'info' : 'warning'
+      )
+      focusShipmentDateRange()
       return
     }
 
     if (requiresDateRange && isInvalidDateRange(cleanStartDate, cleanEndDate)) {
-      setDateRangeReportCode(report.code)
       showUserMessage(t.dateRangeInvalid, 'warning')
+      focusShipmentDateRange()
       return
     }
 
@@ -2289,12 +2307,13 @@ function App() {
                 </button>
 
                 {report.requiresDateRange && dateRangeReportCode === report.code && (
-                  <div className="dateRangeBox">
+                  <div className="dateRangeBox" ref={shipmentDateBoxRef}>
                     <div className="dateInputGrid">
                       <div>
                         <label htmlFor="shipmentStartDate">{t.startDate}</label>
                         <input
                           id="shipmentStartDate"
+                          ref={shipmentStartInputRef}
                           type="date"
                           value={startDate}
                           onChange={(e) => setStartDate(e.target.value)}
