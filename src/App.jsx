@@ -20,26 +20,31 @@ const REPORTS = [
   {
     code: 'RAR00032',
     key: 'inspection',
+    icon: 'inspect',
     requiresBarcode: true,
   },
   {
     code: 'RAR00033',
     key: 'workOrder',
+    icon: 'work',
     requiresBarcode: true,
   },
   {
     code: 'RAR00034',
     key: 'surfaceControl',
+    icon: 'surface',
     requiresBarcode: true,
   },
   {
     code: 'RAR00035',
     key: 'fixingWaiting',
+    icon: 'fixing',
     requiresBarcode: false,
   },
   {
     code: 'RAR00036',
     key: 'shipmentTracking',
+    icon: 'shipment',
     requiresBarcode: false,
     requiresDateRange: true,
     customerCode: '61002',
@@ -73,6 +78,10 @@ const LANGUAGES = {
     recentBarcodes: 'Son Barkodlar',
     clear: 'Temizle',
     selectedBarcode: 'Barkod seçildi',
+    scannedOnly: 'Okutuldu',
+    selectedDateRange: 'Seçilen tarih aralığı',
+    selectedDayCount: 'gün',
+    scannerReady: 'Okutmaya hazır',
     logout: 'Çıkış Yap',
     logoutConfirm: 'Çıkış yapmak istediğinize emin misiniz?',
     usernamePasswordRequired: 'Kullanıcı adı ve şifre zorunludur.',
@@ -143,6 +152,10 @@ const LANGUAGES = {
     recentBarcodes: 'Recent Barcodes',
     clear: 'Clear',
     selectedBarcode: 'Barcode selected',
+    scannedOnly: 'Scanned',
+    selectedDateRange: 'Selected date range',
+    selectedDayCount: 'days',
+    scannerReady: 'Ready to scan',
     logout: 'Logout',
     logoutConfirm: 'Are you sure you want to logout?',
     usernamePasswordRequired: 'Username and password are required.',
@@ -213,6 +226,10 @@ const LANGUAGES = {
     recentBarcodes: 'آخر الباركودات',
     clear: 'مسح',
     selectedBarcode: 'تم اختيار الباركود',
+    scannedOnly: 'تم المسح',
+    selectedDateRange: 'نطاق التاريخ المحدد',
+    selectedDayCount: 'أيام',
+    scannerReady: 'جاهز للمسح',
     logout: 'تسجيل الخروج',
     logoutConfirm: 'هل أنت متأكد أنك تريد تسجيل الخروج؟',
     usernamePasswordRequired: 'اسم المستخدم وكلمة المرور مطلوبان.',
@@ -390,6 +407,71 @@ const smallButtonStyle = {
   marginTop: '4px',
 }
 
+const REPORT_ICON_PATHS = {
+  inspect: (
+    <>
+      <path d="M8 4h8l3 3v13H5V4h3z" />
+      <path d="M15 4v4h4" />
+      <path d="M8 12h8" />
+      <path d="M8 16h5" />
+    </>
+  ),
+  work: (
+    <>
+      <path d="M9 7V5h6v2" />
+      <path d="M4 8h16v11H4V8z" />
+      <path d="M4 13h16" />
+      <path d="M10 13v2h4v-2" />
+    </>
+  ),
+  surface: (
+    <>
+      <path d="M4 16l5-8 4 5 3-4 4 7" />
+      <path d="M4 19h16" />
+      <path d="M7 12h2" />
+      <path d="M14 12h2" />
+    </>
+  ),
+  fixing: (
+    <>
+      <path d="M6 7h12" />
+      <path d="M8 7v10" />
+      <path d="M16 7v10" />
+      <path d="M7 17h10" />
+      <path d="M10 10h4" />
+    </>
+  ),
+  shipment: (
+    <>
+      <path d="M3 8h11v8H3V8z" />
+      <path d="M14 11h4l3 3v2h-7v-5z" />
+      <path d="M7 18a2 2 0 1 0 0-4 2 2 0 0 0 0 4z" />
+      <path d="M17 18a2 2 0 1 0 0-4 2 2 0 0 0 0 4z" />
+    </>
+  ),
+}
+
+function ReportIcon({ type }) {
+  return (
+    <svg
+      className="reportButtonIcon"
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <g
+        fill="none"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="1.9"
+      >
+        {REPORT_ICON_PATHS[type] || REPORT_ICON_PATHS.inspect}
+      </g>
+    </svg>
+  )
+}
+
 function App() {
   const videoRef = useRef(null)
   const scannerControlsRef = useRef(null)
@@ -549,13 +631,33 @@ function App() {
         return []
       }
 
-      return parsed.filter((item) => typeof item === 'string' && item.trim() !== '')
+      return parsed
+        .map((item) => {
+          if (typeof item === 'string') {
+            return {
+              value: item.trim(),
+              reportCode: '',
+              reportName: '',
+            }
+          }
+
+          if (item && typeof item === 'object') {
+            return {
+              value: String(item.value || item.barcode || '').trim(),
+              reportCode: String(item.reportCode || '').trim(),
+              reportName: String(item.reportName || '').trim(),
+            }
+          }
+
+          return null
+        })
+        .filter((item) => item?.value)
     } catch (err) {
       return []
     }
   }
 
-  const saveBarcodeToHistory = (value) => {
+  const saveBarcodeToHistory = (value, report = null) => {
     const cleanValue = value ? String(value).trim() : ''
 
     if (!cleanValue) {
@@ -563,10 +665,20 @@ function App() {
     }
 
     const currentHistory = loadBarcodeHistory()
+    const historyItem = {
+      value: cleanValue,
+      reportCode: report?.code || '',
+      reportName: report ? getReportName(report) : '',
+    }
 
     const newHistory = [
-      cleanValue,
-      ...currentHistory.filter((item) => item !== cleanValue),
+      historyItem,
+      ...currentHistory.filter((item) => {
+        return !(
+          item.value === cleanValue &&
+          item.reportCode === historyItem.reportCode
+        )
+      }),
     ].slice(0, 10)
 
     localStorage.setItem(HISTORY_KEY, JSON.stringify(newHistory))
@@ -612,6 +724,21 @@ function App() {
     }
 
     return fromDate > toDate
+  }
+
+  const getDateRangeDayCount = (fromDate, toDate) => {
+    if (!fromDate || !toDate || isInvalidDateRange(fromDate, toDate)) {
+      return null
+    }
+
+    const fromTime = new Date(`${fromDate}T00:00:00`).getTime()
+    const toTime = new Date(`${toDate}T00:00:00`).getTime()
+
+    if (Number.isNaN(fromTime) || Number.isNaN(toTime)) {
+      return null
+    }
+
+    return Math.floor((toTime - fromTime) / 86400000) + 1
   }
 
   const buildPdfMeta = ({ requiresDateRange, cleanStartDate, cleanEndDate, cleanBarcode }) => {
@@ -1582,7 +1709,7 @@ function App() {
     }
 
     if (cleanBarcode) {
-      saveBarcodeToHistory(cleanBarcode)
+      saveBarcodeToHistory(cleanBarcode, report)
     }
 
     stopScanner()
@@ -1709,6 +1836,8 @@ function App() {
     ? REPORTS.find((report) => report.code === selectedReportCode)
     : null
 
+  const dateRangeDayCount = getDateRangeDayCount(startDate, endDate)
+
   if (pdfViewerData) {
     return (
       <PdfViewer
@@ -1758,29 +1887,29 @@ function App() {
             <h1>Admin Panel</h1>
           </div>
 
-          <div style={adminGridStyle}>
-            <div style={statBoxStyle}>
+          <div className="adminStatsGrid" style={adminGridStyle}>
+            <div className="adminStatBox" style={statBoxStyle}>
               <strong>Kullanıcı</strong>
               <p className="subtitle" style={{ margin: '8px 0 0' }}>
                 {adminData.users.length}
               </p>
             </div>
 
-            <div style={statBoxStyle}>
+            <div className="adminStatBox" style={statBoxStyle}>
               <strong>Bildirim Cihazı</strong>
               <p className="subtitle" style={{ margin: '8px 0 0' }}>
                 {adminData.subscriptionCount}
               </p>
             </div>
 
-            <div style={statBoxStyle}>
+            <div className="adminStatBox" style={statBoxStyle}>
               <strong>Login Log</strong>
               <p className="subtitle" style={{ margin: '8px 0 0' }}>
                 {adminData.loginLogs.length}
               </p>
             </div>
 
-            <div style={statBoxStyle}>
+            <div className="adminStatBox" style={statBoxStyle}>
               <strong>Rapor Log</strong>
               <p className="subtitle" style={{ margin: '8px 0 0' }}>
                 {adminData.reportLogs.length}
@@ -1804,8 +1933,9 @@ function App() {
               <strong>Bildirim Gönder</strong>
             </div>
 
-            <label>Bildirim Başlığı</label>
+            <label htmlFor="adminNotificationTitle">Bildirim Başlığı</label>
             <input
+              id="adminNotificationTitle"
               type="text"
               value={adminNotificationTitle}
               onChange={(e) => setAdminNotificationTitle(e.target.value)}
@@ -1813,23 +1943,15 @@ function App() {
               disabled={adminNotificationSending}
             />
 
-            <label>Bildirim Mesajı</label>
+            <label htmlFor="adminNotificationBody">Bildirim Mesajı</label>
             <textarea
+              id="adminNotificationBody"
+              className="adminTextarea"
               value={adminNotificationBody}
               onChange={(e) => setAdminNotificationBody(e.target.value)}
               placeholder="Gönderilecek mesajı yaz"
               disabled={adminNotificationSending}
               rows={4}
-              style={{
-                width: '100%',
-                minHeight: '100px',
-                padding: '14px',
-                borderRadius: '14px',
-                border: '1px solid #d1d5db',
-                resize: 'vertical',
-                fontSize: '15px',
-                fontFamily: 'inherit',
-              }}
             />
 
             <button
@@ -1873,6 +1995,7 @@ function App() {
                       <td style={tdStyle}>
                         <button
                           type="button"
+                          className="adminSmallButton"
                           style={{
                             ...smallButtonStyle,
                             background: user.is_active === false ? '#0f766e' : '#b91c1c',
@@ -1884,6 +2007,7 @@ function App() {
 
                         <button
                           type="button"
+                          className="adminSmallButton"
                           style={{
                             ...smallButtonStyle,
                             background: user.role === 'admin' ? '#4b5563' : '#17324d',
@@ -1986,7 +2110,7 @@ function App() {
             </div>
           </div>
 
-          <button className="logoutButton" onClick={handleLogout}>
+          <button type="button" className="logoutButton" onClick={handleLogout}>
             {t.logout}
           </button>
 
@@ -2007,6 +2131,7 @@ function App() {
 
             <select
               className="languageSelect"
+              aria-label="Dil seçimi"
               value={language}
               onChange={(e) => changeLanguage(e.target.value)}
             >
@@ -2031,10 +2156,13 @@ function App() {
             </button>
           )}
 
-          <label>{t.barcode}</label>
+          <label htmlFor="barcodeInput">{t.barcode}</label>
           <div className="barcodeInputRow">
             <input
+              id="barcodeInput"
               type="text"
+              inputMode="text"
+              autoComplete="off"
               placeholder={t.barcodePlaceholder}
               value={barcode}
               onChange={(e) => setBarcode(e.target.value)}
@@ -2098,6 +2226,11 @@ function App() {
                 </div>
 
                 <div className="scannerBottom">
+                  <div className="scannerStatusPill">
+                    <span></span>
+                    {t.scannerReady}
+                  </div>
+
                   {scannerMessage && (
                     <p className="scannerMessage">{scannerMessage}</p>
                   )}
@@ -2130,6 +2263,7 @@ function App() {
             {REPORTS.map((report, index) => (
               <Fragment key={report.code}>
                 <button
+                  type="button"
                   className={`mainButton reportButton reportButton${index + 1}${
                     loading && selectedReportCode === report.code
                       ? ' reportButtonLoading'
@@ -2139,7 +2273,7 @@ function App() {
                   disabled={loading}
                 >
                   <span className="reportButtonMark">
-                    {String(index + 1).padStart(2, '0')}
+                    <ReportIcon type={report.icon} />
                   </span>
 
                   <span className="reportButtonBody">
@@ -2154,6 +2288,10 @@ function App() {
                   <span className="reportButtonCode">
                     {report.code}
                   </span>
+
+                  {loading && selectedReportCode === report.code && (
+                    <span className="reportButtonProgressBar"></span>
+                  )}
                 </button>
 
                 {report.requiresDateRange && dateRangeReportCode === report.code && (
@@ -2181,6 +2319,18 @@ function App() {
                         />
                       </div>
                     </div>
+
+                    {startDate && endDate && (
+                      <div className="dateRangeSummary">
+                        <strong>{t.selectedDateRange}</strong>
+                        <span>
+                          {formatDisplayDate(startDate)} - {formatDisplayDate(endDate)}
+                          {dateRangeDayCount && (
+                            <> · {dateRangeDayCount} {t.selectedDayCount}</>
+                          )}
+                        </span>
+                      </div>
+                    )}
                   </div>
                 )}
               </Fragment>
@@ -2204,14 +2354,17 @@ function App() {
                 {barcodeHistory.map((item) => (
                   <button
                     type="button"
-                    key={item}
+                    key={`${item.value}-${item.reportCode || 'scan'}`}
                     className="historyItem"
                     onClick={() => {
-                      setBarcode(item)
-                      showUserMessage(`${t.selectedBarcode}: ${item}`, 'info')
+                      setBarcode(item.value)
+                      showUserMessage(`${t.selectedBarcode}: ${item.value}`, 'info')
                     }}
                   >
-                    {item}
+                    <strong>{item.value}</strong>
+                    <small>
+                      {item.reportCode || t.scannedOnly}
+                    </small>
                   </button>
                 ))}
               </div>
@@ -2228,7 +2381,7 @@ function App() {
             </p>
           )}
 
-          <button className="logoutButton" onClick={handleLogout}>
+          <button type="button" className="logoutButton" onClick={handleLogout}>
             {t.logout}
           </button>
 
@@ -2248,6 +2401,7 @@ function App() {
 
           <select
             className="languageSelect"
+            aria-label="Dil seçimi"
             value={language}
             onChange={(e) => changeLanguage(e.target.value)}
           >
@@ -2264,17 +2418,22 @@ function App() {
         </div>
 
         <form onSubmit={handleLogin}>
-          <label>{t.username}</label>
+          <label htmlFor="loginUsername">{t.username}</label>
           <input
+            id="loginUsername"
             type="text"
+            autoComplete="username"
+            inputMode="text"
             placeholder={t.usernamePlaceholder}
             value={username}
             onChange={(e) => setUsername(e.target.value)}
           />
 
-          <label>{t.password}</label>
+          <label htmlFor="loginPassword">{t.password}</label>
           <input
+            id="loginPassword"
             type="password"
+            autoComplete="current-password"
             placeholder={t.passwordPlaceholder}
             value={password}
             onChange={(e) => setPassword(e.target.value)}

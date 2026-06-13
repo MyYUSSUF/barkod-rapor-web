@@ -47,6 +47,7 @@
   gap: 7px;
   overflow-x: auto;
   scrollbar-width: none;
+  overscroll-behavior-x: contain;
 }
 
 .pdfViewerToolbarBottom::-webkit-scrollbar {
@@ -54,7 +55,7 @@
 }
 
 .pdfViewerToolbar button {
-  min-height: 40px;
+  min-height: 44px;
   border: none;
   border-radius: 8px;
   padding: 8px 12px;
@@ -89,6 +90,30 @@
 
 .pdfViewerShareButton {
   background: linear-gradient(135deg, #0f766e, #0b5f58);
+}
+
+.pdfViewerActionButton {
+  width: auto;
+  min-width: 86px;
+  background: rgba(255, 255, 255, 0.10);
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  color: #f8fafc;
+}
+
+.pdfViewerReadyBadge {
+  flex: 0 0 auto;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: rgba(15, 118, 110, 0.28);
+  color: #d6fff7;
+  font-size: 12px;
+  font-weight: 900;
+  white-space: nowrap;
+  animation: pdfViewerReadyPulse 1.6s ease both;
 }
 
 .pdfViewerToolButton {
@@ -268,6 +293,25 @@
   box-shadow: 0 8px 25px rgba(0, 0, 0, 0.24);
 }
 
+.pdfViewerNotice {
+  position: absolute;
+  z-index: 30;
+  top: calc(118px + env(safe-area-inset-top, 0px));
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(calc(100% - 24px), 520px);
+  padding: 12px 14px;
+  border: 1px solid rgba(15, 118, 110, 0.24);
+  border-radius: 8px;
+  background: #e8f3f1;
+  color: #0b5f58;
+  font-size: 13px;
+  font-weight: 900;
+  line-height: 1.4;
+  text-align: center;
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.20);
+}
+
 @keyframes pdfViewerSpin {
   to {
     transform: rotate(360deg);
@@ -286,10 +330,23 @@
   }
 }
 
+@keyframes pdfViewerReadyPulse {
+  from {
+    opacity: 0;
+    transform: translateY(-3px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .pdfViewerToolbar,
   .pdfViewerToolbar button,
-  .pdfViewerSpinner {
+  .pdfViewerSpinner,
+  .pdfViewerReadyBadge {
     animation: none;
   }
 }
@@ -338,7 +395,7 @@
   }
 
   .pdfViewerToolbar button {
-    min-height: 34px;
+    min-height: 44px;
   }
 
   .pdfViewerLoading {

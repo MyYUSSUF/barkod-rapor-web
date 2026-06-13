@@ -46,6 +46,7 @@ function PdfViewer({
   const [loading, setLoading] = useState(true)
   const [sharing, setSharing] = useState(false)
   const [error, setError] = useState('')
+  const [notice, setNotice] = useState('')
   const [pageCount, setPageCount] = useState(0)
   const [currentPage, setCurrentPage] = useState(1)
 
@@ -65,6 +66,11 @@ function PdfViewer({
         'PDF henüz hazır değil. Birkaç saniye sonra tekrar deneyin.',
       page: 'Sayfa',
       pageError: 'Bu sayfa görüntülenemedi.',
+      ready: 'PDF hazır',
+      reload: 'Yenile',
+      copyLink: 'Linki Kopyala',
+      linkCopied: 'PDF linki kopyalandı.',
+      copyLinkError: 'PDF linki kopyalanamadı.',
     },
     en: {
       close: 'Close',
@@ -79,6 +85,11 @@ function PdfViewer({
         'The PDF is not ready yet. Try again in a few seconds.',
       page: 'Page',
       pageError: 'This page could not be displayed.',
+      ready: 'PDF ready',
+      reload: 'Reload',
+      copyLink: 'Copy Link',
+      linkCopied: 'PDF link copied.',
+      copyLinkError: 'PDF link could not be copied.',
     },
     ar: {
       close: 'إغلاق',
@@ -93,6 +104,11 @@ function PdfViewer({
         'ملف PDF غير جاهز بعد. حاول مرة أخرى بعد لحظات.',
       page: 'صفحة',
       pageError: 'تعذر عرض هذه الصفحة.',
+      ready: 'ملف PDF جاهز',
+      reload: 'تحديث',
+      copyLink: 'نسخ الرابط',
+      linkCopied: 'تم نسخ رابط PDF.',
+      copyLinkError: 'تعذر نسخ رابط PDF.',
     },
   }
 
@@ -612,6 +628,7 @@ function PdfViewer({
 
   const sharePdf = () => {
     setError('')
+    setNotice('')
 
     const blob = pdfBlobRef.current
 
@@ -665,6 +682,29 @@ function PdfViewer({
       .finally(() => {
         setSharing(false)
       })
+  }
+
+  const reloadPdf = () => {
+    setError('')
+    setNotice('')
+    setRenderVersion((value) => value + 1)
+  }
+
+  const copyPdfLink = async () => {
+    setError('')
+    setNotice('')
+
+    try {
+      if (!navigator.clipboard?.writeText) {
+        throw new Error('Clipboard API unavailable')
+      }
+
+      await navigator.clipboard.writeText(pdfUrl)
+      setNotice(t.linkCopied)
+    } catch (copyError) {
+      console.error('PDF link kopyalama hatası:', copyError)
+      setError(t.copyLinkError)
+    }
   }
 
   const handleClose = async () => {
@@ -728,6 +768,7 @@ function PdfViewer({
             type="button"
             className="pdfViewerCloseButton"
             onClick={handleClose}
+            aria-label={t.close}
           >
             {t.close}
           </button>
@@ -755,33 +796,54 @@ function PdfViewer({
             className="pdfViewerShareButton"
             onClick={sharePdf}
             disabled={sharing || loading}
+            aria-label={t.share}
           >
             {sharing ? t.sharing : t.share}
           </button>
         </div>
+
+        <div className="pdfViewerToolbarBottom" aria-label="PDF actions">
+          <button
+            type="button"
+            className="pdfViewerActionButton"
+            onClick={reloadPdf}
+            disabled={loading}
+          >
+            {t.reload}
+          </button>
+
+          <button
+            type="button"
+            className="pdfViewerActionButton"
+            onClick={copyPdfLink}
+          >
+            {t.copyLink}
+          </button>
+
+          {pageCount > 0 && !loading && (
+            <span className="pdfViewerReadyBadge" role="status">
+              {t.ready}
+            </span>
+          )}
+        </div>
       </header>
 
       {loading && (
-        <div
-          className="pdfViewerLoading"
-          style={{
-            inset: '56px 0 0',
-          }}
-        >
+        <div className="pdfViewerLoading">
           <div className="pdfViewerSpinner" />
           <strong>{t.loading}</strong>
         </div>
       )}
 
       {error && (
-        <div
-          className="pdfViewerError"
-          style={{
-            top:
-              'calc(66px + env(safe-area-inset-top, 0px))',
-          }}
-        >
+        <div className="pdfViewerError">
           {error}
+        </div>
+      )}
+
+      {notice && (
+        <div className="pdfViewerNotice" role="status" aria-live="polite">
+          {notice}
         </div>
       )}
 
