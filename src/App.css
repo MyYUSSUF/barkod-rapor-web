@@ -348,7 +348,8 @@ form button {
   .logoutButton,
   .reportProgressRing,
   .reportButtonLoading .reportButtonMark,
-  .scanLine {
+  .scanLine,
+  .messageToast {
     animation: none;
   }
 }
@@ -377,6 +378,34 @@ form button {
   border-right: 4px solid var(--danger);
   border-left: 1px solid rgba(185, 28, 28, 0.18);
   text-align: right;
+}
+
+.messageToast {
+  position: fixed;
+  z-index: 10000;
+  top: calc(18px + env(safe-area-inset-top, 0px));
+  left: 50%;
+  width: min(calc(100% - 28px), 520px);
+  margin: 0;
+  transform: translateX(-50%);
+  animation: messageToastEnter 0.42s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+[dir="rtl"] .messageToast {
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+@keyframes messageToastEnter {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
 }
 
 .barcodeInputRow {

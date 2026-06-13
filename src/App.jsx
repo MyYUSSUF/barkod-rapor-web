@@ -2163,7 +2163,11 @@ function App() {
             </div>
           )}
 
-          {message && <p className="message">{message}</p>}
+          {message && (
+            <p className="message messageToast" role="alert" aria-live="assertive">
+              {message}
+            </p>
+          )}
 
           <button className="logoutButton" onClick={handleLogout}>
             {t.logout}
@@ -2222,7 +2226,11 @@ function App() {
           </button>
         </form>
 
-        {message && <p className="message">{message}</p>}
+        {message && (
+          <p className="message messageToast" role="alert" aria-live="assertive">
+            {message}
+          </p>
+        )}
 
         <p className="appFooter">
           {t.versionText} {APP_VERSION}
