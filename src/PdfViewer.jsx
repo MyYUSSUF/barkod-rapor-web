@@ -12,7 +12,6 @@ const FIRST_PAGE_TIMEOUT_MS = 12000
 const OTHER_PAGE_TIMEOUT_MS = 15000
 const MIN_ZOOM_LEVEL = 1
 const MAX_ZOOM_LEVEL = 2
-const ZOOM_STEP = 0.25
 
 function clampZoomLevel(value) {
   return Math.min(
@@ -65,6 +64,25 @@ function createTimeoutError() {
   return error
 }
 
+function getTouchDistance(touches) {
+  const first = touches[0]
+  const second = touches[1]
+  const deltaX = first.clientX - second.clientX
+  const deltaY = first.clientY - second.clientY
+
+  return Math.hypot(deltaX, deltaY)
+}
+
+function getTouchCenter(touches) {
+  const first = touches[0]
+  const second = touches[1]
+
+  return {
+    x: (first.clientX + second.clientX) / 2,
+    y: (first.clientY + second.clientY) / 2,
+  }
+}
+
 function PdfViewer({
   pdfUrl,
   fileName,
@@ -77,8 +95,23 @@ function PdfViewer({
   const renderIdRef = useRef(0)
   const pdfDocumentRef = useRef(null)
   const pdfBlobRef = useRef(null)
+  const pagesHostRef = useRef(null)
   const activeRenderTaskRef = useRef(null)
   const adaptiveDprLimitRef = useRef(HIGH_QUALITY_DPR_LIMIT)
+  const zoomLevelRef = useRef(1)
+  const touchGestureRef = useRef({
+    mode: '',
+    startX: 0,
+    startY: 0,
+    scrollLeft: 0,
+    scrollTop: 0,
+    startDistance: 0,
+    startZoom: 1,
+    anchorX: 0,
+    anchorY: 0,
+    anchorContentX: 0,
+    anchorContentY: 0,
+  })
 
   const [renderVersion, setRenderVersion] = useState(0)
   const [loading, setLoading] = useState(true)
@@ -86,7 +119,6 @@ function PdfViewer({
   const [error, setError] = useState('')
   const [pageCount, setPageCount] = useState(0)
   const [currentPage, setCurrentPage] = useState(1)
-  const [zoomLevel, setZoomLevel] = useState(1)
 
   const isArabic = language === 'ar'
 
@@ -302,7 +334,7 @@ function PdfViewer({
         availableWidth / originalViewport.width
 
       const viewport = page.getViewport({
-        scale: fitScale * zoomLevel,
+        scale: fitScale,
       })
 
       const pageWrapper =
@@ -338,14 +370,9 @@ function PdfViewer({
 
       const nativeDpr = window.devicePixelRatio || 1
 
-      const zoomAwareDprLimit =
-        zoomLevel > 1
-          ? Math.min(adaptiveDprLimitRef.current, LOW_QUALITY_DPR_LIMIT)
-          : adaptiveDprLimitRef.current
-
       const highQualityDpr = Math.min(
         nativeDpr,
-        zoomAwareDprLimit
+        adaptiveDprLimitRef.current
       )
 
       const timeoutMs =
@@ -452,7 +479,6 @@ function PdfViewer({
       renderCanvasWithTimeout,
       t.page,
       t.pageError,
-      zoomLevel,
     ]
   )
 
@@ -501,6 +527,12 @@ function PdfViewer({
       container.scrollTop = 0
       container.scrollLeft = 0
 
+      const pagesHost = document.createElement('div')
+      pagesHost.className = 'pdfViewerPages'
+      pagesHost.style.zoom = String(zoomLevelRef.current)
+      pagesHostRef.current = pagesHost
+      container.appendChild(pagesHost)
+
       const availableWidth = Math.max(
         container.clientWidth - 24,
         280
@@ -518,7 +550,7 @@ function PdfViewer({
         const pageRendered = await renderSinglePage({
           pdfDocument,
           pageNumber,
-          container,
+          container: pagesHost,
           availableWidth,
           currentRenderId,
         })
@@ -734,14 +766,6 @@ function PdfViewer({
     setRenderVersion((value) => value + 1)
   }
 
-  const zoomOut = () => {
-    setZoomLevel((value) => clampZoomLevel(value - ZOOM_STEP))
-  }
-
-  const zoomIn = () => {
-    setZoomLevel((value) => clampZoomLevel(value + ZOOM_STEP))
-  }
-
   const openPdfInBrowser = () => {
     setError('')
 
@@ -750,6 +774,152 @@ function PdfViewer({
     if (!opened) {
       setError(openInBrowserErrorText)
     }
+  }
+
+  const applyTouchZoom = (nextZoom, anchor) => {
+    const container = containerRef.current
+    const pagesHost = pagesHostRef.current
+    const clampedZoom = clampZoomLevel(nextZoom)
+
+    zoomLevelRef.current = clampedZoom
+
+    if (pagesHost) {
+      pagesHost.style.zoom = String(clampedZoom)
+    }
+
+    if (container && anchor) {
+      const rect = container.getBoundingClientRect()
+
+      container.scrollLeft =
+        anchor.contentX * clampedZoom - (anchor.x - rect.left)
+      container.scrollTop =
+        anchor.contentY * clampedZoom - (anchor.y - rect.top)
+    }
+  }
+
+  const startPanGesture = (touch) => {
+    const container = containerRef.current
+
+    if (!container) {
+      return
+    }
+
+    touchGestureRef.current = {
+      ...touchGestureRef.current,
+      mode: 'pan',
+      startX: touch.clientX,
+      startY: touch.clientY,
+      scrollLeft: container.scrollLeft,
+      scrollTop: container.scrollTop,
+    }
+  }
+
+  const startPinchGesture = (touches) => {
+    const container = containerRef.current
+
+    if (!container || touches.length < 2) {
+      return
+    }
+
+    const center = getTouchCenter(touches)
+    const rect = container.getBoundingClientRect()
+    const currentZoom = zoomLevelRef.current
+
+    touchGestureRef.current = {
+      ...touchGestureRef.current,
+      mode: 'pinch',
+      startDistance: Math.max(1, getTouchDistance(touches)),
+      startZoom: currentZoom,
+      anchorX: center.x,
+      anchorY: center.y,
+      anchorContentX:
+        (container.scrollLeft + center.x - rect.left) / currentZoom,
+      anchorContentY:
+        (container.scrollTop + center.y - rect.top) / currentZoom,
+    }
+  }
+
+  const handleContentTouchStart = (event) => {
+    if (loading) {
+      return
+    }
+
+    if (event.touches.length >= 2) {
+      startPinchGesture(event.touches)
+      return
+    }
+
+    if (event.touches.length === 1) {
+      startPanGesture(event.touches[0])
+    }
+  }
+
+  const handleContentTouchMove = (event) => {
+    if (loading || event.touches.length === 0) {
+      return
+    }
+
+    const container = containerRef.current
+    const gesture = touchGestureRef.current
+
+    if (!container) {
+      return
+    }
+
+    if (event.touches.length >= 2) {
+      if (gesture.mode !== 'pinch') {
+        startPinchGesture(event.touches)
+      }
+
+      const activeGesture = touchGestureRef.current
+      const nextZoom =
+        activeGesture.startZoom *
+        (getTouchDistance(event.touches) / activeGesture.startDistance)
+      const center = getTouchCenter(event.touches)
+
+      applyTouchZoom(nextZoom, {
+        x: center.x,
+        y: center.y,
+        contentX: activeGesture.anchorContentX,
+        contentY: activeGesture.anchorContentY,
+      })
+
+      if (event.cancelable) {
+        event.preventDefault()
+      }
+
+      return
+    }
+
+    if (gesture.mode === 'pan') {
+      const touch = event.touches[0]
+      const deltaX = touch.clientX - gesture.startX
+      const deltaY = touch.clientY - gesture.startY
+
+      container.scrollLeft = gesture.scrollLeft - deltaX
+      container.scrollTop = gesture.scrollTop - deltaY
+
+      if (
+        event.cancelable &&
+        (Math.abs(deltaX) > 2 || Math.abs(deltaY) > 2)
+      ) {
+        event.preventDefault()
+      }
+    }
+  }
+
+  const handleContentTouchEnd = (event) => {
+    if (event.touches.length >= 2) {
+      startPinchGesture(event.touches)
+      return
+    }
+
+    if (event.touches.length === 1) {
+      startPanGesture(event.touches[0])
+      return
+    }
+
+    touchGestureRef.current.mode = ''
   }
 
   const handleClose = async () => {
@@ -772,6 +942,7 @@ function PdfViewer({
       containerRef.current.scrollTop = 0
       containerRef.current.scrollLeft = 0
       containerRef.current.innerHTML = ''
+      pagesHostRef.current = null
     }
 
     await destroyCurrentPdf()
@@ -850,30 +1021,6 @@ function PdfViewer({
         <div className="pdfViewerToolbarBottom" aria-label="PDF actions">
           <button
             type="button"
-            className="pdfViewerToolButton"
-            onClick={zoomOut}
-            disabled={loading || zoomLevel <= MIN_ZOOM_LEVEL}
-            aria-label="Zoom out"
-          >
-            -
-          </button>
-
-          <span className="pdfViewerZoomValue">
-            {Math.round(zoomLevel * 100)}%
-          </span>
-
-          <button
-            type="button"
-            className="pdfViewerToolButton"
-            onClick={zoomIn}
-            disabled={loading || zoomLevel >= MAX_ZOOM_LEVEL}
-            aria-label="Zoom in"
-          >
-            +
-          </button>
-
-          <button
-            type="button"
             className="pdfViewerActionButton"
             onClick={reloadPdf}
             disabled={loading}
@@ -888,12 +1035,6 @@ function PdfViewer({
           >
             {openInBrowserText}
           </button>
-
-          {pageCount > 0 && !loading && (
-            <span className="pdfViewerReadyBadge" role="status">
-              {t.ready}
-            </span>
-          )}
         </div>
       </header>
 
@@ -912,6 +1053,10 @@ function PdfViewer({
 
       <main
         ref={containerRef}
+        onTouchStart={handleContentTouchStart}
+        onTouchMove={handleContentTouchMove}
+        onTouchEnd={handleContentTouchEnd}
+        onTouchCancel={handleContentTouchEnd}
         className={
           `pdfViewerContent ${
             loading
