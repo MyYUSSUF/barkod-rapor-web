@@ -2177,7 +2177,7 @@ function App() {
 
           <div className="welcomeBox">
             <span className="eyebrow">{t.appSubtitle}</span>
-            <h1>{displayName || t.welcome}</h1>
+            <h1>{displayName ? `${t.welcome}, ${displayName}` : t.welcome}</h1>
           </div>
 
           {userProfile?.role === 'admin' && (
