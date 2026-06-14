@@ -79,6 +79,13 @@ function PdfViewer({
   const pdfBlobRef = useRef(null)
   const activeRenderTaskRef = useRef(null)
   const adaptiveDprLimitRef = useRef(HIGH_QUALITY_DPR_LIMIT)
+  const touchDragRef = useRef({
+    active: false,
+    startX: 0,
+    startY: 0,
+    scrollLeft: 0,
+    scrollTop: 0,
+  })
 
   const [renderVersion, setRenderVersion] = useState(0)
   const [loading, setLoading] = useState(true)
@@ -742,6 +749,50 @@ function PdfViewer({
     setZoomLevel((value) => clampZoomLevel(value + ZOOM_STEP))
   }
 
+  const handleContentTouchStart = (event) => {
+    if (event.touches.length !== 1 || !containerRef.current) {
+      touchDragRef.current.active = false
+      return
+    }
+
+    const touch = event.touches[0]
+
+    touchDragRef.current = {
+      active: true,
+      startX: touch.clientX,
+      startY: touch.clientY,
+      scrollLeft: containerRef.current.scrollLeft,
+      scrollTop: containerRef.current.scrollTop,
+    }
+  }
+
+  const handleContentTouchMove = (event) => {
+    const drag = touchDragRef.current
+    const container = containerRef.current
+
+    if (!drag.active || event.touches.length !== 1 || !container) {
+      return
+    }
+
+    const touch = event.touches[0]
+    const deltaX = touch.clientX - drag.startX
+    const deltaY = touch.clientY - drag.startY
+
+    container.scrollLeft = drag.scrollLeft - deltaX
+    container.scrollTop = drag.scrollTop - deltaY
+
+    if (
+      event.cancelable &&
+      (Math.abs(deltaX) > 3 || Math.abs(deltaY) > 3)
+    ) {
+      event.preventDefault()
+    }
+  }
+
+  const handleContentTouchEnd = () => {
+    touchDragRef.current.active = false
+  }
+
   const openPdfInBrowser = () => {
     setError('')
 
@@ -858,10 +909,6 @@ function PdfViewer({
             -
           </button>
 
-          <span className="pdfViewerZoomValue">
-            {Math.round(zoomLevel * 100)}%
-          </span>
-
           <button
             type="button"
             className="pdfViewerToolButton"
@@ -912,6 +959,10 @@ function PdfViewer({
 
       <main
         ref={containerRef}
+        onTouchStart={handleContentTouchStart}
+        onTouchMove={handleContentTouchMove}
+        onTouchEnd={handleContentTouchEnd}
+        onTouchCancel={handleContentTouchEnd}
         className={
           `pdfViewerContent ${
             loading
