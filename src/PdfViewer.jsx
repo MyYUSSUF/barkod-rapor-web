@@ -10,6 +10,16 @@ const LOW_QUALITY_DPR_LIMIT = 1.25
 const LEGACY_MOBILE_DPR_LIMIT = 1
 const FIRST_PAGE_TIMEOUT_MS = 12000
 const OTHER_PAGE_TIMEOUT_MS = 15000
+const MIN_ZOOM_LEVEL = 1
+const MAX_ZOOM_LEVEL = 2
+const ZOOM_STEP = 0.25
+
+function clampZoomLevel(value) {
+  return Math.min(
+    MAX_ZOOM_LEVEL,
+    Math.max(MIN_ZOOM_LEVEL, value)
+  )
+}
 
 function isLikelyLegacyMobileDevice() {
   if (typeof navigator === 'undefined') {
@@ -76,6 +86,7 @@ function PdfViewer({
   const [error, setError] = useState('')
   const [pageCount, setPageCount] = useState(0)
   const [currentPage, setCurrentPage] = useState(1)
+  const [zoomLevel, setZoomLevel] = useState(1)
 
   const isArabic = language === 'ar'
 
@@ -291,7 +302,7 @@ function PdfViewer({
         availableWidth / originalViewport.width
 
       const viewport = page.getViewport({
-        scale: fitScale,
+        scale: fitScale * zoomLevel,
       })
 
       const pageWrapper =
@@ -327,9 +338,14 @@ function PdfViewer({
 
       const nativeDpr = window.devicePixelRatio || 1
 
+      const zoomAwareDprLimit =
+        zoomLevel > 1
+          ? Math.min(adaptiveDprLimitRef.current, LOW_QUALITY_DPR_LIMIT)
+          : adaptiveDprLimitRef.current
+
       const highQualityDpr = Math.min(
         nativeDpr,
-        adaptiveDprLimitRef.current
+        zoomAwareDprLimit
       )
 
       const timeoutMs =
@@ -436,6 +452,7 @@ function PdfViewer({
       renderCanvasWithTimeout,
       t.page,
       t.pageError,
+      zoomLevel,
     ]
   )
 
@@ -717,6 +734,14 @@ function PdfViewer({
     setRenderVersion((value) => value + 1)
   }
 
+  const zoomOut = () => {
+    setZoomLevel((value) => clampZoomLevel(value - ZOOM_STEP))
+  }
+
+  const zoomIn = () => {
+    setZoomLevel((value) => clampZoomLevel(value + ZOOM_STEP))
+  }
+
   const openPdfInBrowser = () => {
     setError('')
 
@@ -823,6 +848,30 @@ function PdfViewer({
         </div>
 
         <div className="pdfViewerToolbarBottom" aria-label="PDF actions">
+          <button
+            type="button"
+            className="pdfViewerToolButton"
+            onClick={zoomOut}
+            disabled={loading || zoomLevel <= MIN_ZOOM_LEVEL}
+            aria-label="Zoom out"
+          >
+            -
+          </button>
+
+          <span className="pdfViewerZoomValue">
+            {Math.round(zoomLevel * 100)}%
+          </span>
+
+          <button
+            type="button"
+            className="pdfViewerToolButton"
+            onClick={zoomIn}
+            disabled={loading || zoomLevel >= MAX_ZOOM_LEVEL}
+            aria-label="Zoom in"
+          >
+            +
+          </button>
+
           <button
             type="button"
             className="pdfViewerActionButton"
