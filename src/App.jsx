@@ -587,20 +587,32 @@ function App() {
     setPdfViewerData(null)
   }
 
-  const makeDisplayName = (profile, fallbackUsername) => {
+  const isUsableDisplayName = (value) => {
+    const text = String(value || '').trim()
+
+    if (text.length < 2) {
+      return false
+    }
+
+    if (text.includes('@') || /app\.local/i.test(text)) {
+      return false
+    }
+
+    if (/^[._\-\d\s]+$/.test(text)) {
+      return false
+    }
+
+    return true
+  }
+
+  const makeDisplayName = (profile) => {
     const fullName = profile?.full_name ? String(profile.full_name).trim() : ''
 
-    if (fullName) {
+    if (isUsableDisplayName(fullName)) {
       return fullName
     }
 
-    const email = profile?.email ? String(profile.email).trim() : ''
-
-    if (email.includes('@')) {
-      return email.split('@')[0]
-    }
-
-    return fallbackUsername || ''
+    return ''
   }
 
   const getReportName = (report) => {
@@ -1475,6 +1487,35 @@ function App() {
     }
   }
 
+  const getCameraConstraintProfiles = () => [
+    {
+      audio: false,
+      video: {
+        facingMode: { ideal: 'environment' },
+        width: { ideal: 1280 },
+        height: { ideal: 720 },
+      },
+    },
+    {
+      audio: false,
+      video: {
+        facingMode: { ideal: 'environment' },
+        width: { ideal: 640 },
+        height: { ideal: 480 },
+      },
+    },
+    {
+      audio: false,
+      video: {
+        facingMode: { ideal: 'environment' },
+      },
+    },
+    {
+      audio: false,
+      video: true,
+    },
+  ]
+
   const startScanner = async () => {
     if (scannerControlsRef.current || scannerOpen) {
       stopScanner()
@@ -1526,25 +1567,26 @@ function App() {
           stopScanner({ keepResultHandled: true })
         }
 
-        const constraints = {
-          audio: false,
-          video: {
-            facingMode: { ideal: 'environment' },
-            width: { ideal: 1920 },
-            height: { ideal: 1080 },
-          },
-        }
-
         let controls
 
-        try {
-          controls = await codeReader.decodeFromConstraints(
-            constraints,
-            videoRef.current,
-            handleScanResult
-          )
-        } catch (constraintError) {
-          console.log('decodeFromConstraints failed, trying device list:', constraintError)
+        for (const constraints of getCameraConstraintProfiles()) {
+          try {
+            controls = await codeReader.decodeFromConstraints(
+              constraints,
+              videoRef.current,
+              handleScanResult
+            )
+            break
+          } catch (constraintError) {
+            console.log(
+              'Camera constraint profile failed:',
+              constraintError?.name || constraintError?.message || constraintError
+            )
+          }
+        }
+
+        if (!controls) {
+          console.log('Camera constraints failed, trying device list.')
 
           const videoInputDevices = await BrowserCodeReader.listVideoInputDevices()
           let selectedDeviceId = undefined
@@ -2159,7 +2201,7 @@ function App() {
 
           <div className="welcomeBox">
             <span className="eyebrow">{t.appSubtitle}</span>
-            <h1>{t.welcome}, {displayName}</h1>
+            <h1>{displayName ? `${t.welcome}, ${displayName}` : t.welcome}</h1>
           </div>
 
           {userProfile?.role === 'admin' && (

@@ -100,6 +100,10 @@
   color: #f8fafc;
 }
 
+.pdfViewerBrowserButton {
+  background: rgba(14, 116, 144, 0.62);
+}
+
 .pdfViewerReadyBadge {
   flex: 0 0 auto;
   min-height: 44px;

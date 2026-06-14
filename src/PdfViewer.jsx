@@ -7,8 +7,36 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl
 
 const HIGH_QUALITY_DPR_LIMIT = 2
 const LOW_QUALITY_DPR_LIMIT = 1.25
+const LEGACY_MOBILE_DPR_LIMIT = 1
 const FIRST_PAGE_TIMEOUT_MS = 12000
 const OTHER_PAGE_TIMEOUT_MS = 15000
+
+function isLikelyLegacyMobileDevice() {
+  if (typeof navigator === 'undefined') {
+    return false
+  }
+
+  const userAgent = navigator.userAgent || ''
+  const isIOS = /iPad|iPhone|iPod/i.test(userAgent)
+  const iosMatch = userAgent.match(/OS (\d+)[._]/i)
+  const iosMajorVersion = iosMatch ? Number(iosMatch[1]) : 0
+  const lowMemory =
+    typeof navigator.deviceMemory === 'number' && navigator.deviceMemory <= 3
+  const lowCoreCount =
+    typeof navigator.hardwareConcurrency === 'number' &&
+    navigator.hardwareConcurrency <= 4
+
+  return (
+    (isIOS && (!iosMajorVersion || iosMajorVersion <= 15)) ||
+    (lowMemory && lowCoreCount)
+  )
+}
+
+function getInitialDprLimit() {
+  return isLikelyLegacyMobileDevice()
+    ? LEGACY_MOBILE_DPR_LIMIT
+    : HIGH_QUALITY_DPR_LIMIT
+}
 
 function sanitizeFileName(value) {
   return (
@@ -103,6 +131,18 @@ function PdfViewer({
   }
 
   const t = texts[language] || texts.tr
+  const openInBrowserText =
+    language === 'tr'
+      ? 'Tarayıcıda Aç'
+      : language === 'ar'
+        ? 'فتح في المتصفح'
+        : 'Open in Browser'
+  const openInBrowserErrorText =
+    language === 'tr'
+      ? 'PDF yeni sekmede açılamadı.'
+      : language === 'ar'
+        ? 'تعذر فتح ملف PDF في علامة تبويب جديدة.'
+        : 'The PDF could not be opened in a new tab.'
 
   const finalFileName = sanitizeFileName(
     fileName?.toLowerCase().endsWith('.pdf')
@@ -403,8 +443,7 @@ function PdfViewer({
     const currentRenderId = renderIdRef.current + 1
     renderIdRef.current = currentRenderId
 
-    adaptiveDprLimitRef.current =
-      HIGH_QUALITY_DPR_LIMIT
+    adaptiveDprLimitRef.current = getInitialDprLimit()
 
     setLoading(true)
     setError('')
@@ -678,6 +717,16 @@ function PdfViewer({
     setRenderVersion((value) => value + 1)
   }
 
+  const openPdfInBrowser = () => {
+    setError('')
+
+    const opened = window.open(pdfUrl, '_blank', 'noopener,noreferrer')
+
+    if (!opened) {
+      setError(openInBrowserErrorText)
+    }
+  }
+
   const handleClose = async () => {
     renderIdRef.current += 1
 
@@ -781,6 +830,14 @@ function PdfViewer({
             disabled={loading}
           >
             {t.reload}
+          </button>
+
+          <button
+            type="button"
+            className="pdfViewerActionButton pdfViewerBrowserButton"
+            onClick={openPdfInBrowser}
+          >
+            {openInBrowserText}
           </button>
 
           {pageCount > 0 && !loading && (
