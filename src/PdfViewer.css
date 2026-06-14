@@ -206,8 +206,7 @@
   scroll-behavior: smooth;
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
-  touch-action: none;
-  user-select: none;
+  touch-action: pan-x pan-y pinch-zoom;
   cursor: grab;
 }
 
@@ -218,13 +217,6 @@
 .pdfViewerContentHidden {
   visibility: hidden;
   pointer-events: none;
-}
-
-.pdfViewerPages {
-  width: max-content;
-  min-width: 100%;
-  margin: 0 auto;
-  transform-origin: 0 0;
 }
 
 .pdfViewerPage {
@@ -242,7 +234,7 @@
 
 .pdfViewerPage canvas {
   display: block;
-  touch-action: none;
+  touch-action: pan-x pan-y pinch-zoom;
   max-width: none;
   height: auto;
   background: #ffffff;
