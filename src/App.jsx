@@ -587,32 +587,8 @@ function App() {
     setPdfViewerData(null)
   }
 
-  const isUsableDisplayName = (value) => {
-    const text = String(value || '').trim()
-
-    if (text.length < 2) {
-      return false
-    }
-
-    if (text.includes('@') || /app\.local/i.test(text)) {
-      return false
-    }
-
-    if (/^[._\-\d\s]+$/.test(text)) {
-      return false
-    }
-
-    return true
-  }
-
   const makeDisplayName = (profile) => {
-    const fullName = profile?.full_name ? String(profile.full_name).trim() : ''
-
-    if (isUsableDisplayName(fullName)) {
-      return fullName
-    }
-
-    return ''
+    return profile?.full_name ? String(profile.full_name).trim() : ''
   }
 
   const getReportName = (report) => {
@@ -2201,7 +2177,7 @@ function App() {
 
           <div className="welcomeBox">
             <span className="eyebrow">{t.appSubtitle}</span>
-            <h1>{displayName ? `${t.welcome}, ${displayName}` : t.welcome}</h1>
+            <h1>{displayName || t.welcome}</h1>
           </div>
 
           {userProfile?.role === 'admin' && (
