@@ -1,16 +1,63 @@
-# React + Vite
+# Barkod Rapor Web
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+React + Vite ile hazirlanan barkod okutma ve rapor goruntuleme uygulamasi.
 
-Currently, two official plugins are available:
+## Kurulum
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+```bash
+npm install
+```
 
-## React Compiler
+Windows PowerShell script policy `npm` komutunu engellerse `.cmd` komutlarini kullanin:
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+```bash
+npm.cmd install
+npm.cmd run dev
+```
 
-## Expanding the ESLint configuration
+## Ortam Degiskenleri
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+Yeni bilgisayarda uygulamanin acilmasi icin proje kok dizinine `.env.local` dosyasi ekleyin.
+Ornek icin `.env.example` dosyasina bakin.
+
+Gerekli frontend degiskenleri:
+
+```env
+VITE_SUPABASE_URL=
+VITE_SUPABASE_ANON_KEY=
+VITE_VAPID_PUBLIC_KEY=
+```
+
+Backend/admin bildirimleri icin Vercel ortaminda ayrica su degiskenler gerekir:
+
+```env
+SUPABASE_SERVICE_ROLE_KEY=
+VAPID_PUBLIC_KEY=
+VAPID_PRIVATE_KEY=
+VAPID_SUBJECT=
+NOTIFICATION_ADMIN_SECRET=
+```
+
+Not: `.env.local` ve diger `.env*` dosyalari GitHub'a gonderilmez. Gizli degerleri sadece yerel dosyada veya Vercel Environment Variables alaninda tutun.
+
+## Gelistirme
+
+Frontend:
+
+```bash
+npm.cmd run dev
+```
+
+Yerel backend proxy:
+
+```bash
+node server.js
+```
+
+Frontend varsayilan olarak `http://127.0.0.1:5173`, backend ise `http://localhost:3001` uzerinde calisir.
+
+## Build
+
+```bash
+npm.cmd run build
+```
