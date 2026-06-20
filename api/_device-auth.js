@@ -1,5 +1,9 @@
 import crypto from 'crypto'
 import { createClient } from '@supabase/supabase-js'
+import {
+  hasRegisteredDevice,
+  notifyAdminsAboutPendingDevice,
+} from './_admin-device-notification.js'
 
 function isNotBlank(value) {
   return value !== null && value !== undefined && String(value).trim() !== ''
@@ -138,8 +142,17 @@ export async function requestDeviceAccess(req, deviceName = '') {
     }
   }
 
+  const deviceHash = hashDeviceToken(deviceToken)
+  let deviceWasRegistered = true
+
+  try {
+    deviceWasRegistered = await hasRegisteredDevice(authResult.userId, deviceHash)
+  } catch (deviceHistoryError) {
+    console.error('Cihaz geçmişi kontrol edilemedi:', deviceHistoryError)
+  }
+
   const { data, error } = await authResult.supabase.rpc('request_device_access', {
-    p_device_hash: hashDeviceToken(deviceToken),
+    p_device_hash: deviceHash,
     p_device_name: String(deviceName || '').slice(0, 500),
   })
 
@@ -149,6 +162,21 @@ export async function requestDeviceAccess(req, deviceName = '') {
 
   const result = normalizeDeviceResult(data)
   const status = result.status || 'pending'
+
+  if (status === 'pending' && !deviceWasRegistered) {
+    try {
+      await notifyAdminsAboutPendingDevice({
+        userId: authResult.userId,
+        userName:
+          authResult.profile.full_name ||
+          authResult.profile.email ||
+          authResult.userId,
+        deviceName,
+      })
+    } catch (notificationError) {
+      console.error('Admin cihaz bildirimi gönderilemedi:', notificationError)
+    }
+  }
 
   return {
     ...authResult,

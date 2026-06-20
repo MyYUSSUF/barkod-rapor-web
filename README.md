@@ -69,6 +69,10 @@ Normal kullanicilarin yeni cihazlari admin panelinde onaylanmadan rapor API'leri
 erisemez. Bir kullanici icin yeni cihaz onaylandiginda onceki onayli cihaz iptal
 edilir.
 
+Yeni bir cihaz ilk kez onay bekleyen duruma dustugunde, bildirim izni ve push
+aboneligi bulunan admin cihazlarina otomatik bildirim gonderilir. Ayni cihaz tekrar
+giris denediginde yeni bildirim uretilmez.
+
 Veritabani tablosu ve Supabase fonksiyonlari su migration dosyasindadir:
 
 ```text
