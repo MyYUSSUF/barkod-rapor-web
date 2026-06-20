@@ -70,6 +70,8 @@ function PdfViewer({
   fileName,
   reportName,
   reportMeta,
+  accessToken,
+  deviceToken,
   language = 'tr',
   onClose,
 }) {
@@ -169,6 +171,10 @@ function PdfViewer({
     const response = await fetch(pdfUrl, {
       method: 'GET',
       cache: 'no-store',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'X-Device-Token': deviceToken,
+      },
     })
 
     if (!response.ok) {
@@ -183,7 +189,7 @@ function PdfViewer({
 
     pdfBlobRef.current = blob
     return blob
-  }, [pdfUrl])
+  }, [accessToken, deviceToken, pdfUrl])
 
   const destroyCurrentPdf = useCallback(async () => {
     if (activeRenderTaskRef.current) {
@@ -745,11 +751,23 @@ function PdfViewer({
   const openPdfInBrowser = () => {
     setError('')
 
-    const opened = window.open(pdfUrl, '_blank', 'noopener,noreferrer')
+    const blob = pdfBlobRef.current
+
+    if (!blob) {
+      setError(t.pdfNotReady)
+      return
+    }
+
+    const objectUrl = URL.createObjectURL(blob)
+    const opened = window.open(objectUrl, '_blank', 'noopener,noreferrer')
 
     if (!opened) {
+      URL.revokeObjectURL(objectUrl)
       setError(openInBrowserErrorText)
+      return
     }
+
+    setTimeout(() => URL.revokeObjectURL(objectUrl), 60000)
   }
 
   const handleClose = async () => {

@@ -1,9 +1,6 @@
 import webPush from 'web-push'
 import { createClient } from '@supabase/supabase-js'
-
-const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL
-const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
-const NOTIFICATION_ADMIN_SECRET = process.env.NOTIFICATION_ADMIN_SECRET
+import { verifyApprovedDeviceRequest } from './_device-auth.js'
 
 function isNotBlank(value) {
   return value !== null && value !== undefined && String(value).trim() !== ''
@@ -48,26 +45,19 @@ function getVapidSubject() {
   return 'https://barkod-rapor-web.vercel.app'
 }
 
-function getBearerToken(req) {
-  const authHeader = req.headers.authorization || req.headers.Authorization || ''
-
-  if (!authHeader || !String(authHeader).startsWith('Bearer ')) {
-    return ''
-  }
-
-  return String(authHeader).replace('Bearer ', '').trim()
-}
-
 function createSupabaseAdminClient() {
-  if (!isNotBlank(SUPABASE_URL)) {
+  const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+
+  if (!isNotBlank(supabaseUrl)) {
     throw new Error('SUPABASE_URL veya VITE_SUPABASE_URL eksik.')
   }
 
-  if (!isNotBlank(SUPABASE_SERVICE_ROLE_KEY)) {
+  if (!isNotBlank(serviceRoleKey)) {
     throw new Error('SUPABASE_SERVICE_ROLE_KEY eksik.')
   }
 
-  return createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+  return createClient(supabaseUrl, serviceRoleKey, {
     auth: {
       persistSession: false,
       autoRefreshToken: false,
@@ -75,11 +65,12 @@ function createSupabaseAdminClient() {
   })
 }
 
-async function verifyAdminRequest(req, supabaseAdmin, secret) {
+async function verifyAdminRequest(req, secret) {
+  const notificationAdminSecret = process.env.NOTIFICATION_ADMIN_SECRET
   const secretIsValid =
     isNotBlank(secret) &&
-    isNotBlank(NOTIFICATION_ADMIN_SECRET) &&
-    secret === NOTIFICATION_ADMIN_SECRET
+    isNotBlank(notificationAdminSecret) &&
+    secret === notificationAdminSecret
 
   if (secretIsValid) {
     return {
@@ -89,57 +80,18 @@ async function verifyAdminRequest(req, supabaseAdmin, secret) {
     }
   }
 
-  const bearerToken = getBearerToken(req)
+  const approvedDeviceResult = await verifyApprovedDeviceRequest(req, {
+    requireAdmin: true,
+  })
 
-  if (!isNotBlank(bearerToken)) {
-    return {
-      ok: false,
-      error: 'Yetkisiz istek. Yönetici oturumu bulunamadı.',
-    }
-  }
-
-  const { data: userData, error: userError } = await supabaseAdmin.auth.getUser(bearerToken)
-
-  if (userError || !userData?.user?.id) {
-    return {
-      ok: false,
-      error: 'Yetkisiz istek. Kullanıcı doğrulanamadı.',
-    }
-  }
-
-  const userId = userData.user.id
-
-  const { data: profileData, error: profileError } = await supabaseAdmin
-    .from('profiles')
-    .select('id, role, is_active')
-    .eq('id', userId)
-    .single()
-
-  if (profileError || !profileData) {
-    return {
-      ok: false,
-      error: 'Yetkisiz istek. Profil bulunamadı.',
-    }
-  }
-
-  if (profileData.is_active === false) {
-    return {
-      ok: false,
-      error: 'Yetkisiz istek. Kullanıcı pasif.',
-    }
-  }
-
-  if (profileData.role !== 'admin') {
-    return {
-      ok: false,
-      error: 'Yetkisiz istek. Bu işlem için admin yetkisi gerekir.',
-    }
+  if (!approvedDeviceResult.ok) {
+    return approvedDeviceResult
   }
 
   return {
     ok: true,
     method: 'supabase_admin',
-    userId,
+    userId: approvedDeviceResult.userId,
   }
 }
 
@@ -179,7 +131,7 @@ export default async function handler(req, res) {
     }
 
     const supabaseAdmin = createSupabaseAdminClient()
-    const authResult = await verifyAdminRequest(req, supabaseAdmin, secret)
+    const authResult = await verifyAdminRequest(req, secret)
 
     if (!authResult.ok) {
       return res.status(401).json({

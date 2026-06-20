@@ -1,3 +1,5 @@
+import { verifyApprovedDeviceRequest } from './_device-auth.js'
+
 const BASE_URL = 'http://repx.elvandyeing.com'
 const ENDPOINT = `${BASE_URL}/RepxService/vxC_RepxWebService.asmx`
 const WSDL_URL = `${ENDPOINT}?WSDL`
@@ -234,6 +236,15 @@ export default async function handler(req, res) {
   try {
     if (req.method !== 'POST') {
       return res.status(405).json({ error: 'Sadece POST isteği desteklenir.' })
+    }
+
+    const authResult = await verifyApprovedDeviceRequest(req)
+
+    if (!authResult.ok) {
+      return res.status(authResult.statusCode || 403).json({
+        error: authResult.error || 'Yetkisiz istek.',
+        deviceStatus: authResult.deviceStatus || '',
+      })
     }
 
     const { barcode, reportCode, requiresBarcode, startDate, endDate, customerCode } = req.body || {}

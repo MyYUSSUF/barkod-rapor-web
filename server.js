@@ -2,6 +2,17 @@ import express from 'express'
 import cors from 'cors'
 import path from 'path'
 import { fileURLToPath } from 'url'
+import adminPanelHandler from './api/admin-panel.js'
+import deviceAccessHandler from './api/device-access.js'
+import reportPdfHandler from './api/report-pdf.js'
+import sendNotificationHandler from './api/send-notification.js'
+import { verifyApprovedDeviceRequest } from './api/_device-auth.js'
+
+try {
+  process.loadEnvFile?.('.env.local')
+} catch (error) {
+  console.log('.env.local yüklenemedi:', error.message)
+}
 
 const app = express()
 const PORT = process.env.PORT || 3001
@@ -17,6 +28,11 @@ let cachedTargetNs = null
 
 app.use(cors())
 app.use(express.json())
+
+app.all('/api/device-access', deviceAccessHandler)
+app.all('/api/admin-panel', adminPanelHandler)
+app.all('/api/report-pdf', reportPdfHandler)
+app.all('/api/send-notification', sendNotificationHandler)
 
 function isNotBlank(value) {
   return value !== null && value !== undefined && String(value).trim() !== ''
@@ -246,6 +262,15 @@ async function getReportPdfUrl(reportCode, options = {}) {
 
 app.post('/api/report-url', async (req, res) => {
   try {
+    const authResult = await verifyApprovedDeviceRequest(req)
+
+    if (!authResult.ok) {
+      return res.status(authResult.statusCode || 403).json({
+        error: authResult.error || 'Yetkisiz istek.',
+        deviceStatus: authResult.deviceStatus || '',
+      })
+    }
+
     const { barcode, reportCode, requiresBarcode, startDate, endDate, customerCode } = req.body
     const mustHaveBarcode = requiresBarcode !== false
     const isShipmentReport = reportCode === 'RAR00036'
