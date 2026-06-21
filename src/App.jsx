@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useRef, useState } from 'react'
 import { BrowserCodeReader, BrowserMultiFormatReader } from '@zxing/browser'
-import { supabase } from './lib/supabaseClient'
+import { isSupabaseConfigured, supabase } from './lib/supabaseClient'
 import PdfViewer from './PdfViewer'
 import './App.css'
 
@@ -1336,6 +1336,11 @@ function App() {
 
   useEffect(() => {
     const restoreSession = async () => {
+      if (!isSupabaseConfigured) {
+        setRestoringSession(false)
+        return
+      }
+
       try {
         const { data } = await supabase.auth.getSession()
         const session = data?.session
@@ -1895,6 +1900,23 @@ function App() {
 
           <h1>{t.appTitle}</h1>
           <p className="subtitle">{t.checkingSession}</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (!isSupabaseConfigured) {
+    return (
+      <div className="page" dir="ltr">
+        <div className="card">
+          <div className="topBar">
+            <img src="/elvan-logo.png" alt="Elvan Dyeing" className="appLogo" />
+          </div>
+
+          <h1>Supabase ayarlari eksik</h1>
+          <p className="subtitle">
+            Proje klasorune .env dosyasi ekleyip VITE_SUPABASE_URL ve VITE_SUPABASE_ANON_KEY degerlerini yazin.
+          </p>
         </div>
       </div>
     )
