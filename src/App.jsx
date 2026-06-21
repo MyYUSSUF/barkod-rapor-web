@@ -11,8 +11,10 @@ const API_BASE_URL =
 
 const HISTORY_KEY = 'barkod_rapor_history'
 const LANGUAGE_KEY = 'barkod_rapor_language'
+const DEVICE_TOKEN_KEY = 'barkod_rapor_device_token_v1'
 const NOTIFICATION_PERMISSION_ASKED_KEY = 'barkod_rapor_notification_permission_asked_v2'
 const REPORT_TIMEOUT_MS = 45000
+const DEVICE_ACCESS_CHECK_MS = 10000
 const APP_VERSION = 'v1.18'
 const APP_LOG_VERSION = 'web-v1.18'
 
@@ -125,6 +127,9 @@ const LANGUAGES = {
     notificationKeyMissing: 'Bildirim anahtarı eksik. Vercel ayarlarını kontrol edin.',
     notificationSaved: 'Bildirimler açıldı. Bu cihaza bildirim gelebilir.',
     notificationError: 'Bildirim açılırken hata oluştu: ',
+    devicePending: 'Bu cihaz yönetici onayı bekliyor.',
+    deviceRevoked: 'Bu cihazın erişim izni kaldırıldı.',
+    deviceAccessFailed: 'Cihaz doğrulaması yapılamadı: ',
   },
   en: {
     appTitle: 'Barcode Report Web',
@@ -199,6 +204,9 @@ const LANGUAGES = {
     notificationKeyMissing: 'Notification key is missing. Check Vercel settings.',
     notificationSaved: 'Notifications enabled. This device can receive notifications.',
     notificationError: 'Notification setup failed: ',
+    devicePending: 'This device is waiting for administrator approval.',
+    deviceRevoked: 'Access for this device has been revoked.',
+    deviceAccessFailed: 'Device verification failed: ',
   },
   ar: {
     appTitle: 'نظام تقارير الباركود',
@@ -273,7 +281,36 @@ const LANGUAGES = {
     notificationKeyMissing: 'مفتاح الإشعارات غير موجود. تحقق من إعدادات Vercel.',
     notificationSaved: 'تم تفعيل الإشعارات. يمكن لهذا الجهاز استقبال الإشعارات.',
     notificationError: 'حدث خطأ أثناء تفعيل الإشعارات: ',
+    devicePending: 'هذا الجهاز بانتظار موافقة المسؤول.',
+    deviceRevoked: 'تم إلغاء صلاحية هذا الجهاز.',
+    deviceAccessFailed: 'تعذر التحقق من الجهاز: ',
   },
+}
+
+function createDeviceToken() {
+  if (window.crypto?.getRandomValues) {
+    const bytes = new Uint8Array(32)
+    window.crypto.getRandomValues(bytes)
+
+    return btoa(String.fromCharCode(...bytes))
+      .replaceAll('+', '-')
+      .replaceAll('/', '_')
+      .replaceAll('=', '')
+  }
+
+  return `${Date.now()}-${Math.random()}-${Math.random()}-${Math.random()}`
+}
+
+function getOrCreateDeviceToken() {
+  const existingToken = localStorage.getItem(DEVICE_TOKEN_KEY)
+
+  if (existingToken && existingToken.length >= 32) {
+    return existingToken
+  }
+
+  const newToken = createDeviceToken()
+  localStorage.setItem(DEVICE_TOKEN_KEY, newToken)
+  return newToken
 }
 
 const escapeHtml = (value) => {
@@ -515,6 +552,7 @@ function App() {
   const [adminMessage, setAdminMessage] = useState('')
   const [adminData, setAdminData] = useState({
     users: [],
+    devices: [],
     loginLogs: [],
     reportLogs: [],
     subscriptionCount: 0,
@@ -537,6 +575,18 @@ function App() {
 
   const getDeviceName = () => {
     return navigator.userAgent || 'Web Browser'
+  }
+
+  const getDeviceToken = () => {
+    return getOrCreateDeviceToken()
+  }
+
+  const makeAuthorizedHeaders = (accessToken, extraHeaders = {}) => {
+    return {
+      ...extraHeaders,
+      Authorization: `Bearer ${accessToken}`,
+      'X-Device-Token': getDeviceToken(),
+    }
   }
 
   function stopScanner(options = {}) {
@@ -699,7 +749,7 @@ function App() {
   }
 
   const makePdfProxyUrl = (pdfUrl) => {
-    return `${window.location.origin}/api/report-pdf?url=${encodeURIComponent(pdfUrl)}`
+    return `${API_BASE_URL}/api/report-pdf?url=${encodeURIComponent(pdfUrl)}`
   }
 
   const sanitizePdfFileName = (value) => {
@@ -892,6 +942,42 @@ function App() {
     return sessionData?.session?.access_token || ''
   }
 
+  const checkDeviceAccess = async (accessToken, options = {}) => {
+    const { register = false } = options
+    const response = await fetch(`${API_BASE_URL}/api/device-access`, {
+      method: register ? 'POST' : 'GET',
+      headers: makeAuthorizedHeaders(accessToken, {
+        'Content-Type': 'application/json',
+      }),
+      body: register
+        ? JSON.stringify({
+            deviceName: getDeviceName(),
+          })
+        : undefined,
+    })
+
+    const result = await response.json().catch(() => ({}))
+
+    return {
+      ok: response.ok,
+      approved: result.approved === true,
+      status: result.status || '',
+      error: result.error || '',
+    }
+  }
+
+  const getDeviceAccessMessage = (result) => {
+    if (result?.status === 'pending') {
+      return t.devicePending
+    }
+
+    if (['revoked', 'missing'].includes(result?.status)) {
+      return t.deviceRevoked
+    }
+
+    return `${t.deviceAccessFailed}${result?.error || 'Unknown error'}`
+  }
+
   const loadAdminPanelData = async () => {
     setAdminLoading(true)
     setAdminMessage('')
@@ -907,9 +993,7 @@ function App() {
 
       const response = await fetch(`${API_BASE_URL}/api/admin-panel`, {
         method: 'GET',
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
+        headers: makeAuthorizedHeaders(accessToken),
       })
 
       const result = await response.json().catch(() => ({}))
@@ -920,6 +1004,7 @@ function App() {
 
       setAdminData({
         users: result.users || [],
+        devices: result.devices || [],
         loginLogs: result.loginLogs || [],
         reportLogs: result.reportLogs || [],
         subscriptionCount: result.subscriptionCount || 0,
@@ -949,10 +1034,9 @@ function App() {
 
       const response = await fetch(`${API_BASE_URL}/api/admin-panel`, {
         method: 'PATCH',
-        headers: {
+        headers: makeAuthorizedHeaders(accessToken, {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${accessToken}`,
-        },
+        }),
         body: JSON.stringify({
           userId,
           ...patch,
@@ -966,6 +1050,45 @@ function App() {
       }
 
       setAdminMessage('Kullanıcı güncellendi.')
+      await loadAdminPanelData()
+    } catch (err) {
+      setAdminMessage(err.message)
+    }
+  }
+
+  const updateAdminDevice = async (deviceId, action) => {
+    setAdminMessage('')
+
+    try {
+      const accessToken = await getAccessToken()
+
+      if (!accessToken) {
+        setAdminMessage(t.sessionMissing)
+        return
+      }
+
+      const response = await fetch(`${API_BASE_URL}/api/admin-panel`, {
+        method: 'PATCH',
+        headers: makeAuthorizedHeaders(accessToken, {
+          'Content-Type': 'application/json',
+        }),
+        body: JSON.stringify({
+          deviceId,
+          action,
+        }),
+      })
+
+      const result = await response.json().catch(() => ({}))
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Cihaz güncellenemedi.')
+      }
+
+      setAdminMessage(
+        action === 'approve_device'
+          ? 'Cihaz onaylandı. Önceki cihaz erişimi kapatıldı.'
+          : 'Cihaz erişimi iptal edildi.'
+      )
       await loadAdminPanelData()
     } catch (err) {
       setAdminMessage(err.message)
@@ -996,10 +1119,9 @@ function App() {
 
       const response = await fetch(`${API_BASE_URL}/api/send-notification`, {
         method: 'POST',
-        headers: {
+        headers: makeAuthorizedHeaders(accessToken, {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${accessToken}`,
-        },
+        }),
         body: JSON.stringify({
           title: cleanTitle,
           body: cleanBody,
@@ -1370,6 +1492,17 @@ function App() {
           return
         }
 
+        const deviceResult = await checkDeviceAccess(session.access_token, {
+          register: true,
+        })
+
+        if (!deviceResult.approved) {
+          await supabase.auth.signOut()
+          showUserMessage(getDeviceAccessMessage(deviceResult), 'warning')
+          setRestoringSession(false)
+          return
+        }
+
         setUserProfile(profileData)
         setDisplayName(makeDisplayName(profileData, ''))
         setBarcodeHistory(loadBarcodeHistory())
@@ -1405,6 +1538,22 @@ function App() {
           await supabase.auth.signOut()
           resetUserState()
           showUserMessage(t.inactiveAutoLogout, 'error')
+          return
+        }
+
+        const accessToken = await getAccessToken()
+
+        if (!accessToken) {
+          return
+        }
+
+        const deviceResult = await checkDeviceAccess(accessToken)
+
+        if (!deviceResult.approved) {
+          stopScanner()
+          await supabase.auth.signOut()
+          resetUserState()
+          showUserMessage(getDeviceAccessMessage(deviceResult), 'error')
         }
       } catch (err) {
         console.log('Aktiflik kontrol hatası:', err)
@@ -1413,7 +1562,7 @@ function App() {
 
     checkUserActiveStatus()
 
-    const intervalId = setInterval(checkUserActiveStatus, 10000)
+    const intervalId = setInterval(checkUserActiveStatus, DEVICE_ACCESS_CHECK_MS)
 
     return () => clearInterval(intervalId)
   }, [userProfile?.id, language])
@@ -1655,6 +1804,26 @@ function App() {
         return
       }
 
+      const accessToken = authData.session?.access_token
+
+      if (!accessToken) {
+        await supabase.auth.signOut()
+        showUserMessage(t.sessionMissing, 'error')
+        setLoading(false)
+        return
+      }
+
+      const deviceResult = await checkDeviceAccess(accessToken, {
+        register: true,
+      })
+
+      if (!deviceResult.approved) {
+        await supabase.auth.signOut()
+        showUserMessage(getDeviceAccessMessage(deviceResult), 'warning')
+        setLoading(false)
+        return
+      }
+
       await supabase.from('login_logs').insert({
         user_id: userId,
         event_type: 'login',
@@ -1760,8 +1929,9 @@ function App() {
     try {
       const { data: sessionData } = await supabase.auth.getSession()
       const userId = sessionData?.session?.user?.id
+      const accessToken = sessionData?.session?.access_token
 
-      if (!userId) {
+      if (!userId || !accessToken) {
         showUserMessage(t.sessionMissing, 'error')
         setUserProfile(null)
         setLoading(false)
@@ -1771,9 +1941,9 @@ function App() {
 
       const response = await fetchWithTimeout(`${API_BASE_URL}/api/report-url`, {
         method: 'POST',
-        headers: {
+        headers: makeAuthorizedHeaders(accessToken, {
           'Content-Type': 'application/json',
-        },
+        }),
         body: JSON.stringify({
           barcode: requiresBarcode ? cleanBarcode : '',
           reportCode: report.code,
@@ -1849,6 +2019,8 @@ function App() {
           `${makePdfProxyUrl(pdfUrl)}&filename=${encodeURIComponent(pdfFileName)}`,
         fileName: pdfFileName,
         reportName,
+        accessToken,
+        deviceToken: getDeviceToken(),
         reportMeta: buildPdfMeta({
           requiresDateRange,
           cleanStartDate,
@@ -1884,6 +2056,8 @@ function App() {
         fileName={pdfViewerData.fileName}
         reportName={pdfViewerData.reportName}
         reportMeta={pdfViewerData.reportMeta}
+        accessToken={pdfViewerData.accessToken}
+        deviceToken={pdfViewerData.deviceToken}
         language={language}
         onClose={() => setPdfViewerData(null)}
       />
@@ -1971,6 +2145,13 @@ function App() {
                 {adminData.reportLogs.length}
               </p>
             </div>
+
+            <div className="adminStatBox" style={statBoxStyle}>
+              <strong>Onay Bekleyen Cihaz</strong>
+              <p className="subtitle" style={{ margin: '8px 0 0' }}>
+                {adminData.devices.filter((device) => device.status === 'pending').length}
+              </p>
+            </div>
           </div>
 
           <button
@@ -2022,6 +2203,84 @@ function App() {
             {adminNotificationMessage && (
               <p className="message">{adminNotificationMessage}</p>
             )}
+          </div>
+
+          <div className="historyBox">
+            <div className="historyHeader">
+              <strong>Cihaz Onayları</strong>
+            </div>
+
+            <div style={tableWrapStyle}>
+              <table style={tableStyle}>
+                <thead>
+                  <tr>
+                    <th style={thStyle}>Kullanıcı</th>
+                    <th style={thStyle}>Cihaz</th>
+                    <th style={thStyle}>İlk İstek</th>
+                    <th style={thStyle}>Son Görülme</th>
+                    <th style={thStyle}>Durum</th>
+                    <th style={thStyle}>İşlem</th>
+                  </tr>
+                </thead>
+
+                <tbody>
+                  {adminData.devices.map((device) => (
+                    <tr key={device.id}>
+                      <td style={tdStyle}>
+                        {device.user_name || device.user_email || device.user_id || '-'}
+                      </td>
+                      <td style={tdStyle}>{device.device_name || '-'}</td>
+                      <td style={tdStyle}>{formatDateTime(device.created_at)}</td>
+                      <td style={tdStyle}>{formatDateTime(device.last_seen_at)}</td>
+                      <td style={tdStyle}>
+                        {device.status === 'approved'
+                          ? 'Onaylı'
+                          : device.status === 'pending'
+                            ? 'Onay Bekliyor'
+                            : 'İptal'}
+                      </td>
+                      <td style={tdStyle}>
+                        {device.status !== 'approved' && (
+                          <button
+                            type="button"
+                            className="adminSmallButton"
+                            style={{
+                              ...smallButtonStyle,
+                              background: '#0f766e',
+                            }}
+                            onClick={() => updateAdminDevice(device.id, 'approve_device')}
+                          >
+                            Onayla
+                          </button>
+                        )}
+
+                        {device.status !== 'revoked' && (
+                          <button
+                            type="button"
+                            className="adminSmallButton"
+                            style={{
+                              ...smallButtonStyle,
+                              background: '#b91c1c',
+                            }}
+                            onClick={() => updateAdminDevice(device.id, 'revoke_device')}
+                          >
+                            İptal Et
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+
+                  {adminData.devices.length === 0 && (
+                    <tr>
+                      <td style={tdStyle} colSpan={6}>
+                        Kayıtlı cihaz bulunamadı.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
 
           <div className="historyBox">

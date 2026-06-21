@@ -1,92 +1,28 @@
 import { createClient } from '@supabase/supabase-js'
-
-const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL
-const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
+import { verifyApprovedDeviceRequest } from './_device-auth.js'
 
 function isNotBlank(value) {
   return value !== null && value !== undefined && String(value).trim() !== ''
 }
 
-function getBearerToken(req) {
-  const authHeader = req.headers.authorization || req.headers.Authorization || ''
-
-  if (!authHeader || !String(authHeader).startsWith('Bearer ')) {
-    return ''
-  }
-
-  return String(authHeader).replace('Bearer ', '').trim()
-}
-
 function createSupabaseAdminClient() {
-  if (!isNotBlank(SUPABASE_URL)) {
+  const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+
+  if (!isNotBlank(supabaseUrl)) {
     throw new Error('SUPABASE_URL veya VITE_SUPABASE_URL eksik.')
   }
 
-  if (!isNotBlank(SUPABASE_SERVICE_ROLE_KEY)) {
+  if (!isNotBlank(serviceRoleKey)) {
     throw new Error('SUPABASE_SERVICE_ROLE_KEY eksik.')
   }
 
-  return createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+  return createClient(supabaseUrl, serviceRoleKey, {
     auth: {
       persistSession: false,
       autoRefreshToken: false,
     },
   })
-}
-
-async function verifyAdminRequest(req, supabaseAdmin) {
-  const bearerToken = getBearerToken(req)
-
-  if (!isNotBlank(bearerToken)) {
-    return {
-      ok: false,
-      error: 'Yetkisiz istek. Yönetici oturumu bulunamadı.',
-    }
-  }
-
-  const { data: userData, error: userError } = await supabaseAdmin.auth.getUser(bearerToken)
-
-  if (userError || !userData?.user?.id) {
-    return {
-      ok: false,
-      error: 'Yetkisiz istek. Kullanıcı doğrulanamadı.',
-    }
-  }
-
-  const userId = userData.user.id
-
-  const { data: profileData, error: profileError } = await supabaseAdmin
-    .from('profiles')
-    .select('id, email, full_name, role, is_active')
-    .eq('id', userId)
-    .single()
-
-  if (profileError || !profileData) {
-    return {
-      ok: false,
-      error: 'Yetkisiz istek. Profil bulunamadı.',
-    }
-  }
-
-  if (profileData.is_active === false) {
-    return {
-      ok: false,
-      error: 'Yetkisiz istek. Kullanıcı pasif.',
-    }
-  }
-
-  if (profileData.role !== 'admin') {
-    return {
-      ok: false,
-      error: 'Yetkisiz istek. Bu işlem için admin yetkisi gerekir.',
-    }
-  }
-
-  return {
-    ok: true,
-    userId,
-    profile: profileData,
-  }
 }
 
 function parseBody(req) {
@@ -164,8 +100,18 @@ async function getAdminData(supabaseAdmin) {
     throw new Error(subscriptionError.message)
   }
 
+  const { data: devices, error: devicesError } = await supabaseAdmin
+    .from('user_devices')
+    .select('id, user_id, device_name, status, created_at, last_seen_at, approved_at')
+    .order('created_at', { ascending: false })
+
+  if (devicesError) {
+    throw new Error(devicesError.message)
+  }
+
   return {
     users: profiles || [],
+    devices: enrichLogs(devices || [], profileMap),
     loginLogs: enrichLogs(loginLogs || [], profileMap),
     reportLogs: enrichLogs(reportLogs || [], profileMap),
     subscriptionCount: subscriptionCount || 0,
@@ -215,6 +161,77 @@ async function updateUser(req, supabaseAdmin, authResult) {
   return data
 }
 
+async function updateDevice(req, supabaseAdmin, authResult) {
+  const body = parseBody(req)
+  const deviceId = body.deviceId
+  const action = body.action
+
+  if (!isNotBlank(deviceId)) {
+    throw new Error('Cihaz ID eksik.')
+  }
+
+  if (!['approve_device', 'revoke_device'].includes(action)) {
+    throw new Error('Geçersiz cihaz işlemi.')
+  }
+
+  const { data: targetDevice, error: targetError } = await supabaseAdmin
+    .from('user_devices')
+    .select('id, user_id, status')
+    .eq('id', deviceId)
+    .single()
+
+  if (targetError || !targetDevice) {
+    throw new Error(targetError?.message || 'Cihaz bulunamadı.')
+  }
+
+  if (action === 'approve_device') {
+    const { error: revokeError } = await supabaseAdmin
+      .from('user_devices')
+      .update({ status: 'revoked' })
+      .eq('user_id', targetDevice.user_id)
+      .eq('status', 'approved')
+      .neq('id', targetDevice.id)
+
+    if (revokeError) {
+      throw new Error(revokeError.message)
+    }
+
+    const { data, error } = await supabaseAdmin
+      .from('user_devices')
+      .update({
+        status: 'approved',
+        approved_at: new Date().toISOString(),
+        approved_by: authResult.userId,
+      })
+      .eq('id', targetDevice.id)
+      .select('id, user_id, device_name, status, created_at, last_seen_at, approved_at')
+      .single()
+
+    if (error) {
+      throw new Error(error.message)
+    }
+
+    return data
+  }
+
+  const { data, error } = await supabaseAdmin
+    .from('user_devices')
+    .update({
+      status: 'revoked',
+      approved_at: null,
+      approved_by: null,
+    })
+    .eq('id', targetDevice.id)
+    .select('id, user_id, device_name, status, created_at, last_seen_at, approved_at')
+    .single()
+
+  if (error) {
+    throw new Error(error.message)
+  }
+
+  return data
+}
+
 export default async function handler(req, res) {
   try {
     if (!['GET', 'PATCH'].includes(req.method)) {
@@ -224,15 +241,28 @@ export default async function handler(req, res) {
     }
 
     const supabaseAdmin = createSupabaseAdminClient()
-    const authResult = await verifyAdminRequest(req, supabaseAdmin)
+    const authResult = await verifyApprovedDeviceRequest(req, {
+      requireAdmin: true,
+    })
 
     if (!authResult.ok) {
-      return res.status(401).json({
+      return res.status(authResult.statusCode || 401).json({
         error: authResult.error || 'Yetkisiz istek.',
       })
     }
 
     if (req.method === 'PATCH') {
+      const body = parseBody(req)
+
+      if (['approve_device', 'revoke_device'].includes(body.action)) {
+        const updatedDevice = await updateDevice(req, supabaseAdmin, authResult)
+
+        return res.status(200).json({
+          success: true,
+          device: updatedDevice,
+        })
+      }
+
       const updatedUser = await updateUser(req, supabaseAdmin, authResult)
 
       return res.status(200).json({

@@ -1,3 +1,5 @@
+import { verifyApprovedDeviceRequest } from './_device-auth.js'
+
 const BASE_URL = 'http://repx.elvandyeing.com'
 
 function isAllowedReportUrl(url) {
@@ -59,6 +61,14 @@ export default async function handler(req, res) {
   try {
     if (req.method !== 'GET') {
       return res.status(405).send('Sadece GET isteği desteklenir.')
+    }
+
+    const authResult = await verifyApprovedDeviceRequest(req)
+
+    if (!authResult.ok) {
+      return res
+        .status(authResult.statusCode || 403)
+        .send(authResult.error || 'Yetkisiz istek.')
     }
 
     const rawUrl = Array.isArray(req.query.url) ? req.query.url[0] : req.query.url
