@@ -3,6 +3,10 @@ import { verifyApprovedDeviceRequest } from './_device-auth.js'
 const BASE_URL = 'http://repx.elvandyeing.com'
 const ENDPOINT = `${BASE_URL}/RepxService/vxC_RepxWebService.asmx`
 const WSDL_URL = `${ENDPOINT}?WSDL`
+const REPORT_PERMISSION_FIELDS = {
+  RAR00035: 'can_view_fixing_report',
+  RAR00036: 'can_view_shipment_report',
+}
 
 let cachedTargetNs = null
 
@@ -250,9 +254,20 @@ export default async function handler(req, res) {
     const { barcode, reportCode, requiresBarcode, startDate, endDate, customerCode } = req.body || {}
     const mustHaveBarcode = requiresBarcode !== false
     const isShipmentReport = reportCode === 'RAR00036'
+    const permissionField = REPORT_PERMISSION_FIELDS[reportCode]
 
     if (!isNotBlank(reportCode)) {
       return res.status(400).json({ error: 'Rapor kodu zorunludur.' })
+    }
+
+    if (
+      permissionField &&
+      authResult.profile.role !== 'admin' &&
+      authResult.profile[permissionField] !== true
+    ) {
+      return res.status(403).json({
+        error: 'Bu rapor için kullanıcı yetkiniz bulunmuyor.',
+      })
     }
 
     if (mustHaveBarcode && !isNotBlank(barcode)) {

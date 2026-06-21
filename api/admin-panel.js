@@ -93,7 +93,9 @@ function enrichProfiles(profiles, devices) {
 async function getAdminData(supabaseAdmin) {
   const { data: profiles, error: profilesError } = await supabaseAdmin
     .from('profiles')
-    .select('id, email, full_name, role, is_active')
+    .select(
+      'id, email, full_name, role, is_active, can_view_fixing_report, can_view_shipment_report'
+    )
     .order('email', { ascending: true })
 
   if (profilesError) {
@@ -180,6 +182,14 @@ async function updateUser(req, supabaseAdmin, authResult) {
     updatePayload.role = body.role
   }
 
+  if (typeof body.can_view_fixing_report === 'boolean') {
+    updatePayload.can_view_fixing_report = body.can_view_fixing_report
+  }
+
+  if (typeof body.can_view_shipment_report === 'boolean') {
+    updatePayload.can_view_shipment_report = body.can_view_shipment_report
+  }
+
   if (Object.keys(updatePayload).length === 0) {
     throw new Error('Güncellenecek alan yok.')
   }
@@ -188,7 +198,9 @@ async function updateUser(req, supabaseAdmin, authResult) {
     .from('profiles')
     .update(updatePayload)
     .eq('id', userId)
-    .select('id, email, full_name, role, is_active')
+    .select(
+      'id, email, full_name, role, is_active, can_view_fixing_report, can_view_shipment_report'
+    )
     .single()
 
   if (error) {

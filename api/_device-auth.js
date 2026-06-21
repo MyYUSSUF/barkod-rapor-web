@@ -97,7 +97,9 @@ async function verifyUserRequest(req) {
   const userId = userData.user.id
   const { data: profile, error: profileError } = await supabase
     .from('profiles')
-    .select('id, email, full_name, role, is_active')
+    .select(
+      'id, email, full_name, role, is_active, can_view_fixing_report, can_view_shipment_report'
+    )
     .eq('id', userId)
     .single()
 

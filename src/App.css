@@ -1123,6 +1123,25 @@ form button {
   line-height: 1.35;
 }
 
+.adminPermissionToggle {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 30px;
+  white-space: nowrap;
+}
+
+.adminPermissionToggle input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: #0f766e;
+}
+
+.adminPermissionToggle input:disabled {
+  opacity: 0.65;
+}
+
 .historyHeader {
   display: flex;
   justify-content: space-between;

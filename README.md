@@ -92,3 +92,6 @@ user_profiles_readable
 user_devices_readable
 push_subscriptions_readable
 ```
+
+Fikse Bekleyenler ve Sevkiyat Takip raporlari kullanici bazli izinle acilir.
+Admin panelindeki kullanici tablosundan her iki rapor icin ayri izin verilebilir.

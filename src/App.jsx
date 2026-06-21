@@ -42,6 +42,7 @@ const REPORTS = [
     key: 'fixingWaiting',
     icon: 'fixing',
     requiresBarcode: false,
+    permissionKey: 'can_view_fixing_report',
   },
   {
     code: 'RAR00036',
@@ -50,6 +51,7 @@ const REPORTS = [
     requiresBarcode: false,
     requiresDateRange: true,
     customerCode: '61002',
+    permissionKey: 'can_view_shipment_report',
   },
 ]
 
@@ -102,6 +104,7 @@ const LANGUAGES = {
     reportUrlFailed: 'Rapor linki alınamadı: ',
     pdfUrlEmpty: 'PDF linki boş geldi.',
     reportLogFailed: 'Rapor log kaydı başarısız: ',
+    reportPermissionDenied: 'Bu raporu görüntüleme yetkiniz bulunmuyor.',
     reportOpened: 'açıldı ve log kaydedildi.',
     unexpectedError: 'Beklenmeyen hata: ',
     inspection: 'Inspection Raporu',
@@ -179,6 +182,7 @@ const LANGUAGES = {
     reportUrlFailed: 'Report link could not be received: ',
     pdfUrlEmpty: 'PDF link is empty.',
     reportLogFailed: 'Report log failed: ',
+    reportPermissionDenied: 'You do not have permission to view this report.',
     reportOpened: 'opened and log saved.',
     unexpectedError: 'Unexpected error: ',
     inspection: 'Inspection Report',
@@ -256,6 +260,7 @@ const LANGUAGES = {
     reportUrlFailed: 'تعذر الحصول على رابط التقرير: ',
     pdfUrlEmpty: 'رابط PDF فارغ.',
     reportLogFailed: 'فشل تسجيل التقرير: ',
+    reportPermissionDenied: 'ليس لديك صلاحية لعرض هذا التقرير.',
     reportOpened: 'تم فتحه وحفظ السجل.',
     unexpectedError: 'خطأ غير متوقع: ',
     inspection: 'تقرير الفحص',
@@ -1474,7 +1479,9 @@ function App() {
 
         const { data: profileData, error: profileError } = await supabase
           .from('profiles')
-          .select('id, email, full_name, role, is_active')
+          .select(
+            'id, email, full_name, role, is_active, can_view_fixing_report, can_view_shipment_report'
+          )
           .eq('id', session.user.id)
           .single()
 
@@ -1786,7 +1793,9 @@ function App() {
 
       const { data: profileData, error: profileError } = await supabase
         .from('profiles')
-        .select('id, email, full_name, role, is_active')
+        .select(
+          'id, email, full_name, role, is_active, can_view_fixing_report, can_view_shipment_report'
+        )
         .eq('id', userId)
         .single()
 
@@ -1886,6 +1895,15 @@ function App() {
     const requiresDateRange = report.requiresDateRange === true
     const cleanStartDate = startDate.trim()
     const cleanEndDate = endDate.trim()
+
+    if (
+      report.permissionKey &&
+      userProfile?.role !== 'admin' &&
+      userProfile?.[report.permissionKey] !== true
+    ) {
+      showUserMessage(t.reportPermissionDenied, 'warning')
+      return
+    }
 
     if (requiresBarcode && !cleanBarcode) {
       showUserMessage(t.barcodeRequired, 'warning')
@@ -2046,6 +2064,14 @@ function App() {
   const activeReport = selectedReportCode
     ? REPORTS.find((report) => report.code === selectedReportCode)
     : null
+
+  const visibleReports = REPORTS.filter((report) => {
+    return (
+      !report.permissionKey ||
+      userProfile?.role === 'admin' ||
+      userProfile?.[report.permissionKey] === true
+    )
+  })
 
   const dateRangeDayCount = getDateRangeDayCount(startDate, endDate)
 
@@ -2302,6 +2328,7 @@ function App() {
                     <th style={thStyle}>Durum</th>
                     <th style={thStyle}>Cihazlar</th>
                     <th style={thStyle}>Son Cihaz</th>
+                    <th style={thStyle}>Rapor Yetkileri</th>
                     <th style={thStyle}>İşlem</th>
                   </tr>
                 </thead>
@@ -2322,6 +2349,41 @@ function App() {
                         )}
                       </td>
                       <td style={tdStyle}>{formatDateTime(user.last_device_seen_at)}</td>
+                      <td style={tdStyle}>
+                        <label className="adminPermissionToggle">
+                          <input
+                            type="checkbox"
+                            checked={
+                              user.role === 'admin' ||
+                              user.can_view_fixing_report === true
+                            }
+                            disabled={user.role === 'admin'}
+                            onChange={(e) =>
+                              updateAdminUser(user.id, {
+                                can_view_fixing_report: e.target.checked,
+                              })
+                            }
+                          />
+                          <span>Fikse</span>
+                        </label>
+
+                        <label className="adminPermissionToggle">
+                          <input
+                            type="checkbox"
+                            checked={
+                              user.role === 'admin' ||
+                              user.can_view_shipment_report === true
+                            }
+                            disabled={user.role === 'admin'}
+                            onChange={(e) =>
+                              updateAdminUser(user.id, {
+                                can_view_shipment_report: e.target.checked,
+                              })
+                            }
+                          />
+                          <span>Sevkiyat</span>
+                        </label>
+                      </td>
                       <td style={tdStyle}>
                         <button
                           type="button"
@@ -2352,7 +2414,7 @@ function App() {
 
                   {adminData.users.length === 0 && (
                     <tr>
-                      <td style={tdStyle} colSpan={7}>
+                      <td style={tdStyle} colSpan={8}>
                         Kullanıcı bulunamadı.
                       </td>
                     </tr>
@@ -2590,7 +2652,7 @@ function App() {
           )}
 
           <div className="reportButtons">
-            {REPORTS.map((report, index) => (
+            {visibleReports.map((report, index) => (
               <Fragment key={report.code}>
                 <button
                   type="button"
