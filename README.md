@@ -90,4 +90,5 @@ icin son migration iki salt okunur gorunum olusturur:
 ```text
 user_profiles_readable
 user_devices_readable
+push_subscriptions_readable
 ```
