@@ -753,8 +753,14 @@ function App() {
     }, 80)
   }
 
-  const makePdfProxyUrl = (pdfUrl) => {
-    return `${API_BASE_URL}/api/report-pdf?url=${encodeURIComponent(pdfUrl)}`
+  const makePdfProxyUrl = (pdfUrl, reportCode, reportToken) => {
+    const params = new URLSearchParams({
+      url: pdfUrl,
+      reportCode,
+      reportToken,
+    })
+
+    return `${API_BASE_URL}/api/report-pdf?${params.toString()}`
   }
 
   const sanitizePdfFileName = (value) => {
@@ -1269,13 +1275,20 @@ function App() {
     reportWindow.document.close()
   }
 
-  const writeShareWindow = (reportWindow, reportName, pdfUrl, barcodeValue) => {
+  const writeShareWindow = (
+    reportWindow,
+    reportName,
+    pdfUrl,
+    barcodeValue,
+    reportCode,
+    reportToken
+  ) => {
     const safeReportName = sanitizePdfFileName(reportName)
     const safeBarcode = sanitizePdfFileName(barcodeValue || 'Barkodsuz')
     const pdfFileName = `${safeReportName}_${safeBarcode}.pdf`
 
     const pdfFileUrl =
-      `${makePdfProxyUrl(pdfUrl)}&filename=${encodeURIComponent(pdfFileName)}`
+      `${makePdfProxyUrl(pdfUrl, reportCode, reportToken)}&filename=${encodeURIComponent(pdfFileName)}`
 
     if (!reportWindow) {
       window.location.href = pdfFileUrl
@@ -1996,8 +2009,9 @@ function App() {
       }
 
       const pdfUrl = result.pdfUrl
+      const reportToken = result.reportToken
 
-      if (!pdfUrl) {
+      if (!pdfUrl || !reportToken) {
         showUserMessage(
           t.pdfUrlEmpty,
           'error'
@@ -2034,7 +2048,7 @@ function App() {
 
       setPdfViewerData({
         pdfUrl:
-          `${makePdfProxyUrl(pdfUrl)}&filename=${encodeURIComponent(pdfFileName)}`,
+          `${makePdfProxyUrl(pdfUrl, report.code, reportToken)}&filename=${encodeURIComponent(pdfFileName)}`,
         fileName: pdfFileName,
         reportName,
         accessToken,

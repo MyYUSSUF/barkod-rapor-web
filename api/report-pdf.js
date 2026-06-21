@@ -1,4 +1,8 @@
 import { verifyApprovedDeviceRequest } from './_device-auth.js'
+import {
+  canProfileViewReport,
+  verifyReportAccessToken,
+} from './_report-access.js'
 
 const BASE_URL = 'http://repx.elvandyeing.com'
 
@@ -75,9 +79,15 @@ export default async function handler(req, res) {
     const rawFileName = Array.isArray(req.query.filename)
       ? req.query.filename[0]
       : req.query.filename
+    const reportCode = Array.isArray(req.query.reportCode)
+      ? req.query.reportCode[0]
+      : req.query.reportCode
+    const reportToken = Array.isArray(req.query.reportToken)
+      ? req.query.reportToken[0]
+      : req.query.reportToken
 
-    if (!rawUrl) {
-      return res.status(400).send('PDF URL eksik.')
+    if (!rawUrl || !reportCode || !reportToken) {
+      return res.status(400).send('PDF erişim bilgileri eksik.')
     }
 
     let pdfUrl = String(rawUrl).trim()
@@ -93,6 +103,17 @@ export default async function handler(req, res) {
     }
 
     pdfUrl = convertInternalUrlToPublicIfNeeded(pdfUrl)
+
+    if (
+      !canProfileViewReport(authResult.profile, reportCode) ||
+      !verifyReportAccessToken(reportToken, {
+        userId: authResult.userId,
+        reportCode,
+        pdfUrl,
+      })
+    ) {
+      return res.status(403).send('Bu PDF için erişim yetkiniz bulunmuyor.')
+    }
 
     let fileName = sanitizeFileName(rawFileName || 'report.pdf')
 
