@@ -78,6 +78,48 @@ export async function hasRegisteredDevice(userId, deviceHash) {
   return Boolean(data?.id)
 }
 
+export async function approveFirstPendingDevice(userId, deviceHash) {
+  const supabaseAdmin = createAdminClient()
+
+  if (!supabaseAdmin) {
+    return false
+  }
+
+  const { data: devices, error: devicesError } = await supabaseAdmin
+    .from('user_devices')
+    .select('id, device_hash, status')
+    .eq('user_id', userId)
+
+  if (devicesError) {
+    throw new Error(`Kullanıcı cihazları kontrol edilemedi: ${devicesError.message}`)
+  }
+
+  if (
+    devices?.length !== 1 ||
+    devices[0].device_hash !== deviceHash ||
+    devices[0].status !== 'pending'
+  ) {
+    return false
+  }
+
+  const { data: approvedDevice, error: approveError } = await supabaseAdmin
+    .from('user_devices')
+    .update({
+      status: 'approved',
+      approved_at: new Date().toISOString(),
+    })
+    .eq('id', devices[0].id)
+    .eq('status', 'pending')
+    .select('id')
+    .maybeSingle()
+
+  if (approveError) {
+    throw new Error(`İlk cihaz otomatik onaylanamadı: ${approveError.message}`)
+  }
+
+  return Boolean(approvedDevice?.id)
+}
+
 export async function notifyAdminsAboutDeviceAccess({
   userId,
   userName,

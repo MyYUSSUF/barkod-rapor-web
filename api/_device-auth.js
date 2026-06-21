@@ -1,6 +1,7 @@
 import crypto from 'crypto'
 import { createClient } from '@supabase/supabase-js'
 import {
+  approveFirstPendingDevice,
   hasRegisteredDevice,
   notifyAdminsAboutDeviceAccess,
 } from './_admin-device-notification.js'
@@ -161,7 +162,22 @@ export async function requestDeviceAccess(req, deviceName = '') {
   }
 
   const result = normalizeDeviceResult(data)
-  const status = result.status || 'pending'
+  let status = result.status || 'pending'
+
+  if (status === 'pending') {
+    try {
+      const firstDeviceApproved = await approveFirstPendingDevice(
+        authResult.userId,
+        deviceHash
+      )
+
+      if (firstDeviceApproved) {
+        status = 'approved'
+      }
+    } catch (approvalError) {
+      console.error('İlk cihaz otomatik onaylanamadı:', approvalError)
+    }
+  }
 
   if (['approved', 'pending'].includes(status) && !deviceWasRegistered) {
     try {
