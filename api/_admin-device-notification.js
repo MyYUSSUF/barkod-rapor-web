@@ -78,10 +78,11 @@ export async function hasRegisteredDevice(userId, deviceHash) {
   return Boolean(data?.id)
 }
 
-export async function notifyAdminsAboutPendingDevice({
+export async function notifyAdminsAboutDeviceAccess({
   userId,
   userName,
   deviceName,
+  status,
 }) {
   const supabaseAdmin = createAdminClient()
 
@@ -122,8 +123,11 @@ export async function notifyAdminsAboutPendingDevice({
 
   const safeUserName = String(userName || userId || 'Bilinmeyen kullanıcı').slice(0, 120)
   const safeDeviceName = String(deviceName || 'Yeni cihaz').slice(0, 180)
+  const automaticallyApproved = status === 'approved'
   const payload = JSON.stringify({
-    title: 'Yeni cihaz onayı bekliyor',
+    title: automaticallyApproved
+      ? 'İlk cihaz otomatik onaylandı'
+      : 'Yeni cihaz onayı bekliyor',
     body: `${safeUserName}: ${safeDeviceName}`,
     url: '/',
   })

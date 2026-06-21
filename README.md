@@ -65,19 +65,20 @@ npm.cmd run build
 ## Cihaz Onayi
 
 Uygulama her tarayici icin guclu ve rastgele bir cihaz anahtari olusturur.
-Normal kullanicilarin yeni cihazlari admin panelinde onaylanmadan rapor API'lerine
-erisemez. Bir kullanici icin yeni cihaz onaylandiginda onceki onayli cihaz iptal
-edilir.
+Her kullanicinin ilk cihazi otomatik onaylanir. Ayni hesabin ikinci ve sonraki
+cihazlari admin panelinde onaylanmadan rapor API'lerine erisemez. Bir kullanici
+icin yeni cihaz onaylandiginda onceki onayli cihaz iptal edilir.
 
-Yeni bir cihaz ilk kez onay bekleyen duruma dustugunde, bildirim izni ve push
-aboneligi bulunan admin cihazlarina otomatik bildirim gonderilir. Ayni cihaz tekrar
-giris denediginde yeni bildirim uretilmez.
+Ilk cihaz otomatik onaylandiginda veya sonraki bir cihaz onay bekleyen duruma
+dustugunde, bildirim izni ve push aboneligi bulunan admin cihazlarina otomatik
+bildirim gonderilir. Ayni cihaz tekrar giris denediginde yeni bildirim uretilmez.
 
 Veritabani tablosu ve Supabase fonksiyonlari su migration dosyasindadir:
 
 ```text
 supabase/migrations/20260620_approved_devices.sql
+supabase/migrations/20260621_first_device_auto_approval.sql
 ```
 
-Bu SQL Supabase SQL Editor uzerinden bir kez calistirilmalidir. Migration
-uygulanmadan cihaz onayi ozelligi calismaz.
+Bu SQL dosyalari tarih sirasiyla Supabase SQL Editor uzerinden bir kez
+calistirilmalidir. Migration uygulanmadan cihaz onayi ozelligi calismaz.

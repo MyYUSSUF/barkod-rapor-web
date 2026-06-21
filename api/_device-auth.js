@@ -2,7 +2,7 @@ import crypto from 'crypto'
 import { createClient } from '@supabase/supabase-js'
 import {
   hasRegisteredDevice,
-  notifyAdminsAboutPendingDevice,
+  notifyAdminsAboutDeviceAccess,
 } from './_admin-device-notification.js'
 
 function isNotBlank(value) {
@@ -163,15 +163,16 @@ export async function requestDeviceAccess(req, deviceName = '') {
   const result = normalizeDeviceResult(data)
   const status = result.status || 'pending'
 
-  if (status === 'pending' && !deviceWasRegistered) {
+  if (['approved', 'pending'].includes(status) && !deviceWasRegistered) {
     try {
-      await notifyAdminsAboutPendingDevice({
+      await notifyAdminsAboutDeviceAccess({
         userId: authResult.userId,
         userName:
           authResult.profile.full_name ||
           authResult.profile.email ||
           authResult.userId,
         deviceName,
+        status,
       })
     } catch (notificationError) {
       console.error('Admin cihaz bildirimi gönderilemedi:', notificationError)
