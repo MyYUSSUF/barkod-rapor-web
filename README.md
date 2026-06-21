@@ -78,7 +78,16 @@ Veritabani tablosu ve Supabase fonksiyonlari su migration dosyasindadir:
 ```text
 supabase/migrations/20260620_approved_devices.sql
 supabase/migrations/20260621_first_device_auto_approval.sql
+supabase/migrations/20260621_readable_user_device_views.sql
 ```
 
 Bu SQL dosyalari tarih sirasiyla Supabase SQL Editor uzerinden bir kez
 calistirilmalidir. Migration uygulanmadan cihaz onayi ozelligi calismaz.
+
+Supabase Table Editor icinde kullanici ve cihaz kayitlarini daha okunur gormek
+icin son migration iki salt okunur gorunum olusturur:
+
+```text
+user_profiles_readable
+user_devices_readable
+```

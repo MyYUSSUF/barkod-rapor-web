@@ -2227,7 +2227,11 @@ function App() {
                   {adminData.devices.map((device) => (
                     <tr key={device.id}>
                       <td style={tdStyle}>
-                        {device.user_name || device.user_email || device.user_id || '-'}
+                        <div>{device.user_name || device.user_email || device.user_id || '-'}</div>
+                        {device.user_email &&
+                          device.user_email !== device.user_name && (
+                            <small className="adminCellDetail">{device.user_email}</small>
+                          )}
                       </td>
                       <td style={tdStyle}>{device.device_name || '-'}</td>
                       <td style={tdStyle}>{formatDateTime(device.created_at)}</td>
@@ -2296,6 +2300,8 @@ function App() {
                     <th style={thStyle}>Ad Soyad</th>
                     <th style={thStyle}>Rol</th>
                     <th style={thStyle}>Durum</th>
+                    <th style={thStyle}>Cihazlar</th>
+                    <th style={thStyle}>Son Cihaz</th>
                     <th style={thStyle}>İşlem</th>
                   </tr>
                 </thead>
@@ -2307,6 +2313,15 @@ function App() {
                       <td style={tdStyle}>{user.full_name || '-'}</td>
                       <td style={tdStyle}>{user.role || 'user'}</td>
                       <td style={tdStyle}>{user.is_active === false ? 'Pasif' : 'Aktif'}</td>
+                      <td style={tdStyle}>
+                        <div>{user.approved_device_count || 0} onaylı</div>
+                        {(user.pending_device_count || 0) > 0 && (
+                          <small className="adminCellDetail">
+                            {user.pending_device_count} bekliyor
+                          </small>
+                        )}
+                      </td>
+                      <td style={tdStyle}>{formatDateTime(user.last_device_seen_at)}</td>
                       <td style={tdStyle}>
                         <button
                           type="button"
@@ -2337,7 +2352,7 @@ function App() {
 
                   {adminData.users.length === 0 && (
                     <tr>
-                      <td style={tdStyle} colSpan={5}>
+                      <td style={tdStyle} colSpan={7}>
                         Kullanıcı bulunamadı.
                       </td>
                     </tr>

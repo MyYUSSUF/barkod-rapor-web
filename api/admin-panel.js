@@ -53,6 +53,43 @@ function enrichLogs(logs, profileMap) {
   })
 }
 
+function enrichProfiles(profiles, devices) {
+  const deviceSummaryMap = new Map()
+
+  for (const device of devices || []) {
+    const summary = deviceSummaryMap.get(device.user_id) || {
+      approved_device_count: 0,
+      pending_device_count: 0,
+      revoked_device_count: 0,
+      last_device_seen_at: null,
+    }
+
+    if (device.status === 'approved') summary.approved_device_count += 1
+    if (device.status === 'pending') summary.pending_device_count += 1
+    if (device.status === 'revoked') summary.revoked_device_count += 1
+
+    if (
+      device.last_seen_at &&
+      (!summary.last_device_seen_at ||
+        new Date(device.last_seen_at) > new Date(summary.last_device_seen_at))
+    ) {
+      summary.last_device_seen_at = device.last_seen_at
+    }
+
+    deviceSummaryMap.set(device.user_id, summary)
+  }
+
+  return (profiles || []).map((profile) => ({
+    ...profile,
+    ...(deviceSummaryMap.get(profile.id) || {
+      approved_device_count: 0,
+      pending_device_count: 0,
+      revoked_device_count: 0,
+      last_device_seen_at: null,
+    }),
+  }))
+}
+
 async function getAdminData(supabaseAdmin) {
   const { data: profiles, error: profilesError } = await supabaseAdmin
     .from('profiles')
@@ -110,7 +147,7 @@ async function getAdminData(supabaseAdmin) {
   }
 
   return {
-    users: profiles || [],
+    users: enrichProfiles(profiles || [], devices || []),
     devices: enrichLogs(devices || [], profileMap),
     loginLogs: enrichLogs(loginLogs || [], profileMap),
     reportLogs: enrichLogs(reportLogs || [], profileMap),
