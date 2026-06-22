@@ -21,6 +21,72 @@ function clampZoomLevel(value) {
   )
 }
 
+function captureScrollAnchor(container, clientX, clientY) {
+  const anchorX = Math.min(
+    container.clientWidth,
+    Math.max(0, clientX)
+  )
+  const anchorY = Math.min(
+    container.clientHeight,
+    Math.max(0, clientY)
+  )
+
+  return {
+    clientX: anchorX,
+    clientY: anchorY,
+    contentX:
+      (container.scrollLeft + anchorX) /
+      Math.max(1, container.scrollWidth),
+    contentY:
+      (container.scrollTop + anchorY) /
+      Math.max(1, container.scrollHeight),
+  }
+}
+
+function restoreScrollAnchor(container, anchor) {
+  if (!anchor) {
+    return
+  }
+
+  const maxScrollLeft = Math.max(
+    0,
+    container.scrollWidth - container.clientWidth
+  )
+  const maxScrollTop = Math.max(
+    0,
+    container.scrollHeight - container.clientHeight
+  )
+
+  container.scrollLeft = Math.min(
+    maxScrollLeft,
+    Math.max(
+      0,
+      anchor.contentX * container.scrollWidth - anchor.clientX
+    )
+  )
+  container.scrollTop = Math.min(
+    maxScrollTop,
+    Math.max(
+      0,
+      anchor.contentY * container.scrollHeight - anchor.clientY
+    )
+  )
+}
+
+function applyCanvasZoomPreview(container, scale) {
+  container
+    .querySelectorAll('.pdfViewerPage canvas')
+    .forEach((canvas) => {
+      const currentWidth =
+        Number.parseFloat(canvas.style.width) || canvas.clientWidth
+      const currentHeight =
+        Number.parseFloat(canvas.style.height) || canvas.clientHeight
+
+      canvas.style.width = `${Math.max(1, currentWidth * scale)}px`
+      canvas.style.height = `${Math.max(1, currentHeight * scale)}px`
+    })
+}
+
 function isLikelyLegacyMobileDevice() {
   if (typeof navigator === 'undefined') {
     return false
@@ -82,6 +148,9 @@ function PdfViewer({
   const activeRenderTaskRef = useRef(null)
   const adaptiveDprLimitRef = useRef(HIGH_QUALITY_DPR_LIMIT)
   const activeTouchPointersRef = useRef(new Set())
+  const renderedZoomLevelRef = useRef(null)
+  const pendingZoomAnchorRef = useRef(null)
+  const forceLoadingRenderRef = useRef(false)
   const panStateRef = useRef({
     active: false,
     pointerId: null,
@@ -95,6 +164,8 @@ function PdfViewer({
     startDistance: 0,
     startZoom: 1,
     targetZoom: 1,
+    centerX: 0,
+    centerY: 0,
   })
   const zoomLevelRef = useRef(1)
 
@@ -488,10 +559,46 @@ function PdfViewer({
 
     adaptiveDprLimitRef.current = getInitialDprLimit()
 
-    setLoading(true)
+    const container = containerRef.current
+
+    if (!container) {
+      setError(t.loadError)
+      setLoading(false)
+      return
+    }
+
+    const hasRenderedPages =
+      container.querySelector('.pdfViewerPage') !== null
+    const isZoomRender =
+      !forceLoadingRenderRef.current &&
+      hasRenderedPages &&
+      renderedZoomLevelRef.current !== null &&
+      renderedZoomLevelRef.current !== zoomLevel
+    const renderTarget = isZoomRender
+      ? document.createElement('div')
+      : container
+    const zoomAnchor = isZoomRender
+      ? pendingZoomAnchorRef.current ||
+        captureScrollAnchor(
+          container,
+          container.clientWidth / 2,
+          container.clientHeight / 2
+        )
+      : null
+
+    forceLoadingRenderRef.current = false
+    pendingZoomAnchorRef.current = null
+
+    if (!isZoomRender) {
+      setLoading(true)
+      setPageCount(0)
+      setCurrentPage(1)
+      container.replaceChildren()
+      container.scrollTop = 0
+      container.scrollLeft = 0
+    }
+
     setError('')
-    setPageCount(0)
-    setCurrentPage(1)
 
     try {
       const blob = await loadPdfBlob()
@@ -515,18 +622,6 @@ function PdfViewer({
       pdfDocumentRef.current = pdfDocument
       setPageCount(pdfDocument.numPages)
 
-      const container = containerRef.current
-
-      if (!container) {
-        throw new Error(
-          'PDF görüntüleme alanı bulunamadı.'
-        )
-      }
-
-      container.innerHTML = ''
-      container.scrollTop = 0
-      container.scrollLeft = 0
-
       const availableWidth = Math.max(
         container.clientWidth - 24,
         280
@@ -544,7 +639,7 @@ function PdfViewer({
         const pageRendered = await renderSinglePage({
           pdfDocument,
           pageNumber,
-          container,
+          container: renderTarget,
           availableWidth,
           currentRenderId,
         })
@@ -560,7 +655,9 @@ function PdfViewer({
             )
           }
 
-          setLoading(false)
+          if (!isZoomRender) {
+            setLoading(false)
+          }
         }
 
         await new Promise((resolve) => {
@@ -569,6 +666,17 @@ function PdfViewer({
       }
 
       if (currentRenderId === renderIdRef.current) {
+        if (isZoomRender) {
+          container.replaceChildren(
+            ...Array.from(renderTarget.children)
+          )
+
+          requestAnimationFrame(() => {
+            restoreScrollAnchor(container, zoomAnchor)
+          })
+        }
+
+        renderedZoomLevelRef.current = zoomLevel
         setLoading(false)
       }
     } catch (renderError) {
@@ -589,6 +697,7 @@ function PdfViewer({
     loadPdfBlob,
     renderSinglePage,
     t.loadError,
+    zoomLevel,
   ])
 
   useEffect(() => {
@@ -720,6 +829,12 @@ function PdfViewer({
         startDistance,
         startZoom: zoomLevelRef.current,
         targetZoom: zoomLevelRef.current,
+        centerX:
+          (event.touches[0].clientX + event.touches[1].clientX) / 2 -
+          container.getBoundingClientRect().left,
+        centerY:
+          (event.touches[0].clientY + event.touches[1].clientY) / 2 -
+          container.getBoundingClientRect().top,
       }
 
       if (event.cancelable) {
@@ -742,6 +857,12 @@ function PdfViewer({
       const previewScale = targetZoom / pinchState.startZoom
 
       pinchState.targetZoom = targetZoom
+      pinchState.centerX =
+        (event.touches[0].clientX + event.touches[1].clientX) / 2 -
+        container.getBoundingClientRect().left
+      pinchState.centerY =
+        (event.touches[0].clientY + event.touches[1].clientY) / 2 -
+        container.getBoundingClientRect().top
 
       container
         .querySelectorAll('.pdfViewerPage')
@@ -763,8 +884,26 @@ function PdfViewer({
       }
 
       pinchState.active = false
+      const targetZoom = pinchState.targetZoom
+      const previewScale = targetZoom / pinchState.startZoom
+      const zoomAnchor = captureScrollAnchor(
+        container,
+        pinchState.centerX,
+        pinchState.centerY
+      )
+
       clearPinchPreview()
-      setZoomLevel(pinchState.targetZoom)
+
+      if (targetZoom !== pinchState.startZoom) {
+        pendingZoomAnchorRef.current = zoomAnchor
+        applyCanvasZoomPreview(container, previewScale)
+
+        requestAnimationFrame(() => {
+          restoreScrollAnchor(container, zoomAnchor)
+        })
+
+        setZoomLevel(targetZoom)
+      }
 
       if (event.cancelable) {
         event.preventDefault()
@@ -993,6 +1132,7 @@ function PdfViewer({
 
   const reloadPdf = () => {
     setError('')
+    forceLoadingRenderRef.current = true
     setRenderVersion((value) => value + 1)
   }
 
