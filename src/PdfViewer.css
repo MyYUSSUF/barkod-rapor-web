@@ -198,7 +198,7 @@
   scroll-behavior: auto;
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
-  touch-action: pan-x pan-y pinch-zoom;
+  touch-action: pan-x pan-y;
   cursor: grab;
   user-select: none;
   -webkit-user-select: none;
@@ -211,6 +211,14 @@
 
 .pdfViewerContent.isPanning {
   cursor: grabbing;
+}
+
+.pdfViewerContent.isPinching {
+  touch-action: none;
+}
+
+.pdfViewerContent.isPinching .pdfViewerPage {
+  transition: none;
 }
 
 .pdfViewerContentHidden {

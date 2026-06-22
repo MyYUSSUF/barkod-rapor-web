@@ -81,6 +81,7 @@ function PdfViewer({
   const pdfBlobRef = useRef(null)
   const activeRenderTaskRef = useRef(null)
   const adaptiveDprLimitRef = useRef(HIGH_QUALITY_DPR_LIMIT)
+  const activeTouchPointersRef = useRef(new Set())
   const panStateRef = useRef({
     active: false,
     pointerId: null,
@@ -89,6 +90,13 @@ function PdfViewer({
     scrollLeft: 0,
     scrollTop: 0,
   })
+  const pinchStateRef = useRef({
+    active: false,
+    startDistance: 0,
+    startZoom: 1,
+    targetZoom: 1,
+  })
+  const zoomLevelRef = useRef(1)
 
   const [renderVersion, setRenderVersion] = useState(0)
   const [loading, setLoading] = useState(true)
@@ -99,6 +107,10 @@ function PdfViewer({
   const [zoomLevel, setZoomLevel] = useState(1)
 
   const isArabic = language === 'ar'
+
+  useEffect(() => {
+    zoomLevelRef.current = zoomLevel
+  }, [zoomLevel])
 
   const texts = {
     tr: {
@@ -665,12 +677,138 @@ function PdfViewer({
   useEffect(() => {
     const container = containerRef.current
 
+    if (!container || loading) {
+      return undefined
+    }
+
+    const getTouchDistance = (touches) => {
+      const horizontalDistance = touches[1].clientX - touches[0].clientX
+      const verticalDistance = touches[1].clientY - touches[0].clientY
+
+      return Math.hypot(horizontalDistance, verticalDistance)
+    }
+
+    const clearPinchPreview = () => {
+      container
+        .querySelectorAll('.pdfViewerPage')
+        .forEach((pageElement) => {
+          pageElement.style.transform = ''
+          pageElement.style.transformOrigin = ''
+        })
+
+      container.classList.remove('isPinching')
+    }
+
+    const handleTouchStart = (event) => {
+      if (event.touches.length !== 2) {
+        return
+      }
+
+      const startDistance = getTouchDistance(event.touches)
+
+      if (startDistance <= 0) {
+        return
+      }
+
+      panStateRef.current.active = false
+      panStateRef.current.pointerId = null
+      container.classList.remove('isPanning')
+      container.classList.add('isPinching')
+
+      pinchStateRef.current = {
+        active: true,
+        startDistance,
+        startZoom: zoomLevelRef.current,
+        targetZoom: zoomLevelRef.current,
+      }
+
+      if (event.cancelable) {
+        event.preventDefault()
+      }
+    }
+
+    const handleTouchMove = (event) => {
+      const pinchState = pinchStateRef.current
+
+      if (!pinchState.active || event.touches.length < 2) {
+        return
+      }
+
+      const currentDistance = getTouchDistance(event.touches)
+      const targetZoom = clampZoomLevel(
+        pinchState.startZoom *
+          (currentDistance / pinchState.startDistance)
+      )
+      const previewScale = targetZoom / pinchState.startZoom
+
+      pinchState.targetZoom = targetZoom
+
+      container
+        .querySelectorAll('.pdfViewerPage')
+        .forEach((pageElement) => {
+          pageElement.style.transformOrigin = 'top center'
+          pageElement.style.transform = `scale(${previewScale})`
+        })
+
+      if (event.cancelable) {
+        event.preventDefault()
+      }
+    }
+
+    const finishPinch = (event) => {
+      const pinchState = pinchStateRef.current
+
+      if (!pinchState.active || event.touches.length >= 2) {
+        return
+      }
+
+      pinchState.active = false
+      clearPinchPreview()
+      setZoomLevel(pinchState.targetZoom)
+
+      if (event.cancelable) {
+        event.preventDefault()
+      }
+    }
+
+    container.addEventListener('touchstart', handleTouchStart, {
+      passive: false,
+    })
+    container.addEventListener('touchmove', handleTouchMove, {
+      passive: false,
+    })
+    container.addEventListener('touchend', finishPinch, {
+      passive: false,
+    })
+    container.addEventListener('touchcancel', finishPinch, {
+      passive: false,
+    })
+
+    return () => {
+      pinchStateRef.current.active = false
+      clearPinchPreview()
+      container.removeEventListener('touchstart', handleTouchStart)
+      container.removeEventListener('touchmove', handleTouchMove)
+      container.removeEventListener('touchend', finishPinch)
+      container.removeEventListener('touchcancel', finishPinch)
+    }
+  }, [loading])
+
+  useEffect(() => {
+    const container = containerRef.current
+
     if (!container || zoomLevel <= MIN_ZOOM_LEVEL || loading) {
       return undefined
     }
 
+    const activeTouchPointers = activeTouchPointersRef.current
+
     const stopPanning = (event) => {
       const panState = panStateRef.current
+
+      if (event.pointerType === 'touch') {
+        activeTouchPointers.delete(event.pointerId)
+      }
 
       if (!panState.active || event.pointerId !== panState.pointerId) {
         return
@@ -688,6 +826,17 @@ function PdfViewer({
     const handlePointerDown = (event) => {
       if (event.pointerType === 'mouse' && event.button !== 0) {
         return
+      }
+
+      if (event.pointerType === 'touch') {
+        activeTouchPointers.add(event.pointerId)
+
+        if (activeTouchPointers.size > 1) {
+          panStateRef.current.active = false
+          panStateRef.current.pointerId = null
+          container.classList.remove('isPanning')
+          return
+        }
       }
 
       const canPan =
@@ -718,7 +867,11 @@ function PdfViewer({
     const handlePointerMove = (event) => {
       const panState = panStateRef.current
 
-      if (!panState.active || event.pointerId !== panState.pointerId) {
+      if (
+        pinchStateRef.current.active ||
+        !panState.active ||
+        event.pointerId !== panState.pointerId
+      ) {
         return
       }
 
@@ -743,6 +896,7 @@ function PdfViewer({
     container.addEventListener('lostpointercapture', stopPanning)
 
     return () => {
+      activeTouchPointers.clear()
       panStateRef.current.active = false
       panStateRef.current.pointerId = null
       container.classList.remove('isPanning')
