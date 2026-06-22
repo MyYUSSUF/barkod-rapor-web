@@ -394,36 +394,6 @@ const formatDateTime = (value) => {
   }
 }
 
-const tableWrapStyle = {
-  width: '100%',
-  overflowX: 'auto',
-  border: '1px solid #e5e7eb',
-  borderRadius: '16px',
-  marginTop: '12px',
-}
-
-const tableStyle = {
-  width: '100%',
-  borderCollapse: 'collapse',
-  fontSize: '13px',
-}
-
-const thStyle = {
-  textAlign: 'left',
-  padding: '10px',
-  borderBottom: '1px solid #e5e7eb',
-  background: '#f9fafb',
-  color: '#17324d',
-  whiteSpace: 'nowrap',
-}
-
-const tdStyle = {
-  padding: '10px',
-  borderBottom: '1px solid #f3f4f6',
-  verticalAlign: 'top',
-  whiteSpace: 'nowrap',
-}
-
 const adminGridStyle = {
   display: 'grid',
   gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
@@ -436,17 +406,6 @@ const statBoxStyle = {
   borderRadius: '16px',
   padding: '14px',
   background: '#ffffff',
-}
-
-const smallButtonStyle = {
-  padding: '9px 12px',
-  border: 'none',
-  borderRadius: '10px',
-  color: '#ffffff',
-  fontWeight: 800,
-  cursor: 'pointer',
-  marginRight: '6px',
-  marginTop: '4px',
 }
 
 const REPORT_ICON_PATHS = {
@@ -555,6 +514,11 @@ function App() {
 
   const [adminLoading, setAdminLoading] = useState(false)
   const [adminMessage, setAdminMessage] = useState('')
+  const [expandedAdminDeviceId, setExpandedAdminDeviceId] = useState('')
+  const [expandedAdminUserId, setExpandedAdminUserId] = useState('')
+  const [expandedAdminLogId, setExpandedAdminLogId] = useState('')
+  const [adminLogView, setAdminLogView] = useState('login')
+  const [adminLogLimit, setAdminLogLimit] = useState(12)
   const [adminData, setAdminData] = useState({
     users: [],
     devices: [],
@@ -2087,6 +2051,25 @@ function App() {
     )
   })
 
+  const sortedAdminDevices = [...adminData.devices].sort((left, right) => {
+    const statusOrder = {
+      pending: 0,
+      approved: 1,
+      revoked: 2,
+    }
+    const statusDifference =
+      (statusOrder[left.status] ?? 3) - (statusOrder[right.status] ?? 3)
+
+    if (statusDifference !== 0) {
+      return statusDifference
+    }
+
+    return new Date(right.last_seen_at || 0) - new Date(left.last_seen_at || 0)
+  })
+  const selectedAdminLogs =
+    adminLogView === 'login' ? adminData.loginLogs : adminData.reportLogs
+  const visibleAdminLogs = selectedAdminLogs.slice(0, adminLogLimit)
+
   const dateRangeDayCount = getDateRangeDayCount(startDate, endDate)
 
   if (pdfViewerData) {
@@ -2248,272 +2231,387 @@ function App() {
           <div className="historyBox">
             <div className="historyHeader">
               <strong>Cihaz Onayları</strong>
+              <span className="adminSectionCount">{adminData.devices.length}</span>
             </div>
 
-            <div className="adminTableWrap" style={tableWrapStyle}>
-              <table className="adminTable" style={tableStyle}>
-                <thead>
-                  <tr>
-                    <th style={thStyle}>Kullanıcı</th>
-                    <th style={thStyle}>Cihaz</th>
-                    <th style={thStyle}>İlk İstek</th>
-                    <th style={thStyle}>Son Görülme</th>
-                    <th style={thStyle}>Durum</th>
-                    <th style={thStyle}>İşlem</th>
-                  </tr>
-                </thead>
+            <div className="adminAccordionList">
+              {sortedAdminDevices.map((device) => {
+                const isExpanded = expandedAdminDeviceId === device.id
+                const userName =
+                  device.user_name || device.user_email || device.user_id || '-'
+                const statusLabel =
+                  device.status === 'approved'
+                    ? 'Onaylı'
+                    : device.status === 'pending'
+                      ? 'Onay Bekliyor'
+                      : 'Reddedildi'
 
-                <tbody>
-                  {adminData.devices.map((device) => (
-                    <tr key={device.id}>
-                      <td data-label="Kullanıcı" style={tdStyle}>
-                        <div>{device.user_name || device.user_email || device.user_id || '-'}</div>
-                        {device.user_email &&
-                          device.user_email !== device.user_name && (
-                            <small className="adminCellDetail">{device.user_email}</small>
+                return (
+                  <article
+                    key={device.id}
+                    className={`adminAccordionCard${isExpanded ? ' isOpen' : ''}`}
+                  >
+                    <button
+                      type="button"
+                      className="adminAccordionHeader"
+                      aria-expanded={isExpanded}
+                      onClick={() =>
+                        setExpandedAdminDeviceId(isExpanded ? '' : device.id)
+                      }
+                    >
+                      <span className="adminAccordionIdentity">
+                        <strong>{userName}</strong>
+                        {device.user_email && device.user_email !== userName && (
+                          <small>{device.user_email}</small>
+                        )}
+                      </span>
+
+                      <span className="adminAccordionMeta">
+                        <span className={`adminStatusBadge is-${device.status}`}>
+                          {statusLabel}
+                        </span>
+                        <span className="adminChevron" aria-hidden="true"></span>
+                      </span>
+                    </button>
+
+                    {isExpanded && (
+                      <div className="adminAccordionBody">
+                        <dl className="adminDetailGrid">
+                          <div>
+                            <dt>Cihaz</dt>
+                            <dd>{device.device_name || '-'}</dd>
+                          </div>
+                          <div>
+                            <dt>İlk İstek</dt>
+                            <dd>{formatDateTime(device.created_at)}</dd>
+                          </div>
+                          <div>
+                            <dt>Son Görülme</dt>
+                            <dd>{formatDateTime(device.last_seen_at)}</dd>
+                          </div>
+                        </dl>
+
+                        <div className="adminCardActions">
+                          {device.status !== 'approved' && (
+                            <button
+                              type="button"
+                              className="adminSmallButton adminApproveButton"
+                              onClick={() =>
+                                updateAdminDevice(device.id, 'approve_device')
+                              }
+                            >
+                              {device.status === 'revoked'
+                                ? 'Tekrar Onayla'
+                                : 'Onayla'}
+                            </button>
                           )}
-                      </td>
-                      <td data-label="Cihaz" style={tdStyle}>{device.device_name || '-'}</td>
-                      <td data-label="İlk İstek" style={tdStyle}>{formatDateTime(device.created_at)}</td>
-                      <td data-label="Son Görülme" style={tdStyle}>{formatDateTime(device.last_seen_at)}</td>
-                      <td data-label="Durum" style={tdStyle}>
-                        {device.status === 'approved'
-                          ? 'Onaylı'
-                          : device.status === 'pending'
-                            ? 'Onay Bekliyor'
-                            : 'İptal'}
-                      </td>
-                      <td data-label="İşlem" className="adminActionCell" style={tdStyle}>
-                        {device.status !== 'approved' && (
-                          <button
-                            type="button"
-                            className="adminSmallButton"
-                            style={{
-                              ...smallButtonStyle,
-                              background: '#0f766e',
-                            }}
-                            onClick={() => updateAdminDevice(device.id, 'approve_device')}
-                          >
-                            Onayla
-                          </button>
-                        )}
 
-                        {device.status !== 'revoked' && (
-                          <button
-                            type="button"
-                            className="adminSmallButton"
-                            style={{
-                              ...smallButtonStyle,
-                              background: '#b91c1c',
-                            }}
-                            onClick={() => updateAdminDevice(device.id, 'revoke_device')}
-                          >
-                            İptal Et
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
+                          {device.status === 'pending' && (
+                            <button
+                              type="button"
+                              className="adminSmallButton adminRejectButton"
+                              onClick={() =>
+                                updateAdminDevice(device.id, 'revoke_device')
+                              }
+                            >
+                              Reddet
+                            </button>
+                          )}
 
-                  {adminData.devices.length === 0 && (
-                    <tr>
-                      <td className="adminEmptyCell" style={tdStyle} colSpan={6}>
-                        Kayıtlı cihaz bulunamadı.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
+                          {device.status === 'approved' && (
+                            <button
+                              type="button"
+                              className="adminSmallButton adminRejectButton"
+                              onClick={() =>
+                                updateAdminDevice(device.id, 'revoke_device')
+                              }
+                            >
+                              İzni Kaldır
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </article>
+                )
+              })}
+
+              {adminData.devices.length === 0 && (
+                <p className="adminEmptyState">Kayıtlı cihaz bulunamadı.</p>
+              )}
             </div>
           </div>
 
           <div className="historyBox">
             <div className="historyHeader">
               <strong>Kullanıcılar</strong>
+              <span className="adminSectionCount">{adminData.users.length}</span>
             </div>
 
-            <div className="adminTableWrap" style={tableWrapStyle}>
-              <table className="adminTable" style={tableStyle}>
-                <thead>
-                  <tr>
-                    <th style={thStyle}>Kullanıcı</th>
-                    <th style={thStyle}>Ad Soyad</th>
-                    <th style={thStyle}>Rol</th>
-                    <th style={thStyle}>Durum</th>
-                    <th style={thStyle}>Cihazlar</th>
-                    <th style={thStyle}>Son Cihaz</th>
-                    <th style={thStyle}>Rapor Yetkileri</th>
-                    <th style={thStyle}>İşlem</th>
-                  </tr>
-                </thead>
+            <div className="adminAccordionList">
+              {adminData.users.map((user) => {
+                const isExpanded = expandedAdminUserId === user.id
+                const userName = user.full_name || user.email || '-'
 
-                <tbody>
-                  {adminData.users.map((user) => (
-                    <tr key={user.id}>
-                      <td data-label="Kullanıcı" style={tdStyle}>{user.email}</td>
-                      <td data-label="Ad Soyad" style={tdStyle}>{user.full_name || '-'}</td>
-                      <td data-label="Rol" style={tdStyle}>{user.role || 'user'}</td>
-                      <td data-label="Durum" style={tdStyle}>{user.is_active === false ? 'Pasif' : 'Aktif'}</td>
-                      <td data-label="Cihazlar" style={tdStyle}>
-                        <div>{user.approved_device_count || 0} onaylı</div>
-                        {(user.pending_device_count || 0) > 0 && (
-                          <small className="adminCellDetail">
-                            {user.pending_device_count} bekliyor
-                          </small>
+                return (
+                  <article
+                    key={user.id}
+                    className={`adminAccordionCard${isExpanded ? ' isOpen' : ''}`}
+                  >
+                    <button
+                      type="button"
+                      className="adminAccordionHeader"
+                      aria-expanded={isExpanded}
+                      onClick={() =>
+                        setExpandedAdminUserId(isExpanded ? '' : user.id)
+                      }
+                    >
+                      <span className="adminAccordionIdentity">
+                        <strong>{userName}</strong>
+                        <small>{user.email}</small>
+                      </span>
+
+                      <span className="adminAccordionMeta">
+                        <span
+                          className={`adminStatusBadge ${
+                            user.is_active === false ? 'is-revoked' : 'is-approved'
+                          }`}
+                        >
+                          {user.is_active === false ? 'Pasif' : 'Aktif'}
+                        </span>
+                        {user.role === 'admin' && (
+                          <span className="adminRoleBadge">Admin</span>
                         )}
-                      </td>
-                      <td data-label="Son Cihaz" style={tdStyle}>{formatDateTime(user.last_device_seen_at)}</td>
-                      <td data-label="Rapor Yetkileri" className="adminPermissionCell" style={tdStyle}>
-                        <label className="adminPermissionToggle">
-                          <input
-                            type="checkbox"
-                            checked={
-                              user.role === 'admin' ||
-                              user.can_view_fixing_report === true
-                            }
-                            disabled={user.role === 'admin'}
-                            onChange={(e) =>
+                        <span className="adminChevron" aria-hidden="true"></span>
+                      </span>
+                    </button>
+
+                    {isExpanded && (
+                      <div className="adminAccordionBody">
+                        <dl className="adminDetailGrid">
+                          <div>
+                            <dt>Rol</dt>
+                            <dd>{user.role === 'admin' ? 'Admin' : 'Kullanıcı'}</dd>
+                          </div>
+                          <div>
+                            <dt>Cihaz</dt>
+                            <dd>
+                              {user.approved_device_count || 0} onaylı
+                              {(user.pending_device_count || 0) > 0
+                                ? `, ${user.pending_device_count} bekliyor`
+                                : ''}
+                            </dd>
+                          </div>
+                          <div>
+                            <dt>Son Cihaz</dt>
+                            <dd>{formatDateTime(user.last_device_seen_at)}</dd>
+                          </div>
+                        </dl>
+
+                        <div className="adminPermissionPanel">
+                          <strong>Rapor Yetkileri</strong>
+                          <label className="adminPermissionToggle">
+                            <input
+                              type="checkbox"
+                              checked={
+                                user.role === 'admin' ||
+                                user.can_view_fixing_report === true
+                              }
+                              disabled={user.role === 'admin'}
+                              onChange={(e) =>
+                                updateAdminUser(user.id, {
+                                  can_view_fixing_report: e.target.checked,
+                                })
+                              }
+                            />
+                            <span>Fikse Bekleyenler</span>
+                          </label>
+
+                          <label className="adminPermissionToggle">
+                            <input
+                              type="checkbox"
+                              checked={
+                                user.role === 'admin' ||
+                                user.can_view_shipment_report === true
+                              }
+                              disabled={user.role === 'admin'}
+                              onChange={(e) =>
+                                updateAdminUser(user.id, {
+                                  can_view_shipment_report: e.target.checked,
+                                })
+                              }
+                            />
+                            <span>Sevkiyat Takip</span>
+                          </label>
+                          {user.role === 'admin' && (
+                            <small>Admin kullanıcıları tüm raporları görebilir.</small>
+                          )}
+                        </div>
+
+                        <div className="adminCardActions">
+                          <button
+                            type="button"
+                            className={`adminSmallButton ${
+                              user.is_active === false
+                                ? 'adminApproveButton'
+                                : 'adminRejectButton'
+                            }`}
+                            onClick={() =>
                               updateAdminUser(user.id, {
-                                can_view_fixing_report: e.target.checked,
+                                is_active: user.is_active === false,
                               })
                             }
-                          />
-                          <span>Fikse</span>
-                        </label>
+                          >
+                            {user.is_active === false ? 'Aktif Yap' : 'Pasif Yap'}
+                          </button>
 
-                        <label className="adminPermissionToggle">
-                          <input
-                            type="checkbox"
-                            checked={
-                              user.role === 'admin' ||
-                              user.can_view_shipment_report === true
-                            }
-                            disabled={user.role === 'admin'}
-                            onChange={(e) =>
+                          <button
+                            type="button"
+                            className="adminSmallButton adminRoleButton"
+                            onClick={() =>
                               updateAdminUser(user.id, {
-                                can_view_shipment_report: e.target.checked,
+                                role: user.role === 'admin' ? 'user' : 'admin',
                               })
                             }
-                          />
-                          <span>Sevkiyat</span>
-                        </label>
-                      </td>
-                      <td data-label="İşlem" className="adminActionCell" style={tdStyle}>
-                        <button
-                          type="button"
-                          className="adminSmallButton"
-                          style={{
-                            ...smallButtonStyle,
-                            background: user.is_active === false ? '#0f766e' : '#b91c1c',
-                          }}
-                          onClick={() => updateAdminUser(user.id, { is_active: user.is_active === false })}
-                        >
-                          {user.is_active === false ? 'Aktif Yap' : 'Pasif Yap'}
-                        </button>
+                          >
+                            {user.role === 'admin' ? 'Kullanıcı Yap' : 'Admin Yap'}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </article>
+                )
+              })}
 
-                        <button
-                          type="button"
-                          className="adminSmallButton"
-                          style={{
-                            ...smallButtonStyle,
-                            background: user.role === 'admin' ? '#4b5563' : '#17324d',
-                          }}
-                          onClick={() => updateAdminUser(user.id, { role: user.role === 'admin' ? 'user' : 'admin' })}
-                        >
-                          {user.role === 'admin' ? 'User Yap' : 'Admin Yap'}
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-
-                  {adminData.users.length === 0 && (
-                    <tr>
-                      <td className="adminEmptyCell" style={tdStyle} colSpan={8}>
-                        Kullanıcı bulunamadı.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
+              {adminData.users.length === 0 && (
+                <p className="adminEmptyState">Kullanıcı bulunamadı.</p>
+              )}
             </div>
           </div>
 
           <div className="historyBox">
             <div className="historyHeader">
-              <strong>Son Giriş / Çıkış Logları</strong>
+              <strong>Son Hareketler</strong>
             </div>
 
-            <div className="adminTableWrap" style={tableWrapStyle}>
-              <table className="adminTable adminLogTable" style={tableStyle}>
-                <thead>
-                  <tr>
-                    <th style={thStyle}>Tarih</th>
-                    <th style={thStyle}>Kullanıcı</th>
-                    <th style={thStyle}>İşlem</th>
-                    <th style={thStyle}>Cihaz</th>
-                  </tr>
-                </thead>
-
-                <tbody>
-                  {adminData.loginLogs.map((log) => (
-                    <tr key={log.id}>
-                      <td data-label="Tarih" style={tdStyle}>{formatDateTime(log.created_at)}</td>
-                      <td data-label="Kullanıcı" style={tdStyle}>{log.user_name || log.user_email || '-'}</td>
-                      <td data-label="İşlem" style={tdStyle}>{log.event_type || '-'}</td>
-                      <td data-label="Cihaz" style={tdStyle}>{log.device_name || '-'}</td>
-                    </tr>
-                  ))}
-
-                  {adminData.loginLogs.length === 0 && (
-                    <tr>
-                      <td className="adminEmptyCell" style={tdStyle} colSpan={4}>
-                        Log bulunamadı.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          <div className="historyBox">
-            <div className="historyHeader">
-              <strong>Son Rapor Logları</strong>
+            <div className="adminLogTabs" role="tablist" aria-label="Log türü">
+              <button
+                type="button"
+                className={adminLogView === 'login' ? 'isActive' : ''}
+                onClick={() => {
+                  setAdminLogView('login')
+                  setAdminLogLimit(12)
+                  setExpandedAdminLogId('')
+                }}
+              >
+                Giriş / Çıkış
+              </button>
+              <button
+                type="button"
+                className={adminLogView === 'report' ? 'isActive' : ''}
+                onClick={() => {
+                  setAdminLogView('report')
+                  setAdminLogLimit(12)
+                  setExpandedAdminLogId('')
+                }}
+              >
+                Raporlar
+              </button>
             </div>
 
-            <div className="adminTableWrap" style={tableWrapStyle}>
-              <table className="adminTable adminLogTable" style={tableStyle}>
-                <thead>
-                  <tr>
-                    <th style={thStyle}>Tarih</th>
-                    <th style={thStyle}>Kullanıcı</th>
-                    <th style={thStyle}>Barkod</th>
-                    <th style={thStyle}>Rapor</th>
-                    <th style={thStyle}>Cihaz</th>
-                  </tr>
-                </thead>
+            <div className="adminAccordionList adminLogAccordionList">
+              {visibleAdminLogs.map((log) => {
+                const isExpanded = expandedAdminLogId === log.id
+                const eventLabel =
+                  adminLogView === 'login'
+                    ? log.event_type === 'logout'
+                      ? 'Çıkış yaptı'
+                      : 'Giriş yaptı'
+                    : log.report_name || 'Rapor açtı'
 
-                <tbody>
-                  {adminData.reportLogs.map((log) => (
-                    <tr key={log.id}>
-                      <td data-label="Tarih" style={tdStyle}>{formatDateTime(log.created_at)}</td>
-                      <td data-label="Kullanıcı" style={tdStyle}>{log.user_name || log.user_email || '-'}</td>
-                      <td data-label="Barkod" style={tdStyle}>{log.barcode || '-'}</td>
-                      <td data-label="Rapor" style={tdStyle}>{log.report_name || '-'}</td>
-                      <td data-label="Cihaz" style={tdStyle}>{log.device_name || '-'}</td>
-                    </tr>
-                  ))}
+                return (
+                  <article
+                    key={log.id}
+                    className={`adminAccordionCard${isExpanded ? ' isOpen' : ''}`}
+                  >
+                    <button
+                      type="button"
+                      className="adminAccordionHeader adminLogAccordionHeader"
+                      aria-expanded={isExpanded}
+                      onClick={() =>
+                        setExpandedAdminLogId(isExpanded ? '' : log.id)
+                      }
+                    >
+                      <span className="adminAccordionIdentity">
+                        <strong>{log.user_name || log.user_email || '-'}</strong>
+                        <small>{eventLabel}</small>
+                      </span>
 
-                  {adminData.reportLogs.length === 0 && (
-                    <tr>
-                      <td className="adminEmptyCell" style={tdStyle} colSpan={5}>
-                        Rapor logu bulunamadı.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
+                      <span className="adminAccordionMeta">
+                        <time>{formatDateTime(log.created_at)}</time>
+                        <span className="adminChevron" aria-hidden="true"></span>
+                      </span>
+                    </button>
+
+                    {isExpanded && (
+                      <div className="adminAccordionBody">
+                        <dl className="adminDetailGrid">
+                          <div>
+                            <dt>Tarih</dt>
+                            <dd>{formatDateTime(log.created_at)}</dd>
+                          </div>
+                          <div>
+                            <dt>İşlem</dt>
+                            <dd>{eventLabel}</dd>
+                          </div>
+                          {adminLogView === 'report' && (
+                            <>
+                              <div>
+                                <dt>Barkod</dt>
+                                <dd>{log.barcode || '-'}</dd>
+                              </div>
+                              <div>
+                                <dt>Rapor</dt>
+                                <dd>{log.report_name || '-'}</dd>
+                              </div>
+                            </>
+                          )}
+                          <div>
+                            <dt>Cihaz</dt>
+                            <dd>{log.device_name || '-'}</dd>
+                          </div>
+                        </dl>
+                      </div>
+                    )}
+                  </article>
+                )
+              })}
+
+              {selectedAdminLogs.length === 0 && (
+                <p className="adminEmptyState">Kayıt bulunamadı.</p>
+              )}
             </div>
+
+            {selectedAdminLogs.length > 12 && (
+              <button
+                type="button"
+                className="adminLogMoreButton"
+                onClick={() =>
+                  setAdminLogLimit(
+                    adminLogLimit >= selectedAdminLogs.length
+                      ? 12
+                      : Math.min(adminLogLimit + 12, selectedAdminLogs.length)
+                  )
+                }
+              >
+                {adminLogLimit >= selectedAdminLogs.length
+                  ? 'Daralt'
+                  : `${Math.min(
+                      12,
+                      selectedAdminLogs.length - adminLogLimit
+                    )} Kayıt Daha Göster`}
+              </button>
+            )}
           </div>
 
           <button type="button" className="logoutButton" onClick={handleLogout}>

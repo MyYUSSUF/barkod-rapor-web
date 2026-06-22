@@ -1112,11 +1112,25 @@ form button {
 .adminSmallButton {
   min-height: 44px;
   width: auto;
+  margin: 0;
+  padding: 10px 14px;
+  border: 0;
+  border-radius: 7px;
+  color: #ffffff;
+  font-weight: 900;
   white-space: nowrap;
 }
 
-.adminActionCell .adminSmallButton {
-  margin-bottom: 4px;
+.adminApproveButton {
+  background: #0f766e;
+}
+
+.adminRejectButton {
+  background: #b91c1c;
+}
+
+.adminRoleButton {
+  background: #17324d;
 }
 
 .adminCellDetail {
@@ -1144,6 +1158,281 @@ form button {
 
 .adminPermissionToggle input:disabled {
   opacity: 0.65;
+}
+
+.adminSectionCount {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 30px;
+  min-height: 26px;
+  padding: 3px 8px;
+  border: 1px solid #dbe2ea;
+  border-radius: 999px;
+  background: #f8fafc;
+  color: #475569;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.adminAccordionList {
+  display: grid;
+  gap: 8px;
+}
+
+.adminAccordionCard {
+  overflow: hidden;
+  border: 1px solid #dbe2ea;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 4px 12px rgba(16, 24, 40, 0.04);
+}
+
+.adminAccordionCard.isOpen {
+  border-color: #9fb8bd;
+  box-shadow: 0 8px 20px rgba(15, 118, 110, 0.08);
+}
+
+.adminAccordionHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  width: 100%;
+  min-height: 58px;
+  margin: 0;
+  padding: 11px 13px;
+  border: 0;
+  border-radius: 0;
+  background: #ffffff;
+  color: var(--text);
+  text-align: left;
+  box-shadow: none;
+}
+
+.adminAccordionHeader:hover:not(:disabled) {
+  transform: none;
+  background: #f8fafc;
+  box-shadow: none;
+}
+
+.adminAccordionIdentity {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.adminAccordionIdentity strong,
+.adminAccordionIdentity small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.adminAccordionIdentity strong {
+  color: #17324d;
+  font-size: 14px;
+}
+
+.adminAccordionIdentity small {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.adminAccordionMeta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 7px;
+  flex: 0 0 auto;
+}
+
+.adminAccordionMeta time {
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.adminStatusBadge,
+.adminRoleBadge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 3px 7px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.adminStatusBadge.is-approved {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.adminStatusBadge.is-pending {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.adminStatusBadge.is-revoked {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.adminRoleBadge {
+  background: #dbeafe;
+  color: #1e40af;
+}
+
+.adminChevron {
+  width: 9px;
+  height: 9px;
+  margin: 0 3px;
+  border-right: 2px solid #64748b;
+  border-bottom: 2px solid #64748b;
+  transform: rotate(45deg);
+  transition: transform 160ms ease;
+}
+
+.adminAccordionCard.isOpen .adminChevron {
+  transform: rotate(225deg);
+}
+
+.adminAccordionBody {
+  padding: 12px 13px 13px;
+  border-top: 1px solid #e8edf2;
+  background: #fbfcfe;
+}
+
+.adminDetailGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+
+.adminDetailGrid > div {
+  min-width: 0;
+  padding: 9px 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 7px;
+  background: #ffffff;
+}
+
+.adminDetailGrid dt {
+  margin: 0 0 3px;
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.adminDetailGrid dd {
+  margin: 0;
+  color: #1e293b;
+  font-size: 13px;
+  font-weight: 750;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.adminPermissionPanel {
+  margin-top: 10px;
+  padding: 10px;
+  border: 1px solid #dbe2ea;
+  border-radius: 7px;
+  background: #ffffff;
+}
+
+.adminPermissionPanel > strong {
+  display: block;
+  margin-bottom: 6px;
+  color: #17324d;
+  font-size: 13px;
+}
+
+.adminPermissionPanel > small {
+  display: block;
+  margin-top: 7px;
+  color: #64748b;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.adminPermissionPanel .adminPermissionToggle {
+  min-height: 38px;
+  margin-top: 6px;
+  padding: 7px 9px;
+  border: 1px solid #e2e8f0;
+  border-radius: 7px;
+  background: #f8fafc;
+}
+
+.adminCardActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.adminEmptyState {
+  margin: 0;
+  padding: 16px;
+  border: 1px dashed #cbd5e1;
+  border-radius: 8px;
+  color: #64748b;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.adminLogTabs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+  margin-bottom: 10px;
+  padding: 4px;
+  border: 1px solid #dbe2ea;
+  border-radius: 8px;
+  background: #f1f5f9;
+}
+
+.adminLogTabs button {
+  min-height: 40px;
+  margin: 0;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #475569;
+  font-size: 13px;
+  box-shadow: none;
+}
+
+.adminLogTabs button:hover:not(:disabled) {
+  transform: none;
+  box-shadow: none;
+}
+
+.adminLogTabs button.isActive {
+  background: #ffffff;
+  color: #17324d;
+  box-shadow: 0 2px 7px rgba(16, 24, 40, 0.08);
+}
+
+.adminLogAccordionHeader {
+  min-height: 54px;
+}
+
+.adminLogMoreButton {
+  width: 100%;
+  min-height: 42px;
+  margin: 10px 0 0;
+  border: 1px solid #b8c5d2;
+  background: #ffffff;
+  color: #17324d;
+  box-shadow: none;
 }
 
 .historyHeader {
@@ -1430,111 +1719,51 @@ form button {
     font-size: 15px;
   }
 
-  .adminTableWrap {
-    overflow: visible !important;
-    border: 0 !important;
-    border-radius: 0 !important;
-    margin-top: 8px !important;
-  }
-
-  .adminTable,
-  .adminTable tbody {
-    display: block;
-    width: 100%;
-  }
-
-  .adminTable thead {
-    display: none;
-  }
-
-  .adminTable tbody {
-    display: grid;
-    gap: 10px;
-  }
-
-  .adminTable tr {
-    display: block;
-    overflow: hidden;
-    border: 1px solid #dbe2ea;
-    border-radius: 8px;
-    background: #ffffff;
-    box-shadow: 0 5px 14px rgba(16, 24, 40, 0.05);
-  }
-
-  .adminTable td {
-    display: grid !important;
-    grid-template-columns: minmax(92px, 34%) minmax(0, 1fr);
-    gap: 10px;
-    width: 100%;
-    padding: 9px 10px !important;
-    border-bottom: 1px solid #edf0f4 !important;
-    white-space: normal !important;
-    overflow-wrap: anywhere;
-    line-height: 1.4;
-  }
-
-  .adminTable td:last-child {
-    border-bottom: 0 !important;
-  }
-
-  .adminTable td::before {
-    content: attr(data-label);
-    color: #64748b;
-    font-size: 11px;
-    font-weight: 900;
-    line-height: 1.4;
-  }
-
-  .adminTable .adminActionCell,
-  .adminTable .adminPermissionCell {
-    display: block !important;
-  }
-
-  .adminTable .adminActionCell::before,
-  .adminTable .adminPermissionCell::before {
-    display: block;
-    margin-bottom: 7px;
-  }
-
-  .adminActionCell .adminSmallButton {
-    width: 100%;
-    min-height: 42px;
-    margin: 0 0 7px !important;
-  }
-
-  .adminActionCell .adminSmallButton:last-child {
-    margin-bottom: 0 !important;
-  }
-
-  .adminPermissionToggle {
-    min-height: 40px;
-    margin-top: 6px;
-    padding: 7px 9px;
-    border: 1px solid #e2e8f0;
-    border-radius: 7px;
-    background: #f8fafc;
-  }
-
-  .adminPermissionToggle:first-of-type {
-    margin-top: 0;
-  }
-
-  .adminTable .adminEmptyCell {
-    display: block !important;
-    padding: 16px !important;
-    text-align: center;
-  }
-
-  .adminTable .adminEmptyCell::before {
-    display: none;
-  }
-
-  .adminLogTable td {
-    grid-template-columns: minmax(78px, 29%) minmax(0, 1fr);
-  }
-
   .adminTextarea {
     min-height: 96px;
+  }
+
+  .adminAccordionHeader {
+    gap: 8px;
+    min-height: 56px;
+    padding: 10px;
+  }
+
+  .adminAccordionIdentity strong {
+    font-size: 13px;
+  }
+
+  .adminAccordionMeta {
+    gap: 5px;
+  }
+
+  .adminStatusBadge,
+  .adminRoleBadge {
+    min-height: 22px;
+    padding: 2px 6px;
+    font-size: 10px;
+  }
+
+  .adminAccordionMeta time {
+    display: none;
+  }
+
+  .adminAccordionBody {
+    padding: 10px;
+  }
+
+  .adminDetailGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .adminCardActions {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .adminCardActions .adminSmallButton {
+    width: 100%;
+    min-height: 42px;
   }
 }
 
@@ -1552,9 +1781,7 @@ form button {
     width: 100% !important;
   }
 
-  .adminTable td,
-  .adminLogTable td {
-    grid-template-columns: 1fr;
-    gap: 3px;
+  .adminAccordionMeta .adminStatusBadge + .adminRoleBadge {
+    display: none;
   }
 }
