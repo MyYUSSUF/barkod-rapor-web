@@ -33,7 +33,7 @@ function parseBody(req) {
   if (typeof req.body === 'string') {
     try {
       return JSON.parse(req.body)
-    } catch (err) {
+    } catch {
       return {}
     }
   }

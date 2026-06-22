@@ -62,6 +62,12 @@ Frontend varsayilan olarak `http://127.0.0.1:5173`, backend ise `http://localhos
 npm.cmd run build
 ```
 
+## Kod Kontrolu
+
+```bash
+npm.cmd run lint
+```
+
 ## Cihaz Onayi
 
 Uygulama her tarayici icin guclu ve rastgele bir cihaz anahtari olusturur.

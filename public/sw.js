@@ -1,4 +1,4 @@
-self.addEventListener('install', (event) => {
+self.addEventListener('install', () => {
   self.skipWaiting()
 })
 
@@ -20,7 +20,7 @@ self.addEventListener('push', (event) => {
         ...event.data.json(),
       }
     }
-  } catch (error) {
+  } catch {
     data.body = event.data ? event.data.text() : data.body
   }
 

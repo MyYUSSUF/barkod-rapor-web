@@ -1,8 +1,9 @@
-import { Fragment, useEffect, useRef, useState } from 'react'
+import { Fragment, lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { BrowserCodeReader, BrowserMultiFormatReader } from '@zxing/browser'
 import { isSupabaseConfigured, supabase } from './lib/supabaseClient'
-import PdfViewer from './PdfViewer'
 import './App.css'
+
+const PdfViewer = lazy(() => import('./PdfViewer'))
 
 const API_BASE_URL =
   window.location.port === '5173'
@@ -116,13 +117,7 @@ const LANGUAGES = {
     endDate: 'Bitiş Tarihi',
     reportPagePreparing: 'Rapor hazırlanıyor...',
     pleaseWait: 'Lütfen bekleyin.',
-    openPdf: 'PDF’i Aç',
-    sharePdf: 'PDF Olarak Paylaş',
     close: 'Kapat',
-    pdfPreparing: 'PDF hazırlanıyor...',
-    pdfFetchFailed: 'PDF alınamadı.',
-    shareFailed: 'Paylaşım yapılamadı.',
-    shareNotSupported: 'PDF paylaşımı bu cihazda desteklenmiyor.',
     reportCouldNotLoad: 'Rapor yüklenemedi.',
     versionText: 'Barkod Rapor Web',
     notificationUnsupported: 'Bu cihaz veya tarayıcı bildirimleri desteklemiyor.',
@@ -194,13 +189,7 @@ const LANGUAGES = {
     endDate: 'End Date',
     reportPagePreparing: 'Report is preparing...',
     pleaseWait: 'Please wait.',
-    openPdf: 'Open PDF',
-    sharePdf: 'Share as PDF',
     close: 'Close',
-    pdfPreparing: 'Preparing PDF...',
-    pdfFetchFailed: 'PDF could not be received.',
-    shareFailed: 'Sharing failed.',
-    shareNotSupported: 'PDF sharing is not supported on this device.',
     reportCouldNotLoad: 'Report could not be loaded.',
     versionText: 'Barcode Report Web',
     notificationUnsupported: 'This device or browser does not support notifications.',
@@ -272,13 +261,7 @@ const LANGUAGES = {
     endDate: 'تاريخ النهاية',
     reportPagePreparing: 'جارٍ تجهيز التقرير...',
     pleaseWait: 'يرجى الانتظار.',
-    openPdf: 'فتح PDF',
-    sharePdf: 'مشاركة كملف PDF',
     close: 'إغلاق',
-    pdfPreparing: 'جارٍ تجهيز PDF...',
-    pdfFetchFailed: 'تعذر الحصول على PDF.',
-    shareFailed: 'تعذرت المشاركة.',
-    shareNotSupported: 'مشاركة PDF غير مدعومة على هذا الجهاز.',
     reportCouldNotLoad: 'تعذر تحميل التقرير.',
     versionText: 'نظام تقارير الباركود',
     notificationUnsupported: 'هذا الجهاز أو المتصفح لا يدعم الإشعارات.',
@@ -316,15 +299,6 @@ function getOrCreateDeviceToken() {
   const newToken = createDeviceToken()
   localStorage.setItem(DEVICE_TOKEN_KEY, newToken)
   return newToken
-}
-
-const escapeHtml = (value) => {
-  return String(value || '')
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&#039;')
 }
 
 const fetchWithTimeout = async (url, options = {}, timeoutMs = REPORT_TIMEOUT_MS) => {
@@ -389,8 +363,48 @@ const formatDateTime = (value) => {
       hour: '2-digit',
       minute: '2-digit',
     }).format(new Date(value))
-  } catch (err) {
+  } catch {
     return value
+  }
+}
+
+const loadBarcodeHistory = () => {
+  try {
+    const saved = localStorage.getItem(HISTORY_KEY)
+
+    if (!saved) {
+      return []
+    }
+
+    const parsed = JSON.parse(saved)
+
+    if (!Array.isArray(parsed)) {
+      return []
+    }
+
+    return parsed
+      .map((item) => {
+        if (typeof item === 'string') {
+          return {
+            value: item.trim(),
+            reportCode: '',
+            reportName: '',
+          }
+        }
+
+        if (item && typeof item === 'object') {
+          return {
+            value: String(item.value || item.barcode || '').trim(),
+            reportCode: String(item.reportCode || '').trim(),
+            reportName: String(item.reportName || '').trim(),
+          }
+        }
+
+        return null
+      })
+      .filter((item) => item?.value)
+  } catch {
+    return []
   }
 }
 
@@ -498,12 +512,11 @@ function App() {
   const [barcode, setBarcode] = useState('')
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
-  const [barcodeHistory, setBarcodeHistory] = useState([])
+  const [barcodeHistory, setBarcodeHistory] = useState(loadBarcodeHistory)
   const [message, setMessage] = useState('')
   const [messageKind, setMessageKind] = useState('error')
   const [scannerOpen, setScannerOpen] = useState(false)
   const [scannerMessage, setScannerMessage] = useState('')
-  const [notificationsEnabled, setNotificationsEnabled] = useState(false)
   const [screen, setScreen] = useState('main')
   const [pdfViewerData, setPdfViewerData] = useState(null)
 
@@ -598,7 +611,6 @@ function App() {
     setDateRangeReportCode('')
     setSelectedReportCode('')
     setDisplayName('')
-    setNotificationsEnabled(false)
     setAdminNotificationBody('')
     setAdminNotificationMessage('')
     setAdminMessage('')
@@ -624,46 +636,6 @@ function App() {
     }
 
     return t.noBarcodeRequired
-  }
-
-  const loadBarcodeHistory = () => {
-    try {
-      const saved = localStorage.getItem(HISTORY_KEY)
-
-      if (!saved) {
-        return []
-      }
-
-      const parsed = JSON.parse(saved)
-
-      if (!Array.isArray(parsed)) {
-        return []
-      }
-
-      return parsed
-        .map((item) => {
-          if (typeof item === 'string') {
-            return {
-              value: item.trim(),
-              reportCode: '',
-              reportName: '',
-            }
-          }
-
-          if (item && typeof item === 'object') {
-            return {
-              value: String(item.value || item.barcode || '').trim(),
-              reportCode: String(item.reportCode || '').trim(),
-              reportName: String(item.reportName || '').trim(),
-            }
-          }
-
-          return null
-        })
-        .filter((item) => item?.value)
-    } catch (err) {
-      return []
-    }
   }
 
   const saveBarcodeToHistory = (value, report = null) => {
@@ -862,8 +834,6 @@ function App() {
       if (error) {
         throw new Error(error.message)
       }
-
-      setNotificationsEnabled(true)
 
       if (showMessage) {
         showUserMessage(t.notificationSaved, 'success')
@@ -1121,317 +1091,6 @@ function App() {
     setAdminNotificationSending(false)
   }
 
-  const writeReportStatusWindow = (reportWindow, title, detail, type = 'loading') => {
-    if (!reportWindow) {
-      return
-    }
-
-    const safeTitle = escapeHtml(title)
-    const safeDetail = escapeHtml(detail)
-    const safeClose = escapeHtml(t.close)
-    const isError = type === 'error'
-
-    reportWindow.document.open()
-    reportWindow.document.write(`
-      <!doctype html>
-      <html lang="${language}" dir="${isArabic ? 'rtl' : 'ltr'}">
-        <head>
-          <title>${safeTitle}</title>
-          <meta name="viewport" content="width=device-width, initial-scale=1.0">
-          <style>
-            * { box-sizing: border-box; }
-
-            body {
-              margin: 0;
-              min-height: 100vh;
-              font-family: Arial, sans-serif;
-              background: #ffffff;
-              color: #111827;
-              display: flex;
-              align-items: center;
-              justify-content: center;
-              padding: 20px;
-            }
-
-            .box {
-              width: 100%;
-              max-width: 440px;
-              background: white;
-              border: 1px solid #e5e7eb;
-              border-radius: 22px;
-              padding: 24px;
-              box-shadow: 0 18px 50px rgba(17, 24, 39, 0.14);
-              text-align: center;
-            }
-
-            .loader {
-              width: 46px;
-              height: 46px;
-              margin: 0 auto 18px;
-              border-radius: 999px;
-              border: 5px solid #e5e7eb;
-              border-top-color: ${isError ? '#b91c1c' : '#17324d'};
-              animation: spin 1s linear infinite;
-            }
-
-            .errorIcon {
-              width: 48px;
-              height: 48px;
-              margin: 0 auto 18px;
-              border-radius: 999px;
-              background: #fee2e2;
-              color: #b91c1c;
-              display: flex;
-              align-items: center;
-              justify-content: center;
-              font-size: 28px;
-              font-weight: 900;
-            }
-
-            h2 {
-              margin: 0 0 10px;
-              font-size: 22px;
-              color: #17324d;
-            }
-
-            p {
-              margin: 0;
-              color: #6b7280;
-              line-height: 1.45;
-              word-break: break-word;
-              white-space: pre-line;
-            }
-
-            button {
-              display: block;
-              width: 100%;
-              margin-top: 18px;
-              padding: 15px;
-              border: none;
-              border-radius: 15px;
-              background: #b91c1c;
-              color: white;
-              font-size: 16px;
-              font-weight: 900;
-              cursor: pointer;
-            }
-
-            @keyframes spin {
-              to { transform: rotate(360deg); }
-            }
-          </style>
-        </head>
-
-        <body>
-          <div class="box">
-            ${isError ? '<div class="errorIcon">!</div>' : '<div class="loader"></div>'}
-            <h2>${safeTitle}</h2>
-            <p>${safeDetail}</p>
-            ${
-              isError
-                ? `<button onclick="window.close()">${safeClose}</button>`
-                : ''
-            }
-          </div>
-        </body>
-      </html>
-    `)
-    reportWindow.document.close()
-  }
-
-  const writeShareWindow = (
-    reportWindow,
-    reportName,
-    pdfUrl,
-    barcodeValue,
-    reportCode,
-    reportToken
-  ) => {
-    const safeReportName = sanitizePdfFileName(reportName)
-    const safeBarcode = sanitizePdfFileName(barcodeValue || 'Barkodsuz')
-    const pdfFileName = `${safeReportName}_${safeBarcode}.pdf`
-
-    const pdfFileUrl =
-      `${makePdfProxyUrl(pdfUrl, reportCode, reportToken)}&filename=${encodeURIComponent(pdfFileName)}`
-
-    if (!reportWindow) {
-      window.location.href = pdfFileUrl
-      return
-    }
-
-    reportWindow.document.open()
-    reportWindow.document.write(`
-      <!doctype html>
-      <html lang="${language}" dir="${isArabic ? 'rtl' : 'ltr'}">
-        <head>
-          <title>${escapeHtml(reportName)}</title>
-          <meta name="viewport" content="width=device-width, initial-scale=1.0">
-          <style>
-            * { box-sizing: border-box; }
-
-            body {
-              margin: 0;
-              min-height: 100vh;
-              font-family: Arial, sans-serif;
-              background: #ffffff;
-              color: #111827;
-              display: flex;
-              align-items: center;
-              justify-content: center;
-              padding: 20px;
-            }
-
-            .box {
-              width: 100%;
-              max-width: 430px;
-              background: white;
-              border: 1px solid #e5e7eb;
-              border-radius: 22px;
-              padding: 24px;
-              box-shadow: 0 18px 50px rgba(17, 24, 39, 0.14);
-              text-align: center;
-            }
-
-            .badge {
-              display: inline-block;
-              margin-bottom: 12px;
-              padding: 8px 12px;
-              border-radius: 999px;
-              background: #f3f4f6;
-              color: #17324d;
-              font-size: 12px;
-              font-weight: 900;
-            }
-
-            h2 {
-              margin: 0 0 8px;
-              font-size: 22px;
-              color: #17324d;
-            }
-
-            p {
-              margin: 0 0 20px;
-              color: #6b7280;
-              line-height: 1.45;
-              word-break: break-word;
-            }
-
-            button,
-            a {
-              display: block;
-              width: 100%;
-              margin-top: 12px;
-              padding: 15px;
-              border: none;
-              border-radius: 15px;
-              color: white;
-              font-size: 16px;
-              font-weight: 900;
-              text-decoration: none;
-              cursor: pointer;
-            }
-
-            .openBtn { background: #17324d; }
-            .shareBtn { background: #0f766e; }
-            .closeBtn { background: #b91c1c; }
-
-            .status {
-              min-height: 20px;
-              margin-top: 14px;
-              font-weight: 900;
-              color: #b91c1c;
-              line-height: 1.4;
-            }
-          </style>
-        </head>
-
-        <body>
-          <div class="box">
-            <span class="badge">PDF</span>
-            <h2>${escapeHtml(reportName)}</h2>
-            <p>${escapeHtml(pdfFileName)}</p>
-
-            <a class="openBtn" href="${pdfFileUrl}" target="_blank" rel="noopener">
-              ${escapeHtml(t.openPdf)}
-            </a>
-
-            <button id="shareBtn" class="shareBtn">
-              ${escapeHtml(t.sharePdf)}
-            </button>
-
-            <button id="closeBtn" class="closeBtn">
-              ${escapeHtml(t.close)}
-            </button>
-
-            <div id="status" class="status"></div>
-          </div>
-
-          <script>
-            const pdfFileUrl = ${JSON.stringify(pdfFileUrl)}
-            const pdfFileName = ${JSON.stringify(pdfFileName)}
-            const reportName = ${JSON.stringify(reportName)}
-            const pdfPreparing = ${JSON.stringify(t.pdfPreparing)}
-            const pdfFetchFailed = ${JSON.stringify(t.pdfFetchFailed)}
-            const shareFailed = ${JSON.stringify(t.shareFailed)}
-            const shareNotSupported = ${JSON.stringify(t.shareNotSupported)}
-
-            const shareBtn = document.getElementById('shareBtn')
-            const closeBtn = document.getElementById('closeBtn')
-            const statusEl = document.getElementById('status')
-
-            shareBtn.addEventListener('click', async () => {
-              try {
-                statusEl.textContent = pdfPreparing
-
-                const response = await fetch(pdfFileUrl)
-
-                if (!response.ok) {
-                  throw new Error(pdfFetchFailed + ' HTTP ' + response.status)
-                }
-
-                const blob = await response.blob()
-                const file = new File([blob], pdfFileName, {
-                  type: 'application/pdf'
-                })
-
-                if (navigator.canShare && navigator.canShare({ files: [file] })) {
-                  await navigator.share({
-                    title: reportName,
-                    text: pdfFileName,
-                    files: [file]
-                  })
-
-                  statusEl.textContent = ''
-                } else if (navigator.share) {
-                  await navigator.share({
-                    title: reportName,
-                    text: pdfFileName,
-                    url: pdfFileUrl
-                  })
-
-                  statusEl.textContent = ''
-                } else {
-                  statusEl.textContent = shareNotSupported
-                }
-              } catch (err) {
-                statusEl.textContent = err.message || shareFailed
-              }
-            })
-
-            closeBtn.addEventListener('click', () => {
-              window.close()
-            })
-          </script>
-        </body>
-      </html>
-    `)
-    reportWindow.document.close()
-  }
-
-  useEffect(() => {
-    setBarcodeHistory(loadBarcodeHistory())
-  }, [])
-
   useEffect(() => {
     return () => {
       stopScanner()
@@ -1498,6 +1157,8 @@ function App() {
     }
 
     restoreSession()
+    // Oturum geri yükleme yalnızca uygulama ilk açıldığında çalışmalıdır.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   useEffect(() => {
@@ -1549,6 +1210,8 @@ function App() {
     const intervalId = setInterval(checkUserActiveStatus, DEVICE_ACCESS_CHECK_MS)
 
     return () => clearInterval(intervalId)
+    // Kontrol döngüsü yalnızca kullanıcı veya dil değiştiğinde yeniden kurulmalıdır.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userProfile?.id, language])
 
   useEffect(() => {
@@ -1561,11 +1224,17 @@ function App() {
     }
 
     if (Notification.permission === 'granted') {
-      registerPushSubscription(userProfile.id, {
-        forceRenew: false,
-        showMessage: false,
-      })
+      const subscriptionTimer = window.setTimeout(() => {
+        registerPushSubscription(userProfile.id, {
+          forceRenew: false,
+          showMessage: false,
+        })
+      }, 0)
+
+      return () => window.clearTimeout(subscriptionTimer)
     }
+    // Abonelik yenileme yalnızca oturum kullanıcısı değiştiğinde çalışmalıdır.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userProfile?.id])
 
   const improveCameraTrack = async () => {
@@ -1954,7 +1623,7 @@ function App() {
 
       try {
         result = JSON.parse(responseText)
-      } catch (err) {
+      } catch {
         result = {
           error: responseText || 'Unknown error',
         }
@@ -2074,16 +1743,25 @@ function App() {
 
   if (pdfViewerData) {
     return (
-      <PdfViewer
-        pdfUrl={pdfViewerData.pdfUrl}
-        fileName={pdfViewerData.fileName}
-        reportName={pdfViewerData.reportName}
-        reportMeta={pdfViewerData.reportMeta}
-        accessToken={pdfViewerData.accessToken}
-        deviceToken={pdfViewerData.deviceToken}
-        language={language}
-        onClose={() => setPdfViewerData(null)}
-      />
+      <Suspense
+        fallback={
+          <div className="pdfBundleLoading" role="status">
+            <span className="reportProgressRing"></span>
+            <strong>{t.reportPagePreparing}</strong>
+          </div>
+        }
+      >
+        <PdfViewer
+          pdfUrl={pdfViewerData.pdfUrl}
+          fileName={pdfViewerData.fileName}
+          reportName={pdfViewerData.reportName}
+          reportMeta={pdfViewerData.reportMeta}
+          accessToken={pdfViewerData.accessToken}
+          deviceToken={pdfViewerData.deviceToken}
+          language={language}
+          onClose={() => setPdfViewerData(null)}
+        />
+      </Suspense>
     )
   }
 

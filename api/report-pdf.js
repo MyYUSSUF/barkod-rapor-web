@@ -94,7 +94,7 @@ export default async function handler(req, res) {
 
     try {
       pdfUrl = decodeURIComponent(pdfUrl)
-    } catch (err) {
+    } catch {
       // Zaten decode edilmiş olabilir.
     }
 

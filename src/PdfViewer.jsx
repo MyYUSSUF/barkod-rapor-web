@@ -81,6 +81,14 @@ function PdfViewer({
   const pdfBlobRef = useRef(null)
   const activeRenderTaskRef = useRef(null)
   const adaptiveDprLimitRef = useRef(HIGH_QUALITY_DPR_LIMIT)
+  const panStateRef = useRef({
+    active: false,
+    pointerId: null,
+    startX: 0,
+    startY: 0,
+    scrollLeft: 0,
+    scrollTop: 0,
+  })
 
   const [renderVersion, setRenderVersion] = useState(0)
   const [loading, setLoading] = useState(true)
@@ -568,14 +576,16 @@ function PdfViewer({
     destroyCurrentPdf,
     loadPdfBlob,
     renderSinglePage,
-    renderVersion,
     t.loadError,
   ])
 
   useEffect(() => {
-    renderPdf()
+    const renderFrameId = requestAnimationFrame(() => {
+      renderPdf()
+    })
 
     return () => {
+      cancelAnimationFrame(renderFrameId)
       renderIdRef.current += 1
 
       if (activeRenderTaskRef.current) {
@@ -593,7 +603,7 @@ function PdfViewer({
 
       destroyCurrentPdf()
     }
-  }, [destroyCurrentPdf, renderPdf])
+  }, [destroyCurrentPdf, renderPdf, renderVersion])
 
   useEffect(() => {
     const container = containerRef.current
@@ -651,6 +661,98 @@ function PdfViewer({
       )
     }
   }, [pageCount])
+
+  useEffect(() => {
+    const container = containerRef.current
+
+    if (!container || zoomLevel <= MIN_ZOOM_LEVEL || loading) {
+      return undefined
+    }
+
+    const stopPanning = (event) => {
+      const panState = panStateRef.current
+
+      if (!panState.active || event.pointerId !== panState.pointerId) {
+        return
+      }
+
+      panState.active = false
+      panState.pointerId = null
+      container.classList.remove('isPanning')
+
+      if (container.hasPointerCapture?.(event.pointerId)) {
+        container.releasePointerCapture(event.pointerId)
+      }
+    }
+
+    const handlePointerDown = (event) => {
+      if (event.pointerType === 'mouse' && event.button !== 0) {
+        return
+      }
+
+      const canPan =
+        container.scrollWidth > container.clientWidth ||
+        container.scrollHeight > container.clientHeight
+
+      if (!canPan) {
+        return
+      }
+
+      panStateRef.current = {
+        active: true,
+        pointerId: event.pointerId,
+        startX: event.clientX,
+        startY: event.clientY,
+        scrollLeft: container.scrollLeft,
+        scrollTop: container.scrollTop,
+      }
+
+      container.classList.add('isPanning')
+      container.setPointerCapture?.(event.pointerId)
+
+      if (event.cancelable) {
+        event.preventDefault()
+      }
+    }
+
+    const handlePointerMove = (event) => {
+      const panState = panStateRef.current
+
+      if (!panState.active || event.pointerId !== panState.pointerId) {
+        return
+      }
+
+      container.scrollLeft =
+        panState.scrollLeft - (event.clientX - panState.startX)
+      container.scrollTop =
+        panState.scrollTop - (event.clientY - panState.startY)
+
+      if (event.cancelable) {
+        event.preventDefault()
+      }
+    }
+
+    container.addEventListener('pointerdown', handlePointerDown, {
+      passive: false,
+    })
+    container.addEventListener('pointermove', handlePointerMove, {
+      passive: false,
+    })
+    container.addEventListener('pointerup', stopPanning)
+    container.addEventListener('pointercancel', stopPanning)
+    container.addEventListener('lostpointercapture', stopPanning)
+
+    return () => {
+      panStateRef.current.active = false
+      panStateRef.current.pointerId = null
+      container.classList.remove('isPanning')
+      container.removeEventListener('pointerdown', handlePointerDown)
+      container.removeEventListener('pointermove', handlePointerMove)
+      container.removeEventListener('pointerup', stopPanning)
+      container.removeEventListener('pointercancel', stopPanning)
+      container.removeEventListener('lostpointercapture', stopPanning)
+    }
+  }, [loading, zoomLevel])
 
   useEffect(() => {
     let resizeTimer
@@ -934,6 +1036,10 @@ function PdfViewer({
           `pdfViewerContent ${
             loading
               ? 'pdfViewerContentHidden'
+              : ''
+          } ${
+            zoomLevel > MIN_ZOOM_LEVEL
+              ? 'pdfViewerContentZoomed'
               : ''
           }`
         }

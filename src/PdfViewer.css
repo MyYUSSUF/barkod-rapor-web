@@ -128,14 +128,6 @@
   font-size: 24px !important;
 }
 
-.pdfViewerFitButton {
-  background: #475569;
-}
-
-.pdfViewerDownloadButton {
-  background: #1d4ed8;
-}
-
 .pdfViewerTitleArea {
   min-width: 0;
   text-align: center;
@@ -203,14 +195,21 @@
     max(12px, env(safe-area-inset-left, 0px));
   background:
     linear-gradient(180deg, #2b3038 0%, #232932 100%);
-  scroll-behavior: smooth;
+  scroll-behavior: auto;
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
   touch-action: pan-x pan-y pinch-zoom;
   cursor: grab;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
-.pdfViewerContent:active {
+.pdfViewerContentZoomed,
+.pdfViewerContentZoomed canvas {
+  touch-action: none;
+}
+
+.pdfViewerContent.isPanning {
   cursor: grabbing;
 }
 
@@ -234,7 +233,7 @@
 
 .pdfViewerPage canvas {
   display: block;
-  touch-action: pan-x pan-y pinch-zoom;
+  touch-action: inherit;
   max-width: none;
   height: auto;
   background: #ffffff;
