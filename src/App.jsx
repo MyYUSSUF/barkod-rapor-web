@@ -2138,14 +2138,14 @@ function App() {
 
   if (userProfile && screen === 'admin' && userProfile.role === 'admin') {
     return (
-      <div className="page" dir={isArabic ? 'rtl' : 'ltr'}>
-        <div className="card" style={{ maxWidth: '980px' }}>
-          <div className="topBar">
+      <div className="page adminPage" dir={isArabic ? 'rtl' : 'ltr'}>
+        <div className="card adminCard" style={{ maxWidth: '980px' }}>
+          <div className="topBar adminTopBar">
             <img src="/elvan-logo.png" alt="Elvan Dyeing" className="appLogo" />
 
             <button
               type="button"
-              className="clearBarcodeButton"
+              className="clearBarcodeButton adminBackButton"
               onClick={() => setScreen('main')}
             >
               Ana Ekrana Dön
@@ -2250,8 +2250,8 @@ function App() {
               <strong>Cihaz Onayları</strong>
             </div>
 
-            <div style={tableWrapStyle}>
-              <table style={tableStyle}>
+            <div className="adminTableWrap" style={tableWrapStyle}>
+              <table className="adminTable" style={tableStyle}>
                 <thead>
                   <tr>
                     <th style={thStyle}>Kullanıcı</th>
@@ -2266,24 +2266,24 @@ function App() {
                 <tbody>
                   {adminData.devices.map((device) => (
                     <tr key={device.id}>
-                      <td style={tdStyle}>
+                      <td data-label="Kullanıcı" style={tdStyle}>
                         <div>{device.user_name || device.user_email || device.user_id || '-'}</div>
                         {device.user_email &&
                           device.user_email !== device.user_name && (
                             <small className="adminCellDetail">{device.user_email}</small>
                           )}
                       </td>
-                      <td style={tdStyle}>{device.device_name || '-'}</td>
-                      <td style={tdStyle}>{formatDateTime(device.created_at)}</td>
-                      <td style={tdStyle}>{formatDateTime(device.last_seen_at)}</td>
-                      <td style={tdStyle}>
+                      <td data-label="Cihaz" style={tdStyle}>{device.device_name || '-'}</td>
+                      <td data-label="İlk İstek" style={tdStyle}>{formatDateTime(device.created_at)}</td>
+                      <td data-label="Son Görülme" style={tdStyle}>{formatDateTime(device.last_seen_at)}</td>
+                      <td data-label="Durum" style={tdStyle}>
                         {device.status === 'approved'
                           ? 'Onaylı'
                           : device.status === 'pending'
                             ? 'Onay Bekliyor'
                             : 'İptal'}
                       </td>
-                      <td style={tdStyle}>
+                      <td data-label="İşlem" className="adminActionCell" style={tdStyle}>
                         {device.status !== 'approved' && (
                           <button
                             type="button"
@@ -2317,7 +2317,7 @@ function App() {
 
                   {adminData.devices.length === 0 && (
                     <tr>
-                      <td style={tdStyle} colSpan={6}>
+                      <td className="adminEmptyCell" style={tdStyle} colSpan={6}>
                         Kayıtlı cihaz bulunamadı.
                       </td>
                     </tr>
@@ -2332,8 +2332,8 @@ function App() {
               <strong>Kullanıcılar</strong>
             </div>
 
-            <div style={tableWrapStyle}>
-              <table style={tableStyle}>
+            <div className="adminTableWrap" style={tableWrapStyle}>
+              <table className="adminTable" style={tableStyle}>
                 <thead>
                   <tr>
                     <th style={thStyle}>Kullanıcı</th>
@@ -2350,11 +2350,11 @@ function App() {
                 <tbody>
                   {adminData.users.map((user) => (
                     <tr key={user.id}>
-                      <td style={tdStyle}>{user.email}</td>
-                      <td style={tdStyle}>{user.full_name || '-'}</td>
-                      <td style={tdStyle}>{user.role || 'user'}</td>
-                      <td style={tdStyle}>{user.is_active === false ? 'Pasif' : 'Aktif'}</td>
-                      <td style={tdStyle}>
+                      <td data-label="Kullanıcı" style={tdStyle}>{user.email}</td>
+                      <td data-label="Ad Soyad" style={tdStyle}>{user.full_name || '-'}</td>
+                      <td data-label="Rol" style={tdStyle}>{user.role || 'user'}</td>
+                      <td data-label="Durum" style={tdStyle}>{user.is_active === false ? 'Pasif' : 'Aktif'}</td>
+                      <td data-label="Cihazlar" style={tdStyle}>
                         <div>{user.approved_device_count || 0} onaylı</div>
                         {(user.pending_device_count || 0) > 0 && (
                           <small className="adminCellDetail">
@@ -2362,8 +2362,8 @@ function App() {
                           </small>
                         )}
                       </td>
-                      <td style={tdStyle}>{formatDateTime(user.last_device_seen_at)}</td>
-                      <td style={tdStyle}>
+                      <td data-label="Son Cihaz" style={tdStyle}>{formatDateTime(user.last_device_seen_at)}</td>
+                      <td data-label="Rapor Yetkileri" className="adminPermissionCell" style={tdStyle}>
                         <label className="adminPermissionToggle">
                           <input
                             type="checkbox"
@@ -2398,7 +2398,7 @@ function App() {
                           <span>Sevkiyat</span>
                         </label>
                       </td>
-                      <td style={tdStyle}>
+                      <td data-label="İşlem" className="adminActionCell" style={tdStyle}>
                         <button
                           type="button"
                           className="adminSmallButton"
@@ -2428,7 +2428,7 @@ function App() {
 
                   {adminData.users.length === 0 && (
                     <tr>
-                      <td style={tdStyle} colSpan={8}>
+                      <td className="adminEmptyCell" style={tdStyle} colSpan={8}>
                         Kullanıcı bulunamadı.
                       </td>
                     </tr>
@@ -2443,8 +2443,8 @@ function App() {
               <strong>Son Giriş / Çıkış Logları</strong>
             </div>
 
-            <div style={tableWrapStyle}>
-              <table style={tableStyle}>
+            <div className="adminTableWrap" style={tableWrapStyle}>
+              <table className="adminTable adminLogTable" style={tableStyle}>
                 <thead>
                   <tr>
                     <th style={thStyle}>Tarih</th>
@@ -2457,16 +2457,16 @@ function App() {
                 <tbody>
                   {adminData.loginLogs.map((log) => (
                     <tr key={log.id}>
-                      <td style={tdStyle}>{formatDateTime(log.created_at)}</td>
-                      <td style={tdStyle}>{log.user_name || log.user_email || '-'}</td>
-                      <td style={tdStyle}>{log.event_type || '-'}</td>
-                      <td style={tdStyle}>{log.device_name || '-'}</td>
+                      <td data-label="Tarih" style={tdStyle}>{formatDateTime(log.created_at)}</td>
+                      <td data-label="Kullanıcı" style={tdStyle}>{log.user_name || log.user_email || '-'}</td>
+                      <td data-label="İşlem" style={tdStyle}>{log.event_type || '-'}</td>
+                      <td data-label="Cihaz" style={tdStyle}>{log.device_name || '-'}</td>
                     </tr>
                   ))}
 
                   {adminData.loginLogs.length === 0 && (
                     <tr>
-                      <td style={tdStyle} colSpan={4}>
+                      <td className="adminEmptyCell" style={tdStyle} colSpan={4}>
                         Log bulunamadı.
                       </td>
                     </tr>
@@ -2481,8 +2481,8 @@ function App() {
               <strong>Son Rapor Logları</strong>
             </div>
 
-            <div style={tableWrapStyle}>
-              <table style={tableStyle}>
+            <div className="adminTableWrap" style={tableWrapStyle}>
+              <table className="adminTable adminLogTable" style={tableStyle}>
                 <thead>
                   <tr>
                     <th style={thStyle}>Tarih</th>
@@ -2496,17 +2496,17 @@ function App() {
                 <tbody>
                   {adminData.reportLogs.map((log) => (
                     <tr key={log.id}>
-                      <td style={tdStyle}>{formatDateTime(log.created_at)}</td>
-                      <td style={tdStyle}>{log.user_name || log.user_email || '-'}</td>
-                      <td style={tdStyle}>{log.barcode || '-'}</td>
-                      <td style={tdStyle}>{log.report_name || '-'}</td>
-                      <td style={tdStyle}>{log.device_name || '-'}</td>
+                      <td data-label="Tarih" style={tdStyle}>{formatDateTime(log.created_at)}</td>
+                      <td data-label="Kullanıcı" style={tdStyle}>{log.user_name || log.user_email || '-'}</td>
+                      <td data-label="Barkod" style={tdStyle}>{log.barcode || '-'}</td>
+                      <td data-label="Rapor" style={tdStyle}>{log.report_name || '-'}</td>
+                      <td data-label="Cihaz" style={tdStyle}>{log.device_name || '-'}</td>
                     </tr>
                   ))}
 
                   {adminData.reportLogs.length === 0 && (
                     <tr>
-                      <td style={tdStyle} colSpan={5}>
+                      <td className="adminEmptyCell" style={tdStyle} colSpan={5}>
                         Rapor logu bulunamadı.
                       </td>
                     </tr>
