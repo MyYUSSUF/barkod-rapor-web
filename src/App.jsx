@@ -4,6 +4,7 @@ import { isSupabaseConfigured, supabase } from './lib/supabaseClient'
 import './App.css'
 
 const PdfViewer = lazy(() => import('./PdfViewer'))
+const NativePdfViewer = lazy(() => import('./NativePdfViewer'))
 
 const API_BASE_URL =
   window.location.port === '5173'
@@ -1742,6 +1743,7 @@ function App() {
           `${makePdfProxyUrl(pdfUrl, report.code, reportToken)}&filename=${encodeURIComponent(pdfFileName)}`,
         fileName: pdfFileName,
         reportName,
+        reportCode: report.code,
         accessToken,
         deviceToken: getDeviceToken(),
         reportMeta: buildPdfMeta({
@@ -1801,6 +1803,11 @@ function App() {
   const dateRangeDayCount = getDateRangeDayCount(startDate, endDate)
 
   if (pdfViewerData) {
+    const ActivePdfViewer =
+      pdfViewerData.reportCode === 'RAR00036'
+        ? NativePdfViewer
+        : PdfViewer
+
     return (
       <Suspense
         fallback={
@@ -1810,7 +1817,7 @@ function App() {
           </div>
         }
       >
-        <PdfViewer
+        <ActivePdfViewer
           pdfUrl={pdfViewerData.pdfUrl}
           fileName={pdfViewerData.fileName}
           reportName={pdfViewerData.reportName}
