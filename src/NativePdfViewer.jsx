@@ -4,32 +4,62 @@ import './NativePdfViewer.css'
 const TEXTS = {
   tr: {
     close: 'Kapat',
+    share: 'Paylaş',
+    sharing: 'Paylaşılıyor...',
     loading: 'Rapor hazırlanıyor...',
     loadError: 'Rapor görüntülenemedi.',
     invalidPdf: 'Sunucudan geçerli bir PDF gelmedi.',
+    pdfNotReady: 'PDF henüz hazır değil.',
+    shareError: 'PDF paylaşılamadı.',
+    shareNotSupported:
+      'Bu cihaz PDF dosyası paylaşımını desteklemiyor.',
     retry: 'Tekrar Dene',
-    viewerTitle: 'Sevkiyat raporu PDF görüntüleyici',
+    viewerTitle: 'Rapor PDF görüntüleyici',
   },
   en: {
     close: 'Close',
+    share: 'Share',
+    sharing: 'Sharing...',
     loading: 'Preparing report...',
     loadError: 'Report could not be displayed.',
     invalidPdf: 'The server did not return a valid PDF.',
+    pdfNotReady: 'The PDF is not ready yet.',
+    shareError: 'The PDF could not be shared.',
+    shareNotSupported:
+      'This device does not support sharing PDF files.',
     retry: 'Try Again',
-    viewerTitle: 'Shipment report PDF viewer',
+    viewerTitle: 'Report PDF viewer',
   },
   ar: {
     close: 'إغلاق',
+    share: 'مشاركة',
+    sharing: 'جارٍ المشاركة...',
     loading: 'جارٍ تحضير التقرير...',
     loadError: 'تعذر عرض التقرير.',
     invalidPdf: 'لم يرسل الخادم ملف PDF صالحًا.',
+    pdfNotReady: 'ملف PDF غير جاهز بعد.',
+    shareError: 'تعذرت مشاركة ملف PDF.',
+    shareNotSupported:
+      'هذا الجهاز لا يدعم مشاركة ملفات PDF.',
     retry: 'حاول مرة أخرى',
-    viewerTitle: 'عارض تقرير الشحن PDF',
+    viewerTitle: 'عارض التقرير PDF',
   },
+}
+
+function sanitizeFileName(value) {
+  return (
+    String(value || 'rapor.pdf')
+      .trim()
+      .replace(/[\\/:*?"<>|]/g, '_')
+      .replace(/\s+/g, '_')
+      .replace(/_+/g, '_')
+      .replace(/^_+|_+$/g, '') || 'rapor.pdf'
+  )
 }
 
 function NativePdfViewer({
   pdfUrl,
+  fileName,
   reportName,
   reportMeta,
   accessToken,
@@ -38,13 +68,21 @@ function NativePdfViewer({
   onClose,
 }) {
   const objectUrlRef = useRef('')
+  const pdfBlobRef = useRef(null)
   const abortControllerRef = useRef(null)
   const [objectUrl, setObjectUrl] = useState('')
   const [error, setError] = useState('')
+  const [shareError, setShareError] = useState('')
+  const [sharing, setSharing] = useState(false)
   const [loadVersion, setLoadVersion] = useState(0)
 
   const isArabic = language === 'ar'
   const t = TEXTS[language] || TEXTS.tr
+  const finalFileName = sanitizeFileName(
+    fileName?.toLowerCase().endsWith('.pdf')
+      ? fileName
+      : `${fileName || reportName || 'rapor'}.pdf`
+  )
 
   const clearObjectUrl = useCallback(() => {
     if (!objectUrlRef.current) {
@@ -53,6 +91,7 @@ function NativePdfViewer({
 
     URL.revokeObjectURL(objectUrlRef.current)
     objectUrlRef.current = ''
+    pdfBlobRef.current = null
   }, [])
 
   useEffect(() => {
@@ -79,6 +118,7 @@ function NativePdfViewer({
     clearObjectUrl()
     setObjectUrl('')
     setError('')
+    setShareError('')
 
     const loadPdf = async () => {
       try {
@@ -110,6 +150,7 @@ function NativePdfViewer({
         }
 
         objectUrlRef.current = nextObjectUrl
+        pdfBlobRef.current = blob
         setObjectUrl(nextObjectUrl)
       } catch (loadError) {
         if (
@@ -153,6 +194,50 @@ function NativePdfViewer({
     setLoadVersion((value) => value + 1)
   }
 
+  const sharePdf = async () => {
+    setShareError('')
+
+    const blob = pdfBlobRef.current
+
+    if (!blob) {
+      setShareError(t.pdfNotReady)
+      return
+    }
+
+    if (
+      typeof navigator.share !== 'function' ||
+      typeof navigator.canShare !== 'function'
+    ) {
+      setShareError(t.shareNotSupported)
+      return
+    }
+
+    const file = new File([blob], finalFileName, {
+      type: 'application/pdf',
+    })
+
+    if (!navigator.canShare({ files: [file] })) {
+      setShareError(t.shareNotSupported)
+      return
+    }
+
+    setSharing(true)
+
+    try {
+      await navigator.share({
+        files: [file],
+        title: reportName || finalFileName,
+      })
+    } catch (shareFailure) {
+      if (shareFailure?.name !== 'AbortError') {
+        console.error('PDF paylaşım hatası:', shareFailure)
+        setShareError(t.shareError)
+      }
+    } finally {
+      setSharing(false)
+    }
+  }
+
   return (
     <div
       className="nativePdfOverlay"
@@ -172,13 +257,31 @@ function NativePdfViewer({
           {reportMeta ? <span>{reportMeta}</span> : null}
         </div>
 
-        <span
-          className="nativePdfHeaderSpacer"
-          aria-hidden="true"
-        />
+        <button
+          type="button"
+          className="nativePdfShareButton"
+          onClick={sharePdf}
+          disabled={!objectUrl || sharing}
+          aria-label={sharing ? t.sharing : t.share}
+        >
+          {sharing ? t.sharing : t.share}
+        </button>
       </header>
 
       <main className="nativePdfContent">
+        {shareError ? (
+          <div className="nativePdfActionMessage" role="alert">
+            <span>{shareError}</span>
+            <button
+              type="button"
+              onClick={() => setShareError('')}
+              aria-label={t.close}
+            >
+              ×
+            </button>
+          </div>
+        ) : null}
+
         {!objectUrl && !error ? (
           <div
             className="nativePdfStatus"
@@ -203,7 +306,7 @@ function NativePdfViewer({
         {objectUrl ? (
           <iframe
             className="nativePdfFrame"
-            src={objectUrl}
+            src={`${objectUrl}#page=1&view=Fit`}
             title={t.viewerTitle}
           />
         ) : null}

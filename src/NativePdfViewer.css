@@ -24,7 +24,7 @@
     7px
     max(10px, env(safe-area-inset-left, 0px));
   display: grid;
-  grid-template-columns: minmax(72px, auto) minmax(0, 1fr) minmax(72px, auto);
+  grid-template-columns: 88px minmax(0, 1fr) 88px;
   align-items: center;
   gap: 8px;
   background: #17212b;
@@ -33,6 +33,7 @@
 }
 
 .nativePdfCloseButton,
+.nativePdfShareButton,
 .nativePdfError button {
   min-height: 42px;
   border: 0;
@@ -51,7 +52,25 @@
   background: #a51d25;
 }
 
+.nativePdfShareButton {
+  width: 88px;
+  justify-self: end;
+  padding-inline: 7px;
+  color: #ffffff;
+  background: #0f766e;
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nativePdfShareButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .nativePdfCloseButton:active,
+.nativePdfShareButton:active,
 .nativePdfError button:active {
   transform: translateY(1px);
 }
@@ -85,10 +104,6 @@
   font-weight: 700;
 }
 
-.nativePdfHeaderSpacer {
-  width: 72px;
-}
-
 .nativePdfContent {
   position: relative;
   flex: 1 1 auto;
@@ -104,6 +119,45 @@
   height: 100%;
   border: 0;
   background: #ffffff;
+}
+
+.nativePdfActionMessage {
+  position: absolute;
+  z-index: 3;
+  top: 10px;
+  left: 50%;
+  width: min(92%, 520px);
+  min-height: 44px;
+  transform: translateX(-50%);
+  padding: 10px 42px 10px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  background: #fff1f2;
+  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.24);
+  color: #991b1b;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.35;
+  text-align: center;
+}
+
+.nativePdfActionMessage button {
+  position: absolute;
+  top: 50%;
+  right: 7px;
+  width: 30px;
+  height: 30px;
+  transform: translateY(-50%);
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: #991b1b;
+  font: inherit;
+  font-size: 22px;
+  cursor: pointer;
 }
 
 .nativePdfStatus {
@@ -148,12 +202,17 @@
 
 @media (max-width: 520px) {
   .nativePdfHeader {
-    grid-template-columns: 72px minmax(0, 1fr) 72px;
+    grid-template-columns: 76px minmax(0, 1fr) 84px;
   }
 
   .nativePdfCloseButton {
-    width: 72px;
+    width: 76px;
     padding-inline: 8px;
+  }
+
+  .nativePdfShareButton {
+    width: 84px;
+    font-size: 11px;
   }
 
   .nativePdfTitle strong {
