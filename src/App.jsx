@@ -21,11 +21,11 @@ const APP_LOG_VERSION = 'web-v1.18'
 
 const SHIPMENT_CUSTOMERS = [
   {
-    code: '61001',
+    code: '61002',
     name: 'Rubyred (Amreya)',
   },
   {
-    code: '61002',
+    code: '61001',
     name: 'Rubyred (Borg)',
   },
   {
