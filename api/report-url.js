@@ -7,6 +7,11 @@ import {
 const BASE_URL = 'http://repx.elvandyeing.com'
 const ENDPOINT = `${BASE_URL}/RepxService/vxC_RepxWebService.asmx`
 const WSDL_URL = `${ENDPOINT}?WSDL`
+const SHIPMENT_CUSTOMER_CODES = new Set([
+  '61001',
+  '61002',
+  'M000172',
+])
 
 let cachedTargetNs = null
 
@@ -271,6 +276,13 @@ export default async function handler(req, res) {
 
     if (isShipmentReport && (!isNotBlank(startDate) || !isNotBlank(endDate))) {
       return res.status(400).json({ error: 'Başlangıç ve bitiş tarihi zorunludur.' })
+    }
+
+    if (
+      isShipmentReport &&
+      !SHIPMENT_CUSTOMER_CODES.has(String(customerCode || '').trim())
+    ) {
+      return res.status(400).json({ error: 'Geçerli bir müşteri seçilmelidir.' })
     }
 
     const pdfUrl = await getReportPdfUrl(reportCode, {

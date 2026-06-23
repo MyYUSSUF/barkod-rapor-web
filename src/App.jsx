@@ -19,6 +19,21 @@ const DEVICE_ACCESS_CHECK_MS = 10000
 const APP_VERSION = 'v1.18'
 const APP_LOG_VERSION = 'web-v1.18'
 
+const SHIPMENT_CUSTOMERS = [
+  {
+    code: '61001',
+    name: 'Rubyred (Amreya)',
+  },
+  {
+    code: '61002',
+    name: 'Rubyred (Borg)',
+  },
+  {
+    code: 'M000172',
+    name: 'Tema',
+  },
+]
+
 const REPORTS = [
   {
     code: 'RAR00032',
@@ -51,7 +66,6 @@ const REPORTS = [
     icon: 'shipment',
     requiresBarcode: false,
     requiresDateRange: true,
-    customerCode: '61002',
     permissionKey: 'can_view_shipment_report',
   },
 ]
@@ -99,6 +113,10 @@ const LANGUAGES = {
     dateRangeRequired: 'Başlangıç tarihi ve bitiş tarihi zorunludur.',
     dateRangeInvalid: 'Başlangıç tarihi bitiş tarihinden sonra olamaz.',
     selectDateRange: 'Sevkiyat Takip için tarih aralığını seçin.',
+    customer: 'Müşteri',
+    selectCustomer: 'Müşteri seçin',
+    customerRequired: 'Sevkiyat raporu için müşteri seçilmelidir.',
+    selectedCustomer: 'Seçilen müşteri',
     reportPreparing: 'hazırlanıyor...',
     reportRequestTimeout: 'Rapor hazırlanması çok uzun sürdü. Lütfen tekrar deneyin.',
     sessionMissing: 'Oturum bulunamadı. Tekrar giriş yap.',
@@ -171,6 +189,10 @@ const LANGUAGES = {
     dateRangeRequired: 'Start date and end date are required.',
     dateRangeInvalid: 'Start date cannot be after end date.',
     selectDateRange: 'Select a date range for Shipment Tracking.',
+    customer: 'Customer',
+    selectCustomer: 'Select customer',
+    customerRequired: 'A customer must be selected for the shipment report.',
+    selectedCustomer: 'Selected customer',
     reportPreparing: 'is preparing...',
     reportRequestTimeout: 'Report preparation took too long. Please try again.',
     sessionMissing: 'Session not found. Please login again.',
@@ -243,6 +265,10 @@ const LANGUAGES = {
     dateRangeRequired: 'تاريخ البداية وتاريخ النهاية مطلوبان.',
     dateRangeInvalid: 'تاريخ البداية لا يمكن أن يكون بعد تاريخ النهاية.',
     selectDateRange: 'اختر نطاق التاريخ لتتبع الشحنات.',
+    customer: 'العميل',
+    selectCustomer: 'اختر العميل',
+    customerRequired: 'يجب اختيار العميل لتقرير الشحن.',
+    selectedCustomer: 'العميل المحدد',
     reportPreparing: 'قيد التحضير...',
     reportRequestTimeout: 'استغرق تجهيز التقرير وقتًا طويلاً. يرجى المحاولة مرة أخرى.',
     sessionMissing: 'لم يتم العثور على الجلسة. سجّل الدخول مرة أخرى.',
@@ -490,6 +516,7 @@ function ReportIcon({ type }) {
 function App() {
   const videoRef = useRef(null)
   const shipmentDateBoxRef = useRef(null)
+  const shipmentCustomerSelectRef = useRef(null)
   const shipmentStartInputRef = useRef(null)
   const scannerControlsRef = useRef(null)
   const scannerResultHandledRef = useRef(false)
@@ -512,6 +539,7 @@ function App() {
   const [barcode, setBarcode] = useState('')
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
+  const [shipmentCustomerCode, setShipmentCustomerCode] = useState('')
   const [barcodeHistory, setBarcodeHistory] = useState(loadBarcodeHistory)
   const [message, setMessage] = useState('')
   const [messageKind, setMessageKind] = useState('error')
@@ -608,6 +636,7 @@ function App() {
     setBarcode('')
     setStartDate('')
     setEndDate('')
+    setShipmentCustomerCode('')
     setDateRangeReportCode('')
     setSelectedReportCode('')
     setDisplayName('')
@@ -676,14 +705,19 @@ function App() {
     clearUserMessage()
   }
 
-  const focusShipmentDateRange = () => {
+  const focusShipmentControls = (target = 'date') => {
     window.setTimeout(() => {
       shipmentDateBoxRef.current?.scrollIntoView({
         behavior: 'smooth',
         block: 'center',
       })
 
-      shipmentStartInputRef.current?.focus({
+      const targetElement =
+        target === 'customer'
+          ? shipmentCustomerSelectRef.current
+          : shipmentStartInputRef.current
+
+      targetElement?.focus({
         preventScroll: true,
       })
     }, 80)
@@ -741,9 +775,15 @@ function App() {
     return Math.floor((toTime - fromTime) / 86400000) + 1
   }
 
-  const buildPdfMeta = ({ requiresDateRange, cleanStartDate, cleanEndDate, cleanBarcode }) => {
+  const buildPdfMeta = ({
+    requiresDateRange,
+    cleanStartDate,
+    cleanEndDate,
+    cleanBarcode,
+    customerName,
+  }) => {
     if (requiresDateRange) {
-      return `${t.startDate}: ${formatDisplayDate(cleanStartDate)} · ${t.endDate}: ${formatDisplayDate(cleanEndDate)}`
+      return `${t.customer}: ${customerName} · ${t.startDate}: ${formatDisplayDate(cleanStartDate)} · ${t.endDate}: ${formatDisplayDate(cleanEndDate)}`
     }
 
     return `${t.barcode}: ${cleanBarcode || 'Barkodsuz'}`
@@ -1541,6 +1581,11 @@ function App() {
     const requiresDateRange = report.requiresDateRange === true
     const cleanStartDate = startDate.trim()
     const cleanEndDate = endDate.trim()
+    const selectedShipmentCustomer = requiresDateRange
+      ? SHIPMENT_CUSTOMERS.find(
+          (customer) => customer.code === shipmentCustomerCode
+        )
+      : null
 
     if (
       report.permissionKey &&
@@ -1560,6 +1605,17 @@ function App() {
       setDateRangeReportCode(report.code)
     }
 
+    if (requiresDateRange && !selectedShipmentCustomer) {
+      showUserMessage(
+        dateRangeReportCode !== report.code
+          ? t.selectCustomer
+          : t.customerRequired,
+        dateRangeReportCode !== report.code ? 'info' : 'warning'
+      )
+      focusShipmentControls('customer')
+      return
+    }
+
     if (requiresDateRange && (!cleanStartDate || !cleanEndDate)) {
       showUserMessage(
         dateRangeReportCode !== report.code
@@ -1567,13 +1623,13 @@ function App() {
           : t.dateRangeRequired,
         dateRangeReportCode !== report.code ? 'info' : 'warning'
       )
-      focusShipmentDateRange()
+      focusShipmentControls('date')
       return
     }
 
     if (requiresDateRange && isInvalidDateRange(cleanStartDate, cleanEndDate)) {
       showUserMessage(t.dateRangeInvalid, 'warning')
-      focusShipmentDateRange()
+      focusShipmentControls('date')
       return
     }
 
@@ -1614,7 +1670,9 @@ function App() {
           requiresBarcode,
           startDate: requiresDateRange ? cleanStartDate : undefined,
           endDate: requiresDateRange ? cleanEndDate : undefined,
-          customerCode: requiresDateRange ? report.customerCode : undefined,
+          customerCode: requiresDateRange
+            ? selectedShipmentCustomer.code
+            : undefined,
         }),
       })
 
@@ -1674,7 +1732,7 @@ function App() {
       const safeReportName = sanitizePdfFileName(reportName)
       const safeBarcode = sanitizePdfFileName(
         requiresDateRange
-          ? `${cleanStartDate}_${cleanEndDate}`
+          ? `${selectedShipmentCustomer.name}_${cleanStartDate}_${cleanEndDate}`
           : (cleanBarcode || 'Barkodsuz')
       )
       const pdfFileName = `${safeReportName}_${safeBarcode}.pdf`
@@ -1691,6 +1749,7 @@ function App() {
           cleanStartDate,
           cleanEndDate,
           cleanBarcode,
+          customerName: selectedShipmentCustomer?.name || '',
         }),
       })
 
@@ -2474,6 +2533,24 @@ function App() {
 
                 {report.requiresDateRange && dateRangeReportCode === report.code && (
                   <div className="dateRangeBox" ref={shipmentDateBoxRef}>
+                    <div className="shipmentCustomerField">
+                      <label htmlFor="shipmentCustomer">{t.customer}</label>
+                      <select
+                        id="shipmentCustomer"
+                        ref={shipmentCustomerSelectRef}
+                        value={shipmentCustomerCode}
+                        onChange={(e) => setShipmentCustomerCode(e.target.value)}
+                        disabled={loading}
+                      >
+                        <option value="">{t.selectCustomer}</option>
+                        {SHIPMENT_CUSTOMERS.map((customer) => (
+                          <option key={customer.code} value={customer.code}>
+                            {customer.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
                     <div className="dateInputGrid">
                       <div>
                         <label htmlFor="shipmentStartDate">{t.startDate}</label>
@@ -2508,6 +2585,21 @@ function App() {
                             <> · {dateRangeDayCount} {t.selectedDayCount}</>
                           )}
                         </span>
+                        {shipmentCustomerCode && (
+                          <>
+                            <strong className="shipmentCustomerSummaryLabel">
+                              {t.selectedCustomer}
+                            </strong>
+                            <span>
+                              {
+                                SHIPMENT_CUSTOMERS.find(
+                                  (customer) =>
+                                    customer.code === shipmentCustomerCode
+                                )?.name
+                              }
+                            </span>
+                          </>
+                        )}
                       </div>
                     )}
                   </div>
