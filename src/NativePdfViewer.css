@@ -8,7 +8,7 @@
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  background: #252a31;
+  background: #ffffff;
   color: #ffffff;
   overscroll-behavior: none;
 }
@@ -117,7 +117,7 @@
     max(12px, env(safe-area-inset-right, 0px))
     calc(72px + env(safe-area-inset-bottom, 0px))
     max(12px, env(safe-area-inset-left, 0px));
-  background: #363b42;
+  background: #ffffff;
   overscroll-behavior: contain;
   touch-action: pan-x pan-y;
   -webkit-overflow-scrolling: touch;
@@ -144,7 +144,8 @@
   flex: 0 0 auto;
   overflow: hidden;
   background: #ffffff;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+  border: 1px solid #d7dce2;
+  box-shadow: 0 2px 7px rgba(15, 23, 42, 0.14);
 }
 
 .nativePdfPageShell .react-pdf__Page,

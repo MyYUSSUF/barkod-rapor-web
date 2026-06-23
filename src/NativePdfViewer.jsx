@@ -16,6 +16,8 @@ const MIN_ZOOM = 1
 const MAX_ZOOM = 3
 const ZOOM_STEP = 0.25
 const PAGE_GAP = 14
+const MAX_RENDER_DENSITY = 2
+const ZOOM_RENDER_DELAY_MS = 180
 
 const TEXTS = {
   tr: {
@@ -101,62 +103,24 @@ function getFittedPageSize(pageSize, viewportSize, zoom) {
 }
 
 function PdfPage({
-  container,
   devicePixelRatio,
-  onVisibilityChange,
   pageNumber,
   pageSize,
+  shouldRender,
   texts,
   viewportSize,
+  renderZoom,
   zoom,
 }) {
-  const shellRef = useRef(null)
-  const [shouldRender, setShouldRender] = useState(pageNumber === 1)
   const fittedSize = getFittedPageSize(pageSize, viewportSize, zoom)
-
-  useEffect(() => {
-    const shell = shellRef.current
-
-    if (!shell || !container || typeof IntersectionObserver === 'undefined') {
-      setShouldRender(true)
-      return undefined
-    }
-
-    const renderObserver = new IntersectionObserver(
-      (entries) => {
-        const entry = entries[0]
-        setShouldRender(entry.isIntersecting)
-      },
-      {
-        root: container,
-        rootMargin: '100% 0px 100% 0px',
-        threshold: 0,
-      }
-    )
-
-    const visibilityObserver = new IntersectionObserver(
-      (entries) => {
-        const entry = entries[0]
-        onVisibilityChange(pageNumber, entry.intersectionRatio)
-      },
-      {
-        root: container,
-        threshold: [0, 0.15, 0.5, 0.85],
-      }
-    )
-
-    renderObserver.observe(shell)
-    visibilityObserver.observe(shell)
-
-    return () => {
-      renderObserver.disconnect()
-      visibilityObserver.disconnect()
-    }
-  }, [container, onVisibilityChange, pageNumber])
+  const renderSize = getFittedPageSize(
+    pageSize,
+    viewportSize,
+    renderZoom
+  )
 
   return (
     <section
-      ref={shellRef}
       className="nativePdfPageShell"
       data-page-number={pageNumber}
       style={{
@@ -168,7 +132,7 @@ function PdfPage({
       {shouldRender ? (
         <Page
           pageNumber={pageNumber}
-          width={fittedSize.width}
+          width={renderSize.width}
           devicePixelRatio={devicePixelRatio}
           renderAnnotationLayer={false}
           renderTextLayer={false}
@@ -204,7 +168,6 @@ function NativePdfViewer({
   const pdfDocumentRef = useRef(null)
   const pdfBlobRef = useRef(null)
   const abortControllerRef = useRef(null)
-  const visibilityRef = useRef(new Map())
   const pinchRef = useRef({
     active: false,
     startDistance: 0,
@@ -224,6 +187,7 @@ function NativePdfViewer({
     height: window.innerHeight,
   })
   const [zoom, setZoom] = useState(1)
+  const [renderZoom, setRenderZoom] = useState(1)
   const [currentPage, setCurrentPage] = useState(1)
   const [error, setError] = useState('')
   const [shareError, setShareError] = useState('')
@@ -239,14 +203,22 @@ function NativePdfViewer({
       : `${fileName || reportName || 'rapor'}.pdf`
   )
   const devicePixelRatio = Math.min(
-    2.5,
-    Math.max(1, window.devicePixelRatio || 1)
+    Math.max(1, window.devicePixelRatio || 1),
+    Math.max(1, MAX_RENDER_DENSITY / renderZoom)
   )
 
   const handleContainerRef = useCallback((node) => {
     containerRef.current = node
     setContainerElement(node)
   }, [])
+
+  useEffect(() => {
+    const renderTimer = window.setTimeout(() => {
+      setRenderZoom(zoom)
+    }, ZOOM_RENDER_DELAY_MS)
+
+    return () => window.clearTimeout(renderTimer)
+  }, [zoom])
 
   useEffect(() => {
     const previousDocumentOverflow =
@@ -302,8 +274,8 @@ function NativePdfViewer({
     setPdfBlob(null)
     setPageSizes([])
     setZoom(1)
+    setRenderZoom(1)
     setCurrentPage(1)
-    visibilityRef.current.clear()
     setError('')
     setShareError('')
 
@@ -385,23 +357,73 @@ function NativePdfViewer({
     setError(documentError.message || t.loadError)
   }, [t.loadError])
 
-  const handleVisibilityChange = useCallback((pageNumber, ratio) => {
-    visibilityRef.current.set(pageNumber, ratio)
+  const handlePageScroll = useCallback(() => {
+    const container = containerRef.current
+    const pages = pagesRef.current
 
-    let visiblePage = 1
-    let highestRatio = -1
-
-    visibilityRef.current.forEach((pageRatio, number) => {
-      if (pageRatio > highestRatio) {
-        highestRatio = pageRatio
-        visiblePage = number
-      }
-    })
-
-    if (highestRatio > 0) {
-      setCurrentPage(visiblePage)
+    if (!container || !pages) {
+      return
     }
-  }, [])
+
+    const containerRect = container.getBoundingClientRect()
+    const viewportCenter =
+      containerRect.top + container.clientHeight / 2
+    let closestPage = 1
+    let closestDistance = Number.POSITIVE_INFINITY
+
+    if (
+      numPages > 0 &&
+      container.scrollTop >=
+        container.scrollHeight - container.clientHeight - 4
+    ) {
+      setCurrentPage(numPages)
+      return
+    }
+
+    pages
+      .querySelectorAll('.nativePdfPageShell')
+      .forEach((pageElement) => {
+        const pageRect = pageElement.getBoundingClientRect()
+        const pageCenter = pageRect.top + pageRect.height / 2
+        const distance = Math.abs(pageCenter - viewportCenter)
+
+        if (distance < closestDistance) {
+          closestDistance = distance
+          closestPage =
+            Number(pageElement.dataset.pageNumber) || 1
+        }
+      })
+
+    setCurrentPage((value) =>
+      value === closestPage ? value : closestPage
+    )
+  }, [numPages])
+
+  useEffect(() => {
+    const frame = requestAnimationFrame(handlePageScroll)
+    return () => cancelAnimationFrame(frame)
+  }, [handlePageScroll, pageSizes, viewportSize, zoom])
+
+  useEffect(() => {
+    const container = containerRef.current
+
+    if (!container) {
+      return undefined
+    }
+
+    container.addEventListener('scroll', handlePageScroll, {
+      passive: true,
+    })
+    const trackingTimer = window.setInterval(
+      handlePageScroll,
+      400
+    )
+
+    return () => {
+      container.removeEventListener('scroll', handlePageScroll)
+      window.clearInterval(trackingTimer)
+    }
+  }, [containerElement, handlePageScroll])
 
   const applyZoom = useCallback((nextZoom, anchor = null) => {
     const container = containerRef.current
@@ -432,9 +454,10 @@ function NativePdfViewer({
           0,
           contentY * scaleRatio - centerY
         )
+        handlePageScroll()
       })
     })
-  }, [zoom])
+  }, [handlePageScroll, zoom])
 
   useEffect(() => {
     const container = containerRef.current
@@ -647,6 +670,8 @@ function NativePdfViewer({
       <main
         ref={handleContainerRef}
         className="nativePdfContent"
+        tabIndex={0}
+        aria-label={reportName || 'PDF'}
       >
         {shareError ? (
           <div className="nativePdfActionMessage" role="alert">
@@ -677,11 +702,14 @@ function NativePdfViewer({
               {pageSizes.map((pageSize, index) => (
                 <PdfPage
                   key={index + 1}
-                  container={containerElement}
                   devicePixelRatio={devicePixelRatio}
-                  onVisibilityChange={handleVisibilityChange}
                   pageNumber={index + 1}
                   pageSize={pageSize}
+                  renderZoom={renderZoom}
+                  shouldRender={
+                    Math.abs(index + 1 - currentPage) <=
+                    (zoom <= 1.25 ? 2 : 1)
+                  }
                   texts={t}
                   viewportSize={viewportSize}
                   zoom={zoom}

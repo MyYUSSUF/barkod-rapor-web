@@ -1,5 +1,4 @@
 import { Fragment, lazy, Suspense, useEffect, useRef, useState } from 'react'
-import { BrowserCodeReader, BrowserMultiFormatReader } from '@zxing/browser'
 import { isSupabaseConfigured, supabase } from './lib/supabaseClient'
 import './App.css'
 
@@ -1359,6 +1358,10 @@ function App() {
           return
         }
 
+        const {
+          BrowserCodeReader,
+          BrowserMultiFormatReader,
+        } = await import('@zxing/browser')
         const codeReader = new BrowserMultiFormatReader()
 
         const handleScanResult = (result, error, controlsFromCallback) => {
