@@ -15,7 +15,7 @@
 
 .nativePdfHeader {
   position: relative;
-  z-index: 2;
+  z-index: 5;
   flex: 0 0 auto;
   min-height: calc(58px + env(safe-area-inset-top, 0px));
   padding:
@@ -64,14 +64,16 @@
   white-space: nowrap;
 }
 
-.nativePdfShareButton:disabled {
-  opacity: 0.5;
+.nativePdfShareButton:disabled,
+.nativePdfZoomControls button:disabled {
+  opacity: 0.45;
   cursor: not-allowed;
 }
 
 .nativePdfCloseButton:active,
 .nativePdfShareButton:active,
-.nativePdfError button:active {
+.nativePdfError button:active,
+.nativePdfZoomControls button:active {
   transform: translateY(1px);
 }
 
@@ -80,7 +82,7 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 3px;
+  gap: 2px;
   text-align: center;
 }
 
@@ -100,7 +102,7 @@
 
 .nativePdfTitle span {
   color: #cbd5e1;
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 700;
 }
 
@@ -109,22 +111,126 @@
   flex: 1 1 auto;
   min-width: 0;
   min-height: 0;
-  overflow: hidden;
-  background: #d7d9dc;
+  overflow: auto;
+  padding:
+    12px
+    max(12px, env(safe-area-inset-right, 0px))
+    calc(72px + env(safe-area-inset-bottom, 0px))
+    max(12px, env(safe-area-inset-left, 0px));
+  background: #363b42;
+  overscroll-behavior: contain;
+  touch-action: pan-x pan-y;
+  -webkit-overflow-scrolling: touch;
 }
 
-.nativePdfFrame {
-  display: block;
-  width: 100%;
-  height: 100%;
-  border: 0;
+.nativePdfContent .react-pdf__Document {
+  width: max-content;
+  min-width: 100%;
+  min-height: 100%;
+}
+
+.nativePdfDocument {
+  width: max-content;
+  min-width: 100%;
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  transition: none;
+}
+
+.nativePdfPageShell {
+  position: relative;
+  flex: 0 0 auto;
+  overflow: hidden;
   background: #ffffff;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+}
+
+.nativePdfPageShell .react-pdf__Page,
+.nativePdfPageShell .react-pdf__Page__canvas {
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
+}
+
+.nativePdfPageSpinner {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 28px;
+  height: 28px;
+  margin: -14px 0 0 -14px;
+  border: 3px solid #d1d5db;
+  border-top-color: #0f766e;
+  border-radius: 50%;
+  animation: nativePdfSpin 0.8s linear infinite;
+}
+
+.nativePdfPageError {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  color: #991b1b;
+  font-size: 12px;
+  font-weight: 800;
+  text-align: center;
+}
+
+.nativePdfZoomControls {
+  position: fixed;
+  z-index: 6;
+  left: 50%;
+  bottom: max(12px, env(safe-area-inset-bottom, 0px));
+  height: 48px;
+  transform: translateX(-50%);
+  display: grid;
+  grid-template-columns: 44px 60px 44px auto;
+  align-items: center;
+  gap: 4px;
+  padding: 3px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 8px;
+  background: rgba(23, 33, 43, 0.96);
+  box-shadow: 0 5px 18px rgba(0, 0, 0, 0.34);
+}
+
+.nativePdfZoomControls button {
+  min-width: 44px;
+  height: 40px;
+  border: 0;
+  border-radius: 6px;
+  padding: 0;
+  background: #334155;
+  color: #ffffff;
+  font: inherit;
+  font-size: 22px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.nativePdfZoomControls span {
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 800;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.nativePdfZoomControls .nativePdfFitButton {
+  width: auto;
+  padding-inline: 10px;
+  background: #0f766e;
+  font-size: 12px;
 }
 
 .nativePdfActionMessage {
-  position: absolute;
-  z-index: 3;
-  top: 10px;
+  position: fixed;
+  z-index: 7;
+  top: calc(72px + env(safe-area-inset-top, 0px));
   left: 50%;
   width: min(92%, 520px);
   min-height: 44px;
@@ -163,7 +269,7 @@
 .nativePdfStatus {
   position: absolute;
   inset: 0;
-  z-index: 1;
+  z-index: 4;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -218,10 +324,6 @@
   .nativePdfTitle strong {
     font-size: 13px;
   }
-
-  .nativePdfTitle span {
-    font-size: 10px;
-  }
 }
 
 @keyframes nativePdfSpin {
@@ -231,7 +333,8 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .nativePdfSpinner {
+  .nativePdfSpinner,
+  .nativePdfPageSpinner {
     animation-duration: 1.6s;
   }
 }

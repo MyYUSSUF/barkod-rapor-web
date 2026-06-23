@@ -1,5 +1,21 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from 'react'
+import { Document, Page, pdfjs } from 'react-pdf'
 import './NativePdfViewer.css'
+
+pdfjs.GlobalWorkerOptions.workerSrc = new URL(
+  'pdfjs-dist/build/pdf.worker.min.mjs',
+  import.meta.url
+).toString()
+
+const MIN_ZOOM = 1
+const MAX_ZOOM = 3
+const ZOOM_STEP = 0.25
+const PAGE_GAP = 14
 
 const TEXTS = {
   tr: {
@@ -14,7 +30,10 @@ const TEXTS = {
     shareNotSupported:
       'Bu cihaz PDF dosyası paylaşımını desteklemiyor.',
     retry: 'Tekrar Dene',
-    viewerTitle: 'Rapor PDF görüntüleyici',
+    page: 'Sayfa',
+    fit: 'Sığdır',
+    zoomControls: 'PDF yakınlaştırma araçları',
+    pageError: 'Bu sayfa görüntülenemedi.',
   },
   en: {
     close: 'Close',
@@ -28,7 +47,10 @@ const TEXTS = {
     shareNotSupported:
       'This device does not support sharing PDF files.',
     retry: 'Try Again',
-    viewerTitle: 'Report PDF viewer',
+    page: 'Page',
+    fit: 'Fit',
+    zoomControls: 'PDF zoom controls',
+    pageError: 'This page could not be displayed.',
   },
   ar: {
     close: 'إغلاق',
@@ -42,8 +64,15 @@ const TEXTS = {
     shareNotSupported:
       'هذا الجهاز لا يدعم مشاركة ملفات PDF.',
     retry: 'حاول مرة أخرى',
-    viewerTitle: 'عارض التقرير PDF',
+    page: 'صفحة',
+    fit: 'ملاءمة',
+    zoomControls: 'أدوات تكبير PDF',
+    pageError: 'تعذر عرض هذه الصفحة.',
   },
+}
+
+function clampZoom(value) {
+  return Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, value))
 }
 
 function sanitizeFileName(value) {
@@ -57,6 +86,109 @@ function sanitizeFileName(value) {
   )
 }
 
+function getFittedPageSize(pageSize, viewportSize, zoom) {
+  const availableWidth = Math.max(1, viewportSize.width - 4)
+  const availableHeight = Math.max(1, viewportSize.height - 4)
+  const fitScale = Math.min(
+    availableWidth / pageSize.width,
+    availableHeight / pageSize.height
+  )
+
+  return {
+    width: Math.max(1, Math.floor(pageSize.width * fitScale * zoom)),
+    height: Math.max(1, Math.floor(pageSize.height * fitScale * zoom)),
+  }
+}
+
+function PdfPage({
+  container,
+  devicePixelRatio,
+  onVisibilityChange,
+  pageNumber,
+  pageSize,
+  texts,
+  viewportSize,
+  zoom,
+}) {
+  const shellRef = useRef(null)
+  const [shouldRender, setShouldRender] = useState(pageNumber === 1)
+  const fittedSize = getFittedPageSize(pageSize, viewportSize, zoom)
+
+  useEffect(() => {
+    const shell = shellRef.current
+
+    if (!shell || !container || typeof IntersectionObserver === 'undefined') {
+      setShouldRender(true)
+      return undefined
+    }
+
+    const renderObserver = new IntersectionObserver(
+      (entries) => {
+        const entry = entries[0]
+        setShouldRender(entry.isIntersecting)
+      },
+      {
+        root: container,
+        rootMargin: '100% 0px 100% 0px',
+        threshold: 0,
+      }
+    )
+
+    const visibilityObserver = new IntersectionObserver(
+      (entries) => {
+        const entry = entries[0]
+        onVisibilityChange(pageNumber, entry.intersectionRatio)
+      },
+      {
+        root: container,
+        threshold: [0, 0.15, 0.5, 0.85],
+      }
+    )
+
+    renderObserver.observe(shell)
+    visibilityObserver.observe(shell)
+
+    return () => {
+      renderObserver.disconnect()
+      visibilityObserver.disconnect()
+    }
+  }, [container, onVisibilityChange, pageNumber])
+
+  return (
+    <section
+      ref={shellRef}
+      className="nativePdfPageShell"
+      data-page-number={pageNumber}
+      style={{
+        width: `${fittedSize.width}px`,
+        height: `${fittedSize.height}px`,
+      }}
+      aria-label={`${texts.page} ${pageNumber}`}
+    >
+      {shouldRender ? (
+        <Page
+          pageNumber={pageNumber}
+          width={fittedSize.width}
+          devicePixelRatio={devicePixelRatio}
+          renderAnnotationLayer={false}
+          renderTextLayer={false}
+          loading={
+            <span
+              className="nativePdfPageSpinner"
+              aria-label={`${texts.page} ${pageNumber}`}
+            />
+          }
+          error={
+            <span className="nativePdfPageError">
+              {texts.pageError}
+            </span>
+          }
+        />
+      ) : null}
+    </section>
+  )
+}
+
 function NativePdfViewer({
   pdfUrl,
   fileName,
@@ -67,10 +199,32 @@ function NativePdfViewer({
   language = 'tr',
   onClose,
 }) {
-  const objectUrlRef = useRef('')
+  const containerRef = useRef(null)
+  const pagesRef = useRef(null)
+  const pdfDocumentRef = useRef(null)
   const pdfBlobRef = useRef(null)
   const abortControllerRef = useRef(null)
-  const [objectUrl, setObjectUrl] = useState('')
+  const visibilityRef = useRef(new Map())
+  const pinchRef = useRef({
+    active: false,
+    startDistance: 0,
+    startZoom: 1,
+    targetZoom: 1,
+    centerX: 0,
+    centerY: 0,
+    contentX: 0,
+    contentY: 0,
+  })
+
+  const [pdfBlob, setPdfBlob] = useState(null)
+  const [containerElement, setContainerElement] = useState(null)
+  const [pageSizes, setPageSizes] = useState([])
+  const [viewportSize, setViewportSize] = useState({
+    width: window.innerWidth,
+    height: window.innerHeight,
+  })
+  const [zoom, setZoom] = useState(1)
+  const [currentPage, setCurrentPage] = useState(1)
   const [error, setError] = useState('')
   const [shareError, setShareError] = useState('')
   const [sharing, setSharing] = useState(false)
@@ -78,20 +232,20 @@ function NativePdfViewer({
 
   const isArabic = language === 'ar'
   const t = TEXTS[language] || TEXTS.tr
+  const numPages = pageSizes.length
   const finalFileName = sanitizeFileName(
     fileName?.toLowerCase().endsWith('.pdf')
       ? fileName
       : `${fileName || reportName || 'rapor'}.pdf`
   )
+  const devicePixelRatio = Math.min(
+    2.5,
+    Math.max(1, window.devicePixelRatio || 1)
+  )
 
-  const clearObjectUrl = useCallback(() => {
-    if (!objectUrlRef.current) {
-      return
-    }
-
-    URL.revokeObjectURL(objectUrlRef.current)
-    objectUrlRef.current = ''
-    pdfBlobRef.current = null
+  const handleContainerRef = useCallback((node) => {
+    containerRef.current = node
+    setContainerElement(node)
   }, [])
 
   useEffect(() => {
@@ -110,13 +264,46 @@ function NativePdfViewer({
   }, [])
 
   useEffect(() => {
+    const container = containerRef.current
+
+    if (!container || typeof ResizeObserver === 'undefined') {
+      return undefined
+    }
+
+    const updateSize = (entry = null) => {
+      const contentRect = entry?.contentRect
+
+      setViewportSize({
+        width:
+          contentRect?.width ??
+          Math.max(1, container.clientWidth - 24),
+        height:
+          contentRect?.height ??
+          Math.max(1, container.clientHeight - 96),
+      })
+    }
+
+    const observer = new ResizeObserver((entries) => {
+      updateSize(entries[0])
+    })
+    observer.observe(container)
+    updateSize()
+
+    return () => observer.disconnect()
+  }, [])
+
+  useEffect(() => {
     let active = true
     const abortController = new AbortController()
 
     abortControllerRef.current?.abort()
     abortControllerRef.current = abortController
-    clearObjectUrl()
-    setObjectUrl('')
+    pdfBlobRef.current = null
+    setPdfBlob(null)
+    setPageSizes([])
+    setZoom(1)
+    setCurrentPage(1)
+    visibilityRef.current.clear()
     setError('')
     setShareError('')
 
@@ -142,21 +329,14 @@ function NativePdfViewer({
           throw new Error(t.invalidPdf)
         }
 
-        const nextObjectUrl = URL.createObjectURL(blob)
-
         if (!active) {
-          URL.revokeObjectURL(nextObjectUrl)
           return
         }
 
-        objectUrlRef.current = nextObjectUrl
         pdfBlobRef.current = blob
-        setObjectUrl(nextObjectUrl)
+        setPdfBlob(blob)
       } catch (loadError) {
-        if (
-          !active ||
-          loadError.name === 'AbortError'
-        ) {
+        if (!active || loadError.name === 'AbortError') {
           return
         }
 
@@ -169,11 +349,10 @@ function NativePdfViewer({
     return () => {
       active = false
       abortController.abort()
-      clearObjectUrl()
+      pdfBlobRef.current = null
     }
   }, [
     accessToken,
-    clearObjectUrl,
     deviceToken,
     loadVersion,
     pdfUrl,
@@ -181,9 +360,201 @@ function NativePdfViewer({
     t.loadError,
   ])
 
+  const handleDocumentLoad = useCallback(async (pdf) => {
+    try {
+      const sizes = await Promise.all(
+        Array.from({ length: pdf.numPages }, async (_, index) => {
+          const page = await pdf.getPage(index + 1)
+          const viewport = page.getViewport({ scale: 1 })
+
+          return {
+            width: viewport.width,
+            height: viewport.height,
+          }
+        })
+      )
+
+      pdfDocumentRef.current = pdf
+      setPageSizes(sizes)
+    } catch (documentError) {
+      setError(documentError.message || t.loadError)
+    }
+  }, [t.loadError])
+
+  const handleDocumentError = useCallback((documentError) => {
+    setError(documentError.message || t.loadError)
+  }, [t.loadError])
+
+  const handleVisibilityChange = useCallback((pageNumber, ratio) => {
+    visibilityRef.current.set(pageNumber, ratio)
+
+    let visiblePage = 1
+    let highestRatio = -1
+
+    visibilityRef.current.forEach((pageRatio, number) => {
+      if (pageRatio > highestRatio) {
+        highestRatio = pageRatio
+        visiblePage = number
+      }
+    })
+
+    if (highestRatio > 0) {
+      setCurrentPage(visiblePage)
+    }
+  }, [])
+
+  const applyZoom = useCallback((nextZoom, anchor = null) => {
+    const container = containerRef.current
+    const currentZoom = zoom
+    const targetZoom = clampZoom(nextZoom)
+
+    if (!container || targetZoom === currentZoom) {
+      return
+    }
+
+    const centerX = anchor?.centerX ?? container.clientWidth / 2
+    const centerY = anchor?.centerY ?? container.clientHeight / 2
+    const contentX =
+      anchor?.contentX ?? container.scrollLeft + centerX
+    const contentY =
+      anchor?.contentY ?? container.scrollTop + centerY
+    const scaleRatio = targetZoom / currentZoom
+
+    setZoom(targetZoom)
+
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        container.scrollLeft = Math.max(
+          0,
+          contentX * scaleRatio - centerX
+        )
+        container.scrollTop = Math.max(
+          0,
+          contentY * scaleRatio - centerY
+        )
+      })
+    })
+  }, [zoom])
+
+  useEffect(() => {
+    const container = containerRef.current
+    const pages = pagesRef.current
+
+    if (!container || !pages) {
+      return undefined
+    }
+
+    const getDistance = (touches) => {
+      return Math.hypot(
+        touches[1].clientX - touches[0].clientX,
+        touches[1].clientY - touches[0].clientY
+      )
+    }
+
+    const getCenter = (touches) => {
+      const rect = container.getBoundingClientRect()
+
+      return {
+        x:
+          (touches[0].clientX + touches[1].clientX) / 2 -
+          rect.left,
+        y:
+          (touches[0].clientY + touches[1].clientY) / 2 -
+          rect.top,
+      }
+    }
+
+    const handleTouchStart = (event) => {
+      if (event.touches.length !== 2) {
+        return
+      }
+
+      const center = getCenter(event.touches)
+
+      pinchRef.current = {
+        active: true,
+        startDistance: getDistance(event.touches),
+        startZoom: zoom,
+        targetZoom: zoom,
+        centerX: center.x,
+        centerY: center.y,
+        contentX: container.scrollLeft + center.x,
+        contentY: container.scrollTop + center.y,
+      }
+    }
+
+    const handleTouchMove = (event) => {
+      const pinch = pinchRef.current
+
+      if (!pinch.active || event.touches.length !== 2) {
+        return
+      }
+
+      event.preventDefault()
+
+      const nextZoom = clampZoom(
+        pinch.startZoom *
+          (getDistance(event.touches) / pinch.startDistance)
+      )
+
+      pinch.targetZoom = nextZoom
+
+      if (pagesRef.current) {
+        const previewScale = nextZoom / pinch.startZoom
+        pagesRef.current.style.transform =
+          `scale(${previewScale})`
+        pagesRef.current.style.transformOrigin =
+          `${pinch.contentX}px ${pinch.contentY}px`
+      }
+    }
+
+    const handleTouchEnd = () => {
+      const pinch = pinchRef.current
+
+      if (!pinch.active) {
+        return
+      }
+
+      if (pagesRef.current) {
+        pagesRef.current.style.transform = ''
+        pagesRef.current.style.transformOrigin = ''
+      }
+
+      pinch.active = false
+      applyZoom(pinch.targetZoom, {
+        centerX: pinch.centerX,
+        centerY: pinch.centerY,
+        contentX: pinch.contentX,
+        contentY: pinch.contentY,
+      })
+    }
+
+    container.addEventListener('touchstart', handleTouchStart, {
+      passive: true,
+    })
+    container.addEventListener('touchmove', handleTouchMove, {
+      passive: false,
+    })
+    container.addEventListener('touchend', handleTouchEnd, {
+      passive: true,
+    })
+    container.addEventListener('touchcancel', handleTouchEnd, {
+      passive: true,
+    })
+
+    return () => {
+      container.removeEventListener('touchstart', handleTouchStart)
+      container.removeEventListener('touchmove', handleTouchMove)
+      container.removeEventListener('touchend', handleTouchEnd)
+      container.removeEventListener('touchcancel', handleTouchEnd)
+    }
+  }, [applyZoom, containerElement, numPages, zoom])
+
   const handleClose = () => {
     abortControllerRef.current?.abort()
-    clearObjectUrl()
+    pdfDocumentRef.current?.destroy?.()
+    pdfDocumentRef.current = null
+    pdfBlobRef.current = null
 
     if (typeof onClose === 'function') {
       onClose()
@@ -255,20 +626,28 @@ function NativePdfViewer({
         <div className="nativePdfTitle">
           <strong>{reportName}</strong>
           {reportMeta ? <span>{reportMeta}</span> : null}
+          {numPages > 0 ? (
+            <span>
+              {t.page} {currentPage} / {numPages}
+            </span>
+          ) : null}
         </div>
 
         <button
           type="button"
           className="nativePdfShareButton"
           onClick={sharePdf}
-          disabled={!objectUrl || sharing}
+          disabled={!pdfBlob || sharing}
           aria-label={sharing ? t.sharing : t.share}
         >
           {sharing ? t.sharing : t.share}
         </button>
       </header>
 
-      <main className="nativePdfContent">
+      <main
+        ref={handleContainerRef}
+        className="nativePdfContent"
+      >
         {shareError ? (
           <div className="nativePdfActionMessage" role="alert">
             <span>{shareError}</span>
@@ -282,7 +661,37 @@ function NativePdfViewer({
           </div>
         ) : null}
 
-        {!objectUrl && !error ? (
+        {pdfBlob && !error ? (
+          <Document
+            file={pdfBlob}
+            onLoadSuccess={handleDocumentLoad}
+            onLoadError={handleDocumentError}
+            loading={null}
+            error={null}
+          >
+            <div
+              ref={pagesRef}
+              className="nativePdfDocument"
+              style={{ gap: `${PAGE_GAP}px` }}
+            >
+              {pageSizes.map((pageSize, index) => (
+                <PdfPage
+                  key={index + 1}
+                  container={containerElement}
+                  devicePixelRatio={devicePixelRatio}
+                  onVisibilityChange={handleVisibilityChange}
+                  pageNumber={index + 1}
+                  pageSize={pageSize}
+                  texts={t}
+                  viewportSize={viewportSize}
+                  zoom={zoom}
+                />
+              ))}
+            </div>
+          </Document>
+        ) : null}
+
+        {(!pdfBlob || pageSizes.length === 0) && !error ? (
           <div
             className="nativePdfStatus"
             role="status"
@@ -303,12 +712,36 @@ function NativePdfViewer({
           </div>
         ) : null}
 
-        {objectUrl ? (
-          <iframe
-            className="nativePdfFrame"
-            src={`${objectUrl}#page=1&view=Fit`}
-            title={t.viewerTitle}
-          />
+        {numPages > 0 ? (
+          <div
+            className="nativePdfZoomControls"
+            aria-label={t.zoomControls}
+          >
+            <button
+              type="button"
+              onClick={() => applyZoom(zoom - ZOOM_STEP)}
+              disabled={zoom <= MIN_ZOOM}
+              aria-label="Zoom out"
+            >
+              −
+            </button>
+            <span>{Math.round(zoom * 100)}%</span>
+            <button
+              type="button"
+              onClick={() => applyZoom(zoom + ZOOM_STEP)}
+              disabled={zoom >= MAX_ZOOM}
+              aria-label="Zoom in"
+            >
+              +
+            </button>
+            <button
+              type="button"
+              className="nativePdfFitButton"
+              onClick={() => applyZoom(1)}
+            >
+              {t.fit}
+            </button>
+          </div>
         ) : null}
       </main>
     </div>
