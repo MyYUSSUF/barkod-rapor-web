@@ -1293,6 +1293,15 @@ function App() {
       const capabilities = track.getCapabilities()
       const advanced = []
 
+      if (capabilities.zoom && track.getSettings) {
+        const settings = track.getSettings()
+        const minZoom = capabilities.zoom.min
+
+        if (typeof minZoom === 'number' && settings.zoom !== minZoom) {
+          advanced.push({ zoom: minZoom })
+        }
+      }
+
       if (
         capabilities.focusMode &&
         Array.isArray(capabilities.focusMode) &&
@@ -1314,16 +1323,20 @@ function App() {
       audio: false,
       video: {
         facingMode: { ideal: 'environment' },
+        aspectRatio: { ideal: 16 / 9 },
         width: { ideal: 1280 },
         height: { ideal: 720 },
+        resizeMode: { ideal: 'none' },
       },
     },
     {
       audio: false,
       video: {
         facingMode: { ideal: 'environment' },
+        aspectRatio: { ideal: 4 / 3 },
         width: { ideal: 640 },
         height: { ideal: 480 },
+        resizeMode: { ideal: 'none' },
       },
     },
     {
