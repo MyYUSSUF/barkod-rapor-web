@@ -554,11 +554,19 @@ function App() {
 
   const [adminLoading, setAdminLoading] = useState(false)
   const [adminMessage, setAdminMessage] = useState('')
-  const [expandedAdminDeviceId, setExpandedAdminDeviceId] = useState('')
   const [expandedAdminUserId, setExpandedAdminUserId] = useState('')
   const [expandedAdminLogId, setExpandedAdminLogId] = useState('')
   const [adminLogView, setAdminLogView] = useState('login')
   const [adminLogLimit, setAdminLogLimit] = useState(12)
+  const [newAdminUser, setNewAdminUser] = useState({
+    username: '',
+    full_name: '',
+    password: '',
+    role: 'user',
+    can_view_fixing_report: false,
+    can_view_shipment_report: false,
+  })
+  const [creatingAdminUser, setCreatingAdminUser] = useState(false)
   const [adminData, setAdminData] = useState({
     users: [],
     devices: [],
@@ -1038,6 +1046,51 @@ function App() {
     } catch (err) {
       setAdminMessage(err.message)
     }
+  }
+
+  const createAdminUser = async (e) => {
+    e.preventDefault()
+    setAdminMessage('')
+    setCreatingAdminUser(true)
+
+    try {
+      const accessToken = await getAccessToken()
+
+      if (!accessToken) {
+        setAdminMessage(t.sessionMissing)
+        setCreatingAdminUser(false)
+        return
+      }
+
+      const response = await fetch(`${API_BASE_URL}/api/admin-panel`, {
+        method: 'POST',
+        headers: makeAuthorizedHeaders(accessToken, {
+          'Content-Type': 'application/json',
+        }),
+        body: JSON.stringify(newAdminUser),
+      })
+
+      const result = await response.json().catch(() => ({}))
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Kullanıcı oluşturulamadı.')
+      }
+
+      setNewAdminUser({
+        username: '',
+        full_name: '',
+        password: '',
+        role: 'user',
+        can_view_fixing_report: false,
+        can_view_shipment_report: false,
+      })
+      setAdminMessage('Kullanıcı eklendi.')
+      await loadAdminPanelData()
+    } catch (err) {
+      setAdminMessage(err.message)
+    }
+
+    setCreatingAdminUser(false)
   }
 
   const updateAdminDevice = async (deviceId, action) => {
@@ -1795,21 +1848,6 @@ function App() {
     )
   })
 
-  const sortedAdminDevices = [...adminData.devices].sort((left, right) => {
-    const statusOrder = {
-      pending: 0,
-      approved: 1,
-      revoked: 2,
-    }
-    const statusDifference =
-      (statusOrder[left.status] ?? 3) - (statusOrder[right.status] ?? 3)
-
-    if (statusDifference !== 0) {
-      return statusDifference
-    }
-
-    return new Date(right.last_seen_at || 0) - new Date(left.last_seen_at || 0)
-  })
   const selectedAdminLogs =
     adminLogView === 'login' ? adminData.loginLogs : adminData.reportLogs
   const visibleAdminLogs = selectedAdminLogs.slice(0, adminLogLimit)
@@ -1983,121 +2021,135 @@ function App() {
 
           <div className="historyBox">
             <div className="historyHeader">
-              <strong>Cihaz Onayları</strong>
-              <span className="adminSectionCount">{adminData.devices.length}</span>
+              <strong>Kullanıcı Ekle</strong>
             </div>
 
-            <div className="adminAccordionList">
-              {sortedAdminDevices.map((device) => {
-                const isExpanded = expandedAdminDeviceId === device.id
-                const userName =
-                  device.user_name || device.user_email || device.user_id || '-'
-                const statusLabel =
-                  device.status === 'approved'
-                    ? 'Onaylı'
-                    : device.status === 'pending'
-                      ? 'Onay Bekliyor'
-                      : 'Reddedildi'
+            <form className="adminCreateUserForm" onSubmit={createAdminUser}>
+              <div className="adminFormGrid">
+                <label>
+                  Kullanıcı Adı
+                  <input
+                    type="text"
+                    value={newAdminUser.username}
+                    onChange={(e) =>
+                      setNewAdminUser((current) => ({
+                        ...current,
+                        username: e.target.value,
+                      }))
+                    }
+                    placeholder="ornek: ahmet"
+                    autoComplete="off"
+                    disabled={creatingAdminUser}
+                  />
+                </label>
 
-                return (
-                  <article
-                    key={device.id}
-                    className={`adminAccordionCard${isExpanded ? ' isOpen' : ''}`}
+                <label>
+                  Ad Soyad
+                  <input
+                    type="text"
+                    value={newAdminUser.full_name}
+                    onChange={(e) =>
+                      setNewAdminUser((current) => ({
+                        ...current,
+                        full_name: e.target.value,
+                      }))
+                    }
+                    placeholder="Kullanıcı adı"
+                    autoComplete="off"
+                    disabled={creatingAdminUser}
+                  />
+                </label>
+
+                <label>
+                  Şifre
+                  <input
+                    type="password"
+                    value={newAdminUser.password}
+                    onChange={(e) =>
+                      setNewAdminUser((current) => ({
+                        ...current,
+                        password: e.target.value,
+                      }))
+                    }
+                    placeholder="En az 6 karakter"
+                    autoComplete="new-password"
+                    disabled={creatingAdminUser}
+                  />
+                </label>
+
+                <label>
+                  Rol
+                  <select
+                    value={newAdminUser.role}
+                    onChange={(e) =>
+                      setNewAdminUser((current) => ({
+                        ...current,
+                        role: e.target.value,
+                      }))
+                    }
+                    disabled={creatingAdminUser}
                   >
-                    <button
-                      type="button"
-                      className="adminAccordionHeader"
-                      aria-expanded={isExpanded}
-                      onClick={() =>
-                        setExpandedAdminDeviceId(isExpanded ? '' : device.id)
-                      }
-                    >
-                      <span className="adminAccordionIdentity">
-                        <strong>{userName}</strong>
-                        {device.user_email && device.user_email !== userName && (
-                          <small>{device.user_email}</small>
-                        )}
-                      </span>
+                    <option value="user">Kullanıcı</option>
+                    <option value="admin">Admin</option>
+                  </select>
+                </label>
+              </div>
 
-                      <span className="adminAccordionMeta">
-                        <span className={`adminStatusBadge is-${device.status}`}>
-                          {statusLabel}
-                        </span>
-                        <span className="adminChevron" aria-hidden="true"></span>
-                      </span>
-                    </button>
+              <div className="adminPermissionPanel">
+                <strong>Başlangıç Rapor Yetkileri</strong>
+                <label className="adminPermissionToggle">
+                  <input
+                    type="checkbox"
+                    checked={
+                      newAdminUser.role === 'admin' ||
+                      newAdminUser.can_view_fixing_report
+                    }
+                    disabled={creatingAdminUser || newAdminUser.role === 'admin'}
+                    onChange={(e) =>
+                      setNewAdminUser((current) => ({
+                        ...current,
+                        can_view_fixing_report: e.target.checked,
+                      }))
+                    }
+                  />
+                  <span>Fikse Bekleyenler</span>
+                </label>
 
-                    {isExpanded && (
-                      <div className="adminAccordionBody">
-                        <dl className="adminDetailGrid">
-                          <div>
-                            <dt>Cihaz</dt>
-                            <dd>{device.device_name || '-'}</dd>
-                          </div>
-                          <div>
-                            <dt>İlk İstek</dt>
-                            <dd>{formatDateTime(device.created_at)}</dd>
-                          </div>
-                          <div>
-                            <dt>Son Görülme</dt>
-                            <dd>{formatDateTime(device.last_seen_at)}</dd>
-                          </div>
-                        </dl>
+                <label className="adminPermissionToggle">
+                  <input
+                    type="checkbox"
+                    checked={
+                      newAdminUser.role === 'admin' ||
+                      newAdminUser.can_view_shipment_report
+                    }
+                    disabled={creatingAdminUser || newAdminUser.role === 'admin'}
+                    onChange={(e) =>
+                      setNewAdminUser((current) => ({
+                        ...current,
+                        can_view_shipment_report: e.target.checked,
+                      }))
+                    }
+                  />
+                  <span>Sevkiyat Takip</span>
+                </label>
+                {newAdminUser.role === 'admin' && (
+                  <small>Admin kullanıcıları tüm raporları görebilir.</small>
+                )}
+              </div>
 
-                        <div className="adminCardActions">
-                          {device.status !== 'approved' && (
-                            <button
-                              type="button"
-                              className="adminSmallButton adminApproveButton"
-                              onClick={() =>
-                                updateAdminDevice(device.id, 'approve_device')
-                              }
-                            >
-                              {device.status === 'revoked'
-                                ? 'Tekrar Onayla'
-                                : 'Onayla'}
-                            </button>
-                          )}
-
-                          {device.status === 'pending' && (
-                            <button
-                              type="button"
-                              className="adminSmallButton adminRejectButton"
-                              onClick={() =>
-                                updateAdminDevice(device.id, 'revoke_device')
-                              }
-                            >
-                              Reddet
-                            </button>
-                          )}
-
-                          {device.status === 'approved' && (
-                            <button
-                              type="button"
-                              className="adminSmallButton adminRejectButton"
-                              onClick={() =>
-                                updateAdminDevice(device.id, 'revoke_device')
-                              }
-                            >
-                              İzni Kaldır
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    )}
-                  </article>
-                )
-              })}
-
-              {adminData.devices.length === 0 && (
-                <p className="adminEmptyState">Kayıtlı cihaz bulunamadı.</p>
-              )}
-            </div>
+              <button
+                type="submit"
+                className="mainButton"
+                disabled={creatingAdminUser}
+              >
+                {creatingAdminUser ? 'Ekleniyor...' : 'Kullanıcı Ekle'}
+              </button>
+            </form>
           </div>
 
           <div className="historyBox">
             <div className="historyHeader">
-              <strong>Kullanıcılar</strong>
+              <strong>Kullanıcı ve Cihaz Yönetimi</strong>
               <span className="adminSectionCount">{adminData.users.length}</span>
             </div>
 
@@ -2160,6 +2212,81 @@ function App() {
                             <dd>{formatDateTime(user.last_device_seen_at)}</dd>
                           </div>
                         </dl>
+
+                        <div className="adminUserDevices">
+                          <strong>Cihazlar</strong>
+
+                          {(user.devices || []).length === 0 && (
+                            <p className="adminEmptyState">Bu kullanıcı için cihaz kaydı yok.</p>
+                          )}
+
+                          {(user.devices || []).map((device) => {
+                            const statusLabel =
+                              device.status === 'approved'
+                                ? 'Onaylı'
+                                : device.status === 'pending'
+                                  ? 'Onay Bekliyor'
+                                  : 'Reddedildi'
+
+                            return (
+                              <div key={device.id} className="adminDeviceRow">
+                                <div className="adminDeviceInfo">
+                                  <strong>{device.device_name || 'Bilinmeyen cihaz'}</strong>
+                                  <small>
+                                    İlk istek: {formatDateTime(device.created_at)}
+                                  </small>
+                                  <small>
+                                    Son görülme: {formatDateTime(device.last_seen_at)}
+                                  </small>
+                                </div>
+
+                                <div className="adminDeviceControls">
+                                  <span className={`adminStatusBadge is-${device.status}`}>
+                                    {statusLabel}
+                                  </span>
+
+                                  {device.status !== 'approved' && (
+                                    <button
+                                      type="button"
+                                      className="adminSmallButton adminApproveButton"
+                                      onClick={() =>
+                                        updateAdminDevice(device.id, 'approve_device')
+                                      }
+                                    >
+                                      {device.status === 'revoked'
+                                        ? 'Tekrar Onayla'
+                                        : 'Onayla'}
+                                    </button>
+                                  )}
+
+                                  {device.status === 'pending' && (
+                                    <button
+                                      type="button"
+                                      className="adminSmallButton adminRejectButton"
+                                      onClick={() =>
+                                        updateAdminDevice(device.id, 'revoke_device')
+                                      }
+                                    >
+                                      Reddet
+                                    </button>
+                                  )}
+
+                                  {device.status === 'approved' && (
+                                    <button
+                                      type="button"
+                                      className="adminSmallButton adminRejectButton"
+                                      onClick={() =>
+                                        updateAdminDevice(device.id, 'revoke_device')
+                                      }
+                                    >
+                                      İzni Kaldır
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                            )
+                          })}
+                        </div>
 
                         <div className="adminPermissionPanel">
                           <strong>Rapor Yetkileri</strong>

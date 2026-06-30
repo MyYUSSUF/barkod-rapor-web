@@ -1154,6 +1154,45 @@ form button {
   box-shadow: 0 0 0 4px var(--focus);
 }
 
+.adminCreateUserForm {
+  display: grid;
+  gap: 12px;
+}
+
+.adminFormGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 10px;
+}
+
+.adminFormGrid label {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  color: #17324d;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.adminFormGrid select {
+  width: 100%;
+  min-height: 48px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.adminFormGrid select:focus {
+  border-color: var(--teal);
+  outline: none;
+  box-shadow: 0 0 0 4px var(--focus);
+}
+
 .adminSmallButton {
   min-height: 44px;
   width: auto;
@@ -1412,6 +1451,63 @@ form button {
   border: 1px solid #e2e8f0;
   border-radius: 7px;
   background: #f8fafc;
+}
+
+.adminUserDevices {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 10px;
+  border: 1px solid #dbe2ea;
+  border-radius: 7px;
+  background: #ffffff;
+}
+
+.adminUserDevices > strong {
+  color: #17324d;
+  font-size: 13px;
+}
+
+.adminDeviceRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  padding: 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 7px;
+  background: #f8fafc;
+}
+
+.adminDeviceInfo {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.adminDeviceInfo strong,
+.adminDeviceInfo small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.adminDeviceInfo strong {
+  color: #1e293b;
+  font-size: 13px;
+}
+
+.adminDeviceInfo small {
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.adminDeviceControls {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 7px;
 }
 
 .adminCardActions {
@@ -1799,6 +1895,25 @@ form button {
 
   .adminDetailGrid {
     grid-template-columns: 1fr;
+  }
+
+  .adminFormGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .adminDeviceRow {
+    grid-template-columns: 1fr;
+  }
+
+  .adminDeviceControls {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .adminDeviceControls .adminSmallButton,
+  .adminDeviceControls .adminStatusBadge {
+    width: 100%;
+    justify-content: center;
   }
 
   .adminCardActions {

@@ -55,6 +55,7 @@ function enrichLogs(logs, profileMap) {
 
 function enrichProfiles(profiles, devices) {
   const deviceSummaryMap = new Map()
+  const devicesByUserMap = new Map()
 
   for (const device of devices || []) {
     const summary = deviceSummaryMap.get(device.user_id) || {
@@ -63,6 +64,7 @@ function enrichProfiles(profiles, devices) {
       revoked_device_count: 0,
       last_device_seen_at: null,
     }
+    const userDevices = devicesByUserMap.get(device.user_id) || []
 
     if (device.status === 'approved') summary.approved_device_count += 1
     if (device.status === 'pending') summary.pending_device_count += 1
@@ -76,7 +78,9 @@ function enrichProfiles(profiles, devices) {
       summary.last_device_seen_at = device.last_seen_at
     }
 
+    userDevices.push(device)
     deviceSummaryMap.set(device.user_id, summary)
+    devicesByUserMap.set(device.user_id, userDevices)
   }
 
   return (profiles || []).map((profile) => ({
@@ -87,7 +91,30 @@ function enrichProfiles(profiles, devices) {
       revoked_device_count: 0,
       last_device_seen_at: null,
     }),
+    devices: (devicesByUserMap.get(profile.id) || []).sort((left, right) => {
+      const statusOrder = {
+        pending: 0,
+        approved: 1,
+        revoked: 2,
+      }
+      const statusDifference =
+        (statusOrder[left.status] ?? 3) - (statusOrder[right.status] ?? 3)
+
+      if (statusDifference !== 0) {
+        return statusDifference
+      }
+
+      return new Date(right.last_seen_at || 0) - new Date(left.last_seen_at || 0)
+    }),
   }))
+}
+
+function normalizeUsername(value) {
+  return String(value || '').trim().toLowerCase()
+}
+
+function getEmailFromUsername(username) {
+  return `${username}@app.local`
 }
 
 async function getAdminData(supabaseAdmin) {
@@ -210,6 +237,71 @@ async function updateUser(req, supabaseAdmin, authResult) {
   return data
 }
 
+async function createUser(req, supabaseAdmin) {
+  const body = parseBody(req)
+  const username = normalizeUsername(body.username)
+  const password = String(body.password || '')
+  const fullName = String(body.full_name || '').trim()
+  const role = isNotBlank(body.role) ? String(body.role).trim() : 'user'
+
+  if (!isNotBlank(username)) {
+    throw new Error('Kullanıcı adı eksik.')
+  }
+
+  if (!/^[a-z0-9._-]+$/.test(username)) {
+    throw new Error('Kullanıcı adı sadece harf, rakam, nokta, tire veya alt çizgi içerebilir.')
+  }
+
+  if (password.length < 6) {
+    throw new Error('Şifre en az 6 karakter olmalıdır.')
+  }
+
+  if (!['admin', 'user'].includes(role)) {
+    throw new Error('Rol sadece admin veya user olabilir.')
+  }
+
+  const email = getEmailFromUsername(username)
+  const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
+    email,
+    password,
+    email_confirm: true,
+    user_metadata: {
+      full_name: fullName,
+    },
+  })
+
+  if (authError || !authData?.user?.id) {
+    throw new Error(authError?.message || 'Kullanıcı oluşturulamadı.')
+  }
+
+  const profilePayload = {
+    id: authData.user.id,
+    email,
+    full_name: fullName || username,
+    role,
+    is_active: true,
+    can_view_fixing_report:
+      role === 'admin' ? true : body.can_view_fixing_report === true,
+    can_view_shipment_report:
+      role === 'admin' ? true : body.can_view_shipment_report === true,
+  }
+
+  const { data: profile, error: profileError } = await supabaseAdmin
+    .from('profiles')
+    .upsert(profilePayload, { onConflict: 'id' })
+    .select(
+      'id, email, full_name, role, is_active, can_view_fixing_report, can_view_shipment_report'
+    )
+    .single()
+
+  if (profileError) {
+    await supabaseAdmin.auth.admin.deleteUser(authData.user.id).catch(() => {})
+    throw new Error(profileError.message)
+  }
+
+  return profile
+}
+
 async function updateDevice(req, supabaseAdmin, authResult) {
   const body = parseBody(req)
   const deviceId = body.deviceId
@@ -283,9 +375,9 @@ async function updateDevice(req, supabaseAdmin, authResult) {
 
 export default async function handler(req, res) {
   try {
-    if (!['GET', 'PATCH'].includes(req.method)) {
+    if (!['GET', 'POST', 'PATCH'].includes(req.method)) {
       return res.status(405).json({
-        error: 'Sadece GET ve PATCH desteklenir.',
+        error: 'Sadece GET, POST ve PATCH desteklenir.',
       })
     }
 
@@ -297,6 +389,15 @@ export default async function handler(req, res) {
     if (!authResult.ok) {
       return res.status(authResult.statusCode || 401).json({
         error: authResult.error || 'Yetkisiz istek.',
+      })
+    }
+
+    if (req.method === 'POST') {
+      const newUser = await createUser(req, supabaseAdmin)
+
+      return res.status(201).json({
+        success: true,
+        user: newUser,
       })
     }
 
