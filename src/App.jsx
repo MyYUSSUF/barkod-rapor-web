@@ -2071,7 +2071,7 @@ function App() {
                         password: e.target.value,
                       }))
                     }
-                    placeholder="En az 6 karakter"
+                    placeholder="Şifre"
                     autoComplete="new-password"
                     disabled={creatingAdminUser}
                   />

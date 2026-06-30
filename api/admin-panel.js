@@ -252,8 +252,8 @@ async function createUser(req, supabaseAdmin) {
     throw new Error('Kullanıcı adı sadece harf, rakam, nokta, tire veya alt çizgi içerebilir.')
   }
 
-  if (password.length < 6) {
-    throw new Error('Şifre en az 6 karakter olmalıdır.')
+  if (!isNotBlank(password)) {
+    throw new Error('Şifre eksik.')
   }
 
   if (!['admin', 'user'].includes(role)) {
