@@ -3,6 +3,7 @@ import {
   canProfileViewReport,
   createReportAccessToken,
 } from './_report-access.js'
+import { handleCors } from './_cors.js'
 
 const BASE_URL = 'http://repx.elvandyeing.com'
 const ENDPOINT = `${BASE_URL}/RepxService/vxC_RepxWebService.asmx`
@@ -242,6 +243,10 @@ async function getReportPdfUrl(reportCode, options = {}) {
 }
 
 export default async function handler(req, res) {
+  if (handleCors(req, res)) {
+    return
+  }
+
   try {
     if (req.method !== 'POST') {
       return res.status(405).json({ error: 'Sadece POST isteği desteklenir.' })

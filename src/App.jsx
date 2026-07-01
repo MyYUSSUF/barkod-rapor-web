@@ -4,10 +4,12 @@ import './App.css'
 
 const NativePdfViewer = lazy(() => import('./NativePdfViewer'))
 
+const configuredApiBaseUrl = import.meta.env.VITE_API_BASE_URL?.trim().replace(/\/$/, '')
 const API_BASE_URL =
-  window.location.port === '5173'
+  configuredApiBaseUrl ||
+  (window.location.port === '5173'
     ? `http://${window.location.hostname}:3001`
-    : window.location.origin
+    : window.location.origin)
 
 const HISTORY_KEY = 'barkod_rapor_history'
 const LANGUAGE_KEY = 'barkod_rapor_language'

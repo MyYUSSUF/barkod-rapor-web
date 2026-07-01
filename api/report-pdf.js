@@ -3,6 +3,7 @@ import {
   canProfileViewReport,
   verifyReportAccessToken,
 } from './_report-access.js'
+import { handleCors } from './_cors.js'
 
 const BASE_URL = 'http://repx.elvandyeing.com'
 
@@ -62,6 +63,10 @@ function makeAsciiHeaderFileName(value) {
 }
 
 export default async function handler(req, res) {
+  if (handleCors(req, res)) {
+    return
+  }
+
   try {
     if (req.method !== 'GET') {
       return res.status(405).send('Sadece GET isteği desteklenir.')

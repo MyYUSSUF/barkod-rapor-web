@@ -1,6 +1,7 @@
 import webPush from 'web-push'
 import { createClient } from '@supabase/supabase-js'
 import { verifyApprovedDeviceRequest } from './_device-auth.js'
+import { handleCors } from './_cors.js'
 
 function isNotBlank(value) {
   return value !== null && value !== undefined && String(value).trim() !== ''
@@ -105,6 +106,10 @@ function makeSafeError(sendError) {
 }
 
 export default async function handler(req, res) {
+  if (handleCors(req, res)) {
+    return
+  }
+
   try {
     if (req.method !== 'POST') {
       return res.status(405).json({

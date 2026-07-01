@@ -2,6 +2,7 @@ import {
   requestDeviceAccess,
   verifyApprovedDeviceRequest,
 } from './_device-auth.js'
+import { handleCors } from './_cors.js'
 
 function parseBody(req) {
   if (!req.body) return {}
@@ -15,6 +16,10 @@ function parseBody(req) {
 }
 
 export default async function handler(req, res) {
+  if (handleCors(req, res)) {
+    return
+  }
+
   try {
     if (!['GET', 'POST'].includes(req.method)) {
       return res.status(405).json({
