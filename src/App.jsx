@@ -104,6 +104,7 @@ const LANGUAGES = {
     scannerReady: 'Okutmaya hazır',
     logout: 'Çıkış Yap',
     logoutConfirm: 'Çıkış yapmak istediğinize emin misiniz?',
+    privacyPolicy: 'Gizlilik Politikası',
     usernamePasswordRequired: 'Kullanıcı adı ve şifre zorunludur.',
     loginFailed: 'Giriş başarısız',
     profileNotFound: 'Profil bilgisi bulunamadı.',
@@ -180,6 +181,7 @@ const LANGUAGES = {
     scannerReady: 'Ready to scan',
     logout: 'Logout',
     logoutConfirm: 'Are you sure you want to logout?',
+    privacyPolicy: 'Privacy Policy',
     usernamePasswordRequired: 'Username and password are required.',
     loginFailed: 'Login failed',
     profileNotFound: 'Profile information not found.',
@@ -256,6 +258,7 @@ const LANGUAGES = {
     scannerReady: 'جاهز للمسح',
     logout: 'تسجيل الخروج',
     logoutConfirm: 'هل أنت متأكد أنك تريد تسجيل الخروج؟',
+    privacyPolicy: 'سياسة الخصوصية',
     usernamePasswordRequired: 'اسم المستخدم وكلمة المرور مطلوبان.',
     loginFailed: 'فشل تسجيل الدخول',
     profileNotFound: 'لم يتم العثور على بيانات الملف الشخصي.',
@@ -511,6 +514,17 @@ function ReportIcon({ type }) {
         {REPORT_ICON_PATHS[type] || REPORT_ICON_PATHS.inspect}
       </g>
     </svg>
+  )
+}
+
+function AppFooter({ text, privacyLabel }) {
+  return (
+    <p className="appFooter">
+      <span>{text}</span>
+      <a href="/privacy-policy.html" target="_blank" rel="noreferrer">
+        {privacyLabel}
+      </a>
+    </p>
   )
 }
 
@@ -2500,9 +2514,10 @@ function App() {
             {t.logout}
           </button>
 
-          <p className="appFooter">
-            {t.versionText} {APP_VERSION}
-          </p>
+          <AppFooter
+            text={`${t.versionText} ${APP_VERSION}`}
+            privacyLabel={t.privacyPolicy}
+          />
         </div>
       </div>
     )
@@ -2798,9 +2813,10 @@ function App() {
             {t.logout}
           </button>
 
-          <p className="appFooter">
-            {t.versionText} {APP_VERSION}
-          </p>
+          <AppFooter
+            text={`${t.versionText} ${APP_VERSION}`}
+            privacyLabel={t.privacyPolicy}
+          />
         </div>
       </div>
     )
@@ -2867,9 +2883,10 @@ function App() {
           </p>
         )}
 
-        <p className="appFooter">
-          {t.versionText} {APP_VERSION}
-        </p>
+        <AppFooter
+          text={`${t.versionText} ${APP_VERSION}`}
+          privacyLabel={t.privacyPolicy}
+        />
       </div>
     </div>
   )

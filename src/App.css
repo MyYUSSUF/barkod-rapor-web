@@ -1670,11 +1670,25 @@ form button {
 }
 
 .appFooter {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 8px 12px;
   margin: 18px 0 0;
   color: var(--muted);
   text-align: center;
   font-size: 12px;
   font-weight: 800;
+}
+
+.appFooter a {
+  color: var(--teal);
+  text-decoration: none;
+}
+
+.appFooter a:hover {
+  text-decoration: underline;
 }
 
 @media (min-width: 720px) {
