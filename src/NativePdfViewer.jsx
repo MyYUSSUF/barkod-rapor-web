@@ -4,6 +4,9 @@ import {
   useRef,
   useState,
 } from 'react'
+import { Capacitor } from '@capacitor/core'
+import { Directory, Filesystem } from '@capacitor/filesystem'
+import { Share } from '@capacitor/share'
 import { Document, Page, pdfjs } from 'react-pdf'
 import './NativePdfViewer.css'
 
@@ -86,6 +89,38 @@ function sanitizeFileName(value) {
       .replace(/_+/g, '_')
       .replace(/^_+|_+$/g, '') || 'rapor.pdf'
   )
+}
+
+function blobToBase64(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+
+    reader.onerror = () => reject(reader.error)
+    reader.onloadend = () => {
+      const result = String(reader.result || '')
+      const [, base64 = result] = result.split(',')
+      resolve(base64)
+    }
+
+    reader.readAsDataURL(blob)
+  })
+}
+
+function openBlobFallback(blob, fileName) {
+  const objectUrl = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+
+  link.href = objectUrl
+  link.download = fileName
+  link.target = '_blank'
+  link.rel = 'noreferrer'
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+
+  window.setTimeout(() => {
+    URL.revokeObjectURL(objectUrl)
+  }, 30000)
 }
 
 function getFittedPageSize(pageSize, viewportSize, zoom) {
@@ -598,30 +633,52 @@ function NativePdfViewer({
       return
     }
 
-    if (
-      typeof navigator.share !== 'function' ||
-      typeof navigator.canShare !== 'function'
-    ) {
-      setShareError(t.shareNotSupported)
-      return
-    }
-
-    const file = new File([blob], finalFileName, {
-      type: 'application/pdf',
-    })
-
-    if (!navigator.canShare({ files: [file] })) {
-      setShareError(t.shareNotSupported)
-      return
-    }
-
     setSharing(true)
 
     try {
-      await navigator.share({
-        files: [file],
-        title: reportName || finalFileName,
+      if (Capacitor.isNativePlatform()) {
+        const nativePath = `shared-pdfs/${Date.now()}-${finalFileName}`
+        const data = await blobToBase64(blob)
+
+        await Filesystem.writeFile({
+          path: nativePath,
+          data,
+          directory: Directory.Cache,
+          recursive: true,
+        })
+
+        const { uri } = await Filesystem.getUri({
+          path: nativePath,
+          directory: Directory.Cache,
+        })
+
+        await Share.share({
+          title: reportName || finalFileName,
+          text: reportMeta || reportName || finalFileName,
+          files: [uri],
+          dialogTitle: reportName || finalFileName,
+        })
+
+        return
+      }
+
+      const file = new File([blob], finalFileName, {
+        type: 'application/pdf',
       })
+
+      if (
+        typeof navigator.share === 'function' &&
+        typeof navigator.canShare === 'function' &&
+        navigator.canShare({ files: [file] })
+      ) {
+        await navigator.share({
+          files: [file],
+          title: reportName || finalFileName,
+        })
+        return
+      }
+
+      openBlobFallback(blob, finalFileName)
     } catch (shareFailure) {
       if (shareFailure?.name !== 'AbortError') {
         console.error('PDF paylaşım hatası:', shareFailure)

@@ -1,0 +1,8 @@
+{
+  "appId": "com.elvandying.barkodrapor",
+  "appName": "ELVAN",
+  "webDir": "dist",
+  "server": {
+    "androidScheme": "https"
+  }
+}

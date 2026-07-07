@@ -68,6 +68,47 @@ npm.cmd run build
 npm.cmd run lint
 ```
 
+## Android / Google Play
+
+Android uygulamasi Capacitor ile `android/` klasorunde hazirlanir.
+
+Mobil uygulama icinden API isteklerinin canli Vercel backend'ine gitmesi icin
+`.env.local` icinde su deger bulunmalidir:
+
+```env
+VITE_API_BASE_URL=https://barkod-rapor-web.vercel.app
+```
+
+Web build'ini alip Android projesine kopyalamak icin:
+
+```bash
+npm.cmd run android:sync
+```
+
+Android Studio'da acmak icin:
+
+```bash
+npm.cmd run android:open
+```
+
+Google Play icin AAB build almak icin:
+
+```bash
+npm.cmd run android:bundle
+```
+
+Windows'ta Gradle Java bulamazsa once bu oturum icin Android Studio JDK'sini
+tanitabilirsiniz:
+
+```powershell
+$env:JAVA_HOME='C:\Program Files\Android\Android Studio\jbr'
+$env:Path="$env:JAVA_HOME\bin;$env:Path"
+```
+
+Not: Play Store'a yuklenecek release AAB icin Android Studio uzerinden veya
+Gradle signing ayarlariyla bir upload/release keystore kullanilmalidir.
+`android/keystore.properties` ve keystore dosyalari GitHub'a gonderilmez.
+
 ## Cihaz Onayi
 
 Uygulama her tarayici icin guclu ve rastgele bir cihaz anahtari olusturur.

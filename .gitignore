@@ -5,3 +5,13 @@ dist
 .DS_Store
 
 .vercel
+
+# Android / Google Play secrets and build outputs
+android/*.jks
+android/*.keystore
+android/keystore.properties
+android/local.properties
+android/.kotlin/
+android/**/*.aab
+android/**/*.apk
+android/**/build/
