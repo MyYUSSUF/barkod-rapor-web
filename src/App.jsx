@@ -17,8 +17,8 @@ const DEVICE_TOKEN_KEY = 'barkod_rapor_device_token_v1'
 const NOTIFICATION_PERMISSION_ASKED_KEY = 'barkod_rapor_notification_permission_asked_v2'
 const REPORT_TIMEOUT_MS = 45000
 const DEVICE_ACCESS_CHECK_MS = 10000
-const APP_VERSION = 'v1.19'
-const APP_LOG_VERSION = 'web-v1.19'
+const APP_VERSION = 'v1.20'
+const APP_LOG_VERSION = 'web-v1.20'
 
 const SHIPMENT_CUSTOMERS = [
   {
@@ -92,8 +92,9 @@ const LANGUAGES = {
     closeCamera: 'Kamerayı Kapat',
     cameraOpening: 'Kamera açılıyor...',
     alignBarcode: 'Barkodu çerçevenin içine hizalayın.',
-    cameraHint: 'Net okuma için barkodu ışık alan yerde, çerçeveye paralel tutun.',
+    cameraHint: 'Barkodu yeşil çizginin üzerine yatay ve net şekilde getir.',
     cameraAreaMissing: 'Kamera alanı bulunamadı.',
+    cameraUnsupported: 'Bu cihaz kamera erişimini desteklemiyor.',
     cameraError: 'Kamera açılamadı: ',
     barcodeRead: 'Barkod okundu',
     recentBarcodes: 'Son Barkodlar',
@@ -169,8 +170,9 @@ const LANGUAGES = {
     closeCamera: 'Close Camera',
     cameraOpening: 'Opening camera...',
     alignBarcode: 'Align the barcode inside the frame.',
-    cameraHint: 'For clear scanning, keep the barcode parallel to the frame in good light.',
+    cameraHint: 'Hold the barcode horizontally on the green line in good light.',
     cameraAreaMissing: 'Camera area not found.',
+    cameraUnsupported: 'This device does not support camera access.',
     cameraError: 'Camera could not be opened: ',
     barcodeRead: 'Barcode read',
     recentBarcodes: 'Recent Barcodes',
@@ -246,8 +248,9 @@ const LANGUAGES = {
     closeCamera: 'إغلاق الكاميرا',
     cameraOpening: 'جارٍ فتح الكاميرا...',
     alignBarcode: 'ضع الباركود داخل الإطار.',
-    cameraHint: 'للقراءة بوضوح، اجعل الباركود موازيًا للإطار وفي إضاءة جيدة.',
+    cameraHint: 'ضع الباركود أفقياً على الخط الأخضر وفي إضاءة جيدة.',
     cameraAreaMissing: 'لم يتم العثور على مساحة الكاميرا.',
+    cameraUnsupported: 'هذا الجهاز لا يدعم الوصول إلى الكاميرا.',
     cameraError: 'تعذر فتح الكاميرا: ',
     barcodeRead: 'تمت قراءة الباركود',
     recentBarcodes: 'آخر الباركودات',
@@ -535,6 +538,8 @@ function App() {
   const shipmentStartInputRef = useRef(null)
   const scannerControlsRef = useRef(null)
   const scannerResultHandledRef = useRef(false)
+  const scannerStartingRef = useRef(false)
+  const scannerStartTokenRef = useRef(0)
 
   const [language, setLanguage] = useState(() => {
     return localStorage.getItem(LANGUAGE_KEY) || 'tr'
@@ -624,6 +629,9 @@ function App() {
 
   function stopScanner(options = {}) {
     const { keepResultHandled = false } = options
+
+    scannerStartTokenRef.current += 1
+    scannerStartingRef.current = false
 
     try {
       if (scannerControlsRef.current) {
@@ -1345,9 +1353,17 @@ function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userProfile?.id])
 
-  const improveCameraTrack = async () => {
+  const stopMediaStream = (stream) => {
+    if (!stream) {
+      return
+    }
+
+    stream.getTracks().forEach((track) => track.stop())
+  }
+
+  const improveCameraTrack = async (targetStream) => {
     try {
-      const stream = videoRef.current?.srcObject
+      const stream = targetStream || videoRef.current?.srcObject
 
       if (!stream) {
         return
@@ -1379,6 +1395,22 @@ function App() {
         advanced.push({ focusMode: 'continuous' })
       }
 
+      if (
+        capabilities.exposureMode &&
+        Array.isArray(capabilities.exposureMode) &&
+        capabilities.exposureMode.includes('continuous')
+      ) {
+        advanced.push({ exposureMode: 'continuous' })
+      }
+
+      if (
+        capabilities.whiteBalanceMode &&
+        Array.isArray(capabilities.whiteBalanceMode) &&
+        capabilities.whiteBalanceMode.includes('continuous')
+      ) {
+        advanced.push({ whiteBalanceMode: 'continuous' })
+      }
+
       if (advanced.length > 0) {
         await track.applyConstraints({ advanced })
       }
@@ -1395,7 +1427,15 @@ function App() {
         aspectRatio: { ideal: 16 / 9 },
         width: { ideal: 1280 },
         height: { ideal: 720 },
-        resizeMode: { ideal: 'none' },
+      },
+    },
+    {
+      audio: false,
+      video: {
+        facingMode: { ideal: 'environment' },
+        aspectRatio: { ideal: 16 / 9 },
+        width: { ideal: 960 },
+        height: { ideal: 540 },
       },
     },
     {
@@ -1405,7 +1445,6 @@ function App() {
         aspectRatio: { ideal: 4 / 3 },
         width: { ideal: 640 },
         height: { ideal: 480 },
-        resizeMode: { ideal: 'none' },
       },
     },
     {
@@ -1420,116 +1459,223 @@ function App() {
     },
   ]
 
+  const getDeviceCameraConstraintProfiles = (deviceId) => [
+    {
+      audio: false,
+      video: {
+        deviceId: { exact: deviceId },
+        width: { ideal: 1280 },
+        height: { ideal: 720 },
+      },
+    },
+    {
+      audio: false,
+      video: {
+        deviceId: { exact: deviceId },
+      },
+    },
+  ]
+
+  const getPreferredCameraDeviceId = async (BrowserCodeReader) => {
+    const videoInputDevices = await BrowserCodeReader.listVideoInputDevices()
+
+    if (!videoInputDevices || videoInputDevices.length === 0) {
+      return undefined
+    }
+
+    const backCamera = videoInputDevices.find((device) => {
+      const label = device.label || ''
+      return /back|rear|environment|arka|kamera|camera 0/i.test(label)
+    })
+
+    return (
+      backCamera?.deviceId ||
+      videoInputDevices[videoInputDevices.length - 1]?.deviceId
+    )
+  }
+
+  const openCameraStream = async (BrowserCodeReader) => {
+    if (!navigator.mediaDevices?.getUserMedia) {
+      throw new Error(t.cameraUnsupported)
+    }
+
+    let lastError
+
+    for (const constraints of getCameraConstraintProfiles()) {
+      try {
+        return await navigator.mediaDevices.getUserMedia(constraints)
+      } catch (constraintError) {
+        lastError = constraintError
+        console.log(
+          'Camera constraint profile failed:',
+          constraintError?.name || constraintError?.message || constraintError
+        )
+      }
+    }
+
+    try {
+      const selectedDeviceId = await getPreferredCameraDeviceId(BrowserCodeReader)
+
+      if (selectedDeviceId) {
+        for (const constraints of getDeviceCameraConstraintProfiles(
+          selectedDeviceId
+        )) {
+          try {
+            return await navigator.mediaDevices.getUserMedia(constraints)
+          } catch (deviceError) {
+            lastError = deviceError
+            console.log(
+              'Camera device profile failed:',
+              deviceError?.name || deviceError?.message || deviceError
+            )
+          }
+        }
+      }
+    } catch (deviceListError) {
+      console.log(
+        'Camera device list failed:',
+        deviceListError?.name || deviceListError?.message || deviceListError
+      )
+    }
+
+    throw lastError || new Error(t.cameraUnsupported)
+  }
+
+  const createBarcodeReader = (
+    BrowserMultiFormatReader,
+    DecodeHintType,
+    BarcodeFormat
+  ) => {
+    const hints = new Map()
+
+    hints.set(DecodeHintType.POSSIBLE_FORMATS, [
+      BarcodeFormat.CODE_128,
+      BarcodeFormat.CODE_39,
+      BarcodeFormat.CODE_93,
+      BarcodeFormat.EAN_13,
+      BarcodeFormat.EAN_8,
+      BarcodeFormat.ITF,
+      BarcodeFormat.CODABAR,
+      BarcodeFormat.UPC_A,
+      BarcodeFormat.UPC_E,
+    ])
+    hints.set(DecodeHintType.TRY_HARDER, true)
+
+    return new BrowserMultiFormatReader(hints, {
+      delayBetweenScanAttempts: 180,
+      delayBetweenScanSuccess: 300,
+      tryPlayVideoTimeout: 7000,
+    })
+  }
+
   const startScanner = async () => {
-    if (scannerControlsRef.current || scannerOpen) {
+    if (scannerControlsRef.current || scannerOpen || scannerStartingRef.current) {
       stopScanner()
       return
     }
 
+    const startToken = scannerStartTokenRef.current + 1
+
+    scannerStartTokenRef.current = startToken
+    scannerStartingRef.current = true
     clearUserMessage()
     setScannerOpen(true)
     setScannerMessage(t.cameraOpening)
     scannerResultHandledRef.current = false
 
-    setTimeout(async () => {
-      try {
-        if (!videoRef.current) {
-          setScannerOpen(false)
-          setScannerMessage('')
-          showUserMessage(t.cameraAreaMissing, 'error')
+    try {
+      await new Promise((resolve) => window.setTimeout(resolve, 300))
+
+      if (scannerStartTokenRef.current !== startToken) {
+        return
+      }
+
+      if (!videoRef.current) {
+        scannerStartingRef.current = false
+        setScannerOpen(false)
+        setScannerMessage('')
+        showUserMessage(t.cameraAreaMissing, 'error')
+        return
+      }
+
+      const [
+        { BrowserCodeReader, BrowserMultiFormatReader },
+        { BarcodeFormat, DecodeHintType },
+      ] = await Promise.all([
+        import('@zxing/browser'),
+        import('@zxing/library'),
+      ])
+      const codeReader = createBarcodeReader(
+        BrowserMultiFormatReader,
+        DecodeHintType,
+        BarcodeFormat
+      )
+
+      const handleScanResult = (result, error, controlsFromCallback) => {
+        if (!result || scannerResultHandledRef.current) {
           return
         }
 
-        const {
-          BrowserCodeReader,
-          BrowserMultiFormatReader,
-        } = await import('@zxing/browser')
-        const codeReader = new BrowserMultiFormatReader()
+        const scannedText = String(result.getText() || '').trim()
 
-        const handleScanResult = (result, error, controlsFromCallback) => {
-          if (!result || scannerResultHandledRef.current) {
-            return
-          }
-
-          scannerResultHandledRef.current = true
-
-          const scannedText = result.getText()
-
-          setBarcode(scannedText)
-          saveBarcodeToHistory(scannedText)
-          showUserMessage(`${t.barcodeRead}: ${scannedText}`, 'success')
-
-          if (navigator.vibrate) {
-            navigator.vibrate([120, 50, 120])
-          }
-
-          try {
-            if (controlsFromCallback) {
-              controlsFromCallback.stop()
-            }
-          } catch (err) {
-            console.log('Scanner callback stop error:', err)
-          }
-
-          scannerControlsRef.current = null
-          stopScanner({ keepResultHandled: true })
+        if (!scannedText) {
+          return
         }
 
-        let controls
+        scannerResultHandledRef.current = true
 
-        for (const constraints of getCameraConstraintProfiles()) {
-          try {
-            controls = await codeReader.decodeFromConstraints(
-              constraints,
-              videoRef.current,
-              handleScanResult
-            )
-            break
-          } catch (constraintError) {
-            console.log(
-              'Camera constraint profile failed:',
-              constraintError?.name || constraintError?.message || constraintError
-            )
-          }
+        setBarcode(scannedText)
+        saveBarcodeToHistory(scannedText)
+        showUserMessage(`${t.barcodeRead}: ${scannedText}`, 'success')
+
+        if (navigator.vibrate) {
+          navigator.vibrate([120, 50, 120])
         }
 
-        if (!controls) {
-          console.log('Camera constraints failed, trying device list.')
-
-          const videoInputDevices = await BrowserCodeReader.listVideoInputDevices()
-          let selectedDeviceId = undefined
-
-          if (videoInputDevices && videoInputDevices.length > 0) {
-            const backCamera = videoInputDevices.find((device) => {
-              const label = device.label || ''
-              return /back|rear|environment|arka|camera 0/i.test(label)
-            })
-
-            selectedDeviceId =
-              backCamera?.deviceId ||
-              videoInputDevices[videoInputDevices.length - 1]?.deviceId
+        try {
+          if (controlsFromCallback) {
+            controlsFromCallback.stop()
           }
-
-          controls = await codeReader.decodeFromVideoDevice(
-            selectedDeviceId,
-            videoRef.current,
-            handleScanResult
-          )
+        } catch (err) {
+          console.log('Scanner callback stop error:', err)
         }
 
-        scannerControlsRef.current = controls
-        setScannerMessage(t.alignBarcode)
-
-        setTimeout(() => {
-          improveCameraTrack()
-        }, 700)
-      } catch (err) {
         scannerControlsRef.current = null
+        stopScanner({ keepResultHandled: true })
+      }
+
+      const stream = await openCameraStream(BrowserCodeReader)
+
+      if (scannerStartTokenRef.current !== startToken) {
+        stopMediaStream(stream)
+        return
+      }
+
+      await improveCameraTrack(stream)
+
+      const controls = await codeReader.decodeFromStream(
+        stream,
+        videoRef.current,
+        handleScanResult
+      )
+
+      if (scannerStartTokenRef.current !== startToken) {
+        controls.stop()
+        return
+      }
+
+      scannerControlsRef.current = controls
+      scannerStartingRef.current = false
+      setScannerMessage(t.alignBarcode)
+    } catch (err) {
+      if (scannerStartTokenRef.current === startToken) {
+        scannerControlsRef.current = null
+        scannerStartingRef.current = false
         setScannerOpen(false)
         setScannerMessage('')
         showUserMessage(t.cameraError + err.message, 'error')
       }
-    }, 300)
+    }
   }
 
   const handleLogin = async (e) => {
