@@ -17,8 +17,8 @@ const DEVICE_TOKEN_KEY = 'barkod_rapor_device_token_v1'
 const NOTIFICATION_PERMISSION_ASKED_KEY = 'barkod_rapor_notification_permission_asked_v2'
 const REPORT_TIMEOUT_MS = 45000
 const DEVICE_ACCESS_CHECK_MS = 10000
-const APP_VERSION = 'v1.20'
-const APP_LOG_VERSION = 'web-v1.20'
+const APP_VERSION = 'v1.21'
+const APP_LOG_VERSION = 'web-v1.21'
 
 const SHIPMENT_CUSTOMERS = [
   {
@@ -696,6 +696,10 @@ function App() {
     }
 
     return t.noBarcodeRequired
+  }
+
+  const getReportLanguageForAppLanguage = () => {
+    return language === 'tr' ? 'tr' : 'en'
   }
 
   const saveBarcodeToHistory = (value, report = null) => {
@@ -1899,6 +1903,7 @@ function App() {
           barcode: requiresBarcode ? cleanBarcode : '',
           reportCode: report.code,
           requiresBarcode,
+          reportLanguage: getReportLanguageForAppLanguage(),
           startDate: requiresDateRange ? cleanStartDate : undefined,
           endDate: requiresDateRange ? cleanEndDate : undefined,
           customerCode: requiresDateRange

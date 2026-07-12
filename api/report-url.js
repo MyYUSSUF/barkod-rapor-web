@@ -91,6 +91,24 @@ function getUserCodeForReport(reportCode, customerCode) {
   return 'Admin'
 }
 
+function getReportLocale(reportLanguage) {
+  const cleanLanguage = reportLanguage
+    ? String(reportLanguage).trim().toLowerCase()
+    : 'tr'
+
+  if (['en', 'eng', 'english', 'ar', 'ara', 'arabic'].includes(cleanLanguage)) {
+    return {
+      languageCode: 'ENG',
+      currentCultureName: 'EN-us',
+    }
+  }
+
+  return {
+    languageCode: 'TUR',
+    currentCultureName: 'TR-tr',
+  }
+}
+
 function extractTagText(xml, tagName) {
   if (!xml) return ''
 
@@ -153,6 +171,7 @@ async function getReportPdfUrl(reportCode, options = {}) {
     startDate = '',
     endDate = '',
     customerCode = '',
+    reportLanguage = 'tr',
   } = options
 
   const soapNs = isNotBlank(cachedTargetNs)
@@ -167,12 +186,14 @@ async function getReportPdfUrl(reportCode, options = {}) {
     ? buildShipmentReportParameters(startDate, endDate)
     : buildReportParametersFromBarcode(barcode)
   const userCode = getUserCodeForReport(reportCode, customerCode)
+  const reportLocale = getReportLocale(reportLanguage)
   const dateFormat = 'dd.mm.yyyy'
 
   console.log('GetReport request:', {
     reportCode,
     parameterMode: reportCode === 'RAR00036' ? 'dateRange' : 'barcode',
     userCode,
+    languageCode: reportLocale.languageCode,
   })
 
   const soap =
@@ -189,10 +210,10 @@ async function getReportPdfUrl(reportCode, options = {}) {
     '<recordSetParameters></recordSetParameters>' +
     '<flagAlternationRowColor>0</flagAlternationRowColor>' +
     '<flagSinglePage>0</flagSinglePage>' +
-    '<languageCode>TUR</languageCode>' +
+    '<languageCode>' + esc(reportLocale.languageCode) + '</languageCode>' +
     '<dateFormat>' + esc(dateFormat) + '</dateFormat>' +
     '<numberDecimalSeperator>.</numberDecimalSeperator>' +
-    '<currentCultureName>TR-tr</currentCultureName>' +
+    '<currentCultureName>' + esc(reportLocale.currentCultureName) + '</currentCultureName>' +
     '<userCode>' + esc(userCode) + '</userCode>' +
     '<companyCode>YZV-0001</companyCode>' +
     '<plantCode>YZV-0001-01</plantCode>' +
@@ -261,7 +282,15 @@ export default async function handler(req, res) {
       })
     }
 
-    const { barcode, reportCode, requiresBarcode, startDate, endDate, customerCode } = req.body || {}
+    const {
+      barcode,
+      reportCode,
+      requiresBarcode,
+      reportLanguage,
+      startDate,
+      endDate,
+      customerCode,
+    } = req.body || {}
     const mustHaveBarcode = requiresBarcode !== false
     const isShipmentReport = reportCode === 'RAR00036'
 
@@ -295,6 +324,7 @@ export default async function handler(req, res) {
       startDate,
       endDate,
       customerCode,
+      reportLanguage,
     })
 
     const reportToken = createReportAccessToken({
