@@ -1,0 +1,8 @@
+{
+  "rewrites": [
+    {
+      "source": "/yonetim",
+      "destination": "/index.html"
+    }
+  ]
+}

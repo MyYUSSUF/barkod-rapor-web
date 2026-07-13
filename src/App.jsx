@@ -17,8 +17,9 @@ const DEVICE_TOKEN_KEY = 'barkod_rapor_device_token_v1'
 const NOTIFICATION_PERMISSION_ASKED_KEY = 'barkod_rapor_notification_permission_asked_v2'
 const REPORT_TIMEOUT_MS = 45000
 const DEVICE_ACCESS_CHECK_MS = 10000
-const APP_VERSION = 'v1.22'
-const APP_LOG_VERSION = 'web-v1.22'
+const DESKTOP_ADMIN_PATH = '/yonetim'
+const APP_VERSION = 'v1.23'
+const APP_LOG_VERSION = 'web-v1.23'
 
 const SHIPMENT_CUSTOMERS = [
   {
@@ -565,7 +566,9 @@ function App() {
   const [messageKind, setMessageKind] = useState('error')
   const [scannerOpen, setScannerOpen] = useState(false)
   const [scannerMessage, setScannerMessage] = useState('')
-  const [screen, setScreen] = useState('main')
+  const [screen, setScreen] = useState(() => {
+    return window.location.pathname === DESKTOP_ADMIN_PATH ? 'desktop-admin' : 'main'
+  })
   const [pdfViewerData, setPdfViewerData] = useState(null)
 
   const [adminNotificationTitle, setAdminNotificationTitle] = useState('Elvan Barkod Rapor')
@@ -580,6 +583,7 @@ function App() {
   const [adminLogView, setAdminLogView] = useState('login')
   const [adminLogLimit, setAdminLogLimit] = useState(12)
   const [activeAdminSection, setActiveAdminSection] = useState('logs')
+  const [activeDesktopAdminView, setActiveDesktopAdminView] = useState('dashboard')
   const [newAdminUser, setNewAdminUser] = useState({
     username: '',
     full_name: '',
@@ -1328,6 +1332,27 @@ function App() {
   }, [])
 
   useEffect(() => {
+    const handleRouteChange = () => {
+      setScreen(
+        window.location.pathname === DESKTOP_ADMIN_PATH ? 'desktop-admin' : 'main'
+      )
+    }
+
+    window.addEventListener('popstate', handleRouteChange)
+    return () => window.removeEventListener('popstate', handleRouteChange)
+  }, [])
+
+  useEffect(() => {
+    if (screen !== 'desktop-admin' || userProfile?.role !== 'admin') {
+      return
+    }
+
+    loadAdminPanelData()
+    // Masaüstü yönetim linki açıldığında admin verisi bir kez yenilenir.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [screen, userProfile?.id, userProfile?.role])
+
+  useEffect(() => {
     if (!userProfile?.id) {
       return
     }
@@ -2067,9 +2092,32 @@ function App() {
   const pendingDeviceCount = adminData.devices.filter(
     (device) => device.status === 'pending'
   ).length
+  const pendingAdminDevices = adminData.devices.filter(
+    (device) => device.status === 'pending'
+  )
+  const approvedAdminDevices = adminData.devices.filter(
+    (device) => device.status === 'approved'
+  )
   const activeUserCount = adminData.users.filter(
     (user) => user.is_active !== false
   ).length
+  const inactiveUserCount = adminData.users.length - activeUserCount
+  const latestAdminActivity = [
+    ...adminData.loginLogs.map((log) => ({
+      ...log,
+      activityType: 'login',
+      activityLabel: log.event_type === 'logout' ? 'Çıkış yaptı' : 'Giriş yaptı',
+    })),
+    ...adminData.reportLogs.map((log) => ({
+      ...log,
+      activityType: 'report',
+      activityLabel: log.report_name || 'Rapor açtı',
+    })),
+  ]
+    .sort((left, right) => {
+      return new Date(right.created_at) - new Date(left.created_at)
+    })
+    .slice(0, 10)
   const adminSections = [
     {
       key: 'logs',
@@ -2090,6 +2138,38 @@ function App() {
       key: 'notify',
       title: 'Bildirim Gönder',
       summary: `${adminData.subscriptionCount} cihaz`,
+    },
+  ]
+  const desktopAdminSections = [
+    {
+      key: 'dashboard',
+      title: 'Genel Bakış',
+      count: `${pendingDeviceCount} bekleyen`,
+    },
+    {
+      key: 'devices',
+      title: 'Cihaz Onayları',
+      count: `${adminData.devices.length} cihaz`,
+    },
+    {
+      key: 'users',
+      title: 'Kullanıcılar',
+      count: `${adminData.users.length} kullanıcı`,
+    },
+    {
+      key: 'logs',
+      title: 'Son Hareketler',
+      count: `${latestAdminActivity.length} kayıt`,
+    },
+    {
+      key: 'notify',
+      title: 'Bildirim Gönder',
+      count: `${adminData.subscriptionCount} abonelik`,
+    },
+    {
+      key: 'create',
+      title: 'Kullanıcı Ekle',
+      count: 'Yeni hesap',
     },
   ]
 
@@ -2147,6 +2227,596 @@ function App() {
             Proje klasorune .env dosyasi ekleyip VITE_SUPABASE_URL ve VITE_SUPABASE_ANON_KEY degerlerini yazin.
           </p>
         </div>
+      </div>
+    )
+  }
+
+  if (userProfile && screen === 'desktop-admin') {
+    if (userProfile.role !== 'admin') {
+      return (
+        <div className="desktopAdminPage" dir="ltr">
+          <main className="desktopAdminAccessCard">
+            <img src="/elvan-logo.png" alt="Elvan Dyeing" className="appLogo" />
+            <h1>Yönetim erişimi yok</h1>
+            <p>Bu sayfayı kullanmak için admin yetkisi gerekir.</p>
+            <button type="button" className="logoutButton" onClick={handleLogout}>
+              {t.logout}
+            </button>
+          </main>
+        </div>
+      )
+    }
+
+    return (
+      <div className="desktopAdminPage" dir="ltr">
+        <aside className="desktopAdminSidebar">
+          <div className="desktopAdminBrand">
+            <img src="/elvan-logo.png" alt="Elvan Dyeing" className="appLogo" />
+            <div>
+              <strong>ELVAN Yönetim</strong>
+              <span>Bilgisayar paneli</span>
+            </div>
+          </div>
+
+          <nav className="desktopAdminNav" aria-label="Yönetim bölümleri">
+            {desktopAdminSections.map((section) => (
+              <button
+                key={section.key}
+                type="button"
+                className={
+                  activeDesktopAdminView === section.key ? 'isActive' : ''
+                }
+                onClick={() => setActiveDesktopAdminView(section.key)}
+              >
+                <span>{section.title}</span>
+                <small>{section.count}</small>
+              </button>
+            ))}
+          </nav>
+
+          <button
+            type="button"
+            className="desktopAdminLogout"
+            onClick={handleLogout}
+          >
+            {t.logout}
+          </button>
+        </aside>
+
+        <main className="desktopAdminMain">
+          <header className="desktopAdminHeader">
+            <div>
+              <span className="eyebrow">YÖNETİM PANELİ</span>
+              <h1>
+                {desktopAdminSections.find(
+                  (section) => section.key === activeDesktopAdminView
+                )?.title || 'Yönetim'}
+              </h1>
+            </div>
+
+            <button
+              type="button"
+              className="desktopAdminRefresh"
+              onClick={loadAdminPanelData}
+              disabled={adminLoading}
+            >
+              {adminLoading ? 'Yenileniyor...' : 'Verileri Yenile'}
+            </button>
+          </header>
+
+          {adminMessage && <p className="message">{adminMessage}</p>}
+
+          {activeDesktopAdminView === 'dashboard' && (
+            <section className="desktopAdminContent">
+              <div className="desktopAdminStats">
+                <article>
+                  <span>Aktif Kullanıcı</span>
+                  <strong>{activeUserCount}</strong>
+                  <small>{inactiveUserCount} pasif kullanıcı</small>
+                </article>
+                <article>
+                  <span>Onay Bekleyen</span>
+                  <strong>{pendingDeviceCount}</strong>
+                  <small>{approvedAdminDevices.length} onaylı cihaz</small>
+                </article>
+                <article>
+                  <span>Bildirim Cihazı</span>
+                  <strong>{adminData.subscriptionCount}</strong>
+                  <small>Push aboneliği</small>
+                </article>
+                <article>
+                  <span>Rapor Log</span>
+                  <strong>{adminData.reportLogs.length}</strong>
+                  <small>{adminData.loginLogs.length} giriş kaydı</small>
+                </article>
+              </div>
+
+              <div className="desktopAdminTwoColumn">
+                <section className="desktopAdminPanel">
+                  <div className="desktopPanelHeader">
+                    <strong>Bekleyen Cihazlar</strong>
+                    <span>{pendingAdminDevices.length}</span>
+                  </div>
+
+                  <div className="desktopAdminList">
+                    {pendingAdminDevices.map((device) => (
+                      <article key={device.id} className="desktopDeviceItem">
+                        <div>
+                          <strong>{device.user_name || device.user_email || '-'}</strong>
+                          <small>{device.device_name || 'Bilinmeyen cihaz'}</small>
+                          <time>İstek: {formatDateTime(device.created_at)}</time>
+                        </div>
+                        <div className="desktopAdminRowActions">
+                          <button
+                            type="button"
+                            className="adminSmallButton adminApproveButton"
+                            onClick={() =>
+                              updateAdminDevice(device.id, 'approve_device')
+                            }
+                          >
+                            Onayla
+                          </button>
+                          <button
+                            type="button"
+                            className="adminSmallButton adminRejectButton"
+                            onClick={() =>
+                              updateAdminDevice(device.id, 'revoke_device')
+                            }
+                          >
+                            Reddet
+                          </button>
+                        </div>
+                      </article>
+                    ))}
+
+                    {pendingAdminDevices.length === 0 && (
+                      <p className="adminEmptyState">Onay bekleyen cihaz yok.</p>
+                    )}
+                  </div>
+                </section>
+
+                <section className="desktopAdminPanel">
+                  <div className="desktopPanelHeader">
+                    <strong>Son Hareketler</strong>
+                    <span>{latestAdminActivity.length}</span>
+                  </div>
+
+                  <div className="desktopActivityList">
+                    {latestAdminActivity.map((log) => (
+                      <article key={`${log.activityType}-${log.id}`}>
+                        <div>
+                          <strong>{log.user_name || log.user_email || '-'}</strong>
+                          <small>{log.activityLabel}</small>
+                        </div>
+                        <time>{formatDateTime(log.created_at)}</time>
+                      </article>
+                    ))}
+
+                    {latestAdminActivity.length === 0 && (
+                      <p className="adminEmptyState">Kayıt bulunamadı.</p>
+                    )}
+                  </div>
+                </section>
+              </div>
+            </section>
+          )}
+
+          {activeDesktopAdminView === 'devices' && (
+            <section className="desktopAdminPanel">
+              <div className="desktopPanelHeader">
+                <strong>Cihaz Onayları</strong>
+                <span>{adminData.devices.length}</span>
+              </div>
+
+              <div className="desktopTableWrap">
+                <table className="desktopAdminTable">
+                  <thead>
+                    <tr>
+                      <th>Kullanıcı</th>
+                      <th>Durum</th>
+                      <th>Cihaz</th>
+                      <th>İlk İstek</th>
+                      <th>Son Görülme</th>
+                      <th>İşlem</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {adminData.devices.map((device) => (
+                      <tr key={device.id}>
+                        <td>
+                          <strong>{device.user_name || '-'}</strong>
+                          <small>{device.user_email || ''}</small>
+                        </td>
+                        <td>
+                          <span className={`adminStatusBadge is-${device.status}`}>
+                            {device.status === 'approved'
+                              ? 'Onaylı'
+                              : 'Onay Bekliyor'}
+                          </span>
+                        </td>
+                        <td>{device.device_name || '-'}</td>
+                        <td>{formatDateTime(device.created_at)}</td>
+                        <td>{formatDateTime(device.last_seen_at)}</td>
+                        <td>
+                          <div className="desktopAdminRowActions">
+                            {device.status !== 'approved' && (
+                              <button
+                                type="button"
+                                className="adminSmallButton adminApproveButton"
+                                onClick={() =>
+                                  updateAdminDevice(device.id, 'approve_device')
+                                }
+                              >
+                                Onayla
+                              </button>
+                            )}
+                            {device.status === 'approved' && (
+                              <button
+                                type="button"
+                                className="adminSmallButton adminRejectButton"
+                                onClick={() =>
+                                  updateAdminDevice(device.id, 'revoke_device')
+                                }
+                              >
+                                İzni Kaldır
+                              </button>
+                            )}
+                            {device.status === 'pending' && (
+                              <button
+                                type="button"
+                                className="adminSmallButton adminRejectButton"
+                                onClick={() =>
+                                  updateAdminDevice(device.id, 'revoke_device')
+                                }
+                              >
+                                Reddet
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          )}
+
+          {activeDesktopAdminView === 'users' && (
+            <section className="desktopAdminPanel">
+              <div className="desktopPanelHeader">
+                <strong>Kullanıcılar</strong>
+                <span>{adminData.users.length}</span>
+              </div>
+
+              <div className="desktopTableWrap">
+                <table className="desktopAdminTable">
+                  <thead>
+                    <tr>
+                      <th>Kullanıcı</th>
+                      <th>Rol</th>
+                      <th>Durum</th>
+                      <th>Cihaz</th>
+                      <th>Rapor Yetkileri</th>
+                      <th>İşlem</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {adminData.users.map((user) => (
+                      <tr key={user.id}>
+                        <td>
+                          <strong>{user.full_name || user.email || '-'}</strong>
+                          <small>{user.email}</small>
+                        </td>
+                        <td>{user.role === 'admin' ? 'Admin' : 'Kullanıcı'}</td>
+                        <td>
+                          <span
+                            className={`adminStatusBadge ${
+                              user.is_active === false
+                                ? 'is-revoked'
+                                : 'is-approved'
+                            }`}
+                          >
+                            {user.is_active === false ? 'Pasif' : 'Aktif'}
+                          </span>
+                        </td>
+                        <td>
+                          {user.approved_device_count || 0} onaylı
+                          {(user.pending_device_count || 0) > 0
+                            ? `, ${user.pending_device_count} bekliyor`
+                            : ''}
+                        </td>
+                        <td>
+                          <label className="desktopPermissionCheck">
+                            <input
+                              type="checkbox"
+                              checked={
+                                user.role === 'admin' ||
+                                user.can_view_fixing_report === true
+                              }
+                              disabled={user.role === 'admin'}
+                              onChange={(e) =>
+                                updateAdminUser(user.id, {
+                                  can_view_fixing_report: e.target.checked,
+                                })
+                              }
+                            />
+                            Fikse
+                          </label>
+                          <label className="desktopPermissionCheck">
+                            <input
+                              type="checkbox"
+                              checked={
+                                user.role === 'admin' ||
+                                user.can_view_shipment_report === true
+                              }
+                              disabled={user.role === 'admin'}
+                              onChange={(e) =>
+                                updateAdminUser(user.id, {
+                                  can_view_shipment_report: e.target.checked,
+                                })
+                              }
+                            />
+                            Sevkiyat
+                          </label>
+                        </td>
+                        <td>
+                          <div className="desktopAdminRowActions">
+                            <button
+                              type="button"
+                              className={`adminSmallButton ${
+                                user.is_active === false
+                                  ? 'adminApproveButton'
+                                  : 'adminRejectButton'
+                              }`}
+                              onClick={() =>
+                                updateAdminUser(user.id, {
+                                  is_active: user.is_active === false,
+                                })
+                              }
+                            >
+                              {user.is_active === false ? 'Aktif Yap' : 'Pasif Yap'}
+                            </button>
+                            <button
+                              type="button"
+                              className="adminSmallButton adminRoleButton"
+                              onClick={() =>
+                                updateAdminUser(user.id, {
+                                  role: user.role === 'admin' ? 'user' : 'admin',
+                                })
+                              }
+                            >
+                              {user.role === 'admin' ? 'User Yap' : 'Admin Yap'}
+                            </button>
+                            <button
+                              type="button"
+                              className="adminSmallButton adminDeleteUserButton"
+                              onClick={() => deleteAdminUser(user)}
+                              disabled={user.id === userProfile.id}
+                            >
+                              Sil
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          )}
+
+          {activeDesktopAdminView === 'logs' && (
+            <section className="desktopAdminPanel">
+              <div className="desktopPanelHeader">
+                <strong>Son Hareketler</strong>
+                <span>{latestAdminActivity.length}</span>
+              </div>
+
+              <div className="desktopTableWrap">
+                <table className="desktopAdminTable">
+                  <thead>
+                    <tr>
+                      <th>Tarih</th>
+                      <th>Kullanıcı</th>
+                      <th>İşlem</th>
+                      <th>Barkod</th>
+                      <th>Cihaz</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {latestAdminActivity.map((log) => (
+                      <tr key={`${log.activityType}-${log.id}`}>
+                        <td>{formatDateTime(log.created_at)}</td>
+                        <td>
+                          <strong>{log.user_name || '-'}</strong>
+                          <small>{log.user_email || ''}</small>
+                        </td>
+                        <td>{log.activityLabel}</td>
+                        <td>{log.barcode || '-'}</td>
+                        <td>{log.device_name || '-'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          )}
+
+          {activeDesktopAdminView === 'notify' && (
+            <section className="desktopAdminPanel desktopFormPanel">
+              <div className="desktopPanelHeader">
+                <strong>Bildirim Gönder</strong>
+                <span>{adminData.subscriptionCount} cihaz</span>
+              </div>
+
+              <label htmlFor="desktopNotificationTitle">Bildirim Başlığı</label>
+              <input
+                id="desktopNotificationTitle"
+                type="text"
+                value={adminNotificationTitle}
+                onChange={(e) => setAdminNotificationTitle(e.target.value)}
+                placeholder="Elvan Barkod Rapor"
+                disabled={adminNotificationSending}
+              />
+
+              <label htmlFor="desktopNotificationBody">Bildirim Mesajı</label>
+              <textarea
+                id="desktopNotificationBody"
+                className="adminTextarea"
+                value={adminNotificationBody}
+                onChange={(e) => setAdminNotificationBody(e.target.value)}
+                placeholder="Gönderilecek mesajı yaz"
+                disabled={adminNotificationSending}
+                rows={5}
+              />
+
+              <button
+                type="button"
+                className="mainButton"
+                onClick={sendAdminNotification}
+                disabled={adminNotificationSending}
+              >
+                {adminNotificationSending ? 'Gönderiliyor...' : 'Bildirimi Gönder'}
+              </button>
+
+              {adminNotificationMessage && (
+                <p className="message">{adminNotificationMessage}</p>
+              )}
+            </section>
+          )}
+
+          {activeDesktopAdminView === 'create' && (
+            <section className="desktopAdminPanel desktopFormPanel">
+              <div className="desktopPanelHeader">
+                <strong>Kullanıcı Ekle</strong>
+                <span>Yeni hesap</span>
+              </div>
+
+              <form className="adminCreateUserForm" onSubmit={createAdminUser}>
+                <div className="adminFormGrid">
+                  <label>
+                    Kullanıcı Adı
+                    <input
+                      type="text"
+                      value={newAdminUser.username}
+                      onChange={(e) =>
+                        setNewAdminUser((current) => ({
+                          ...current,
+                          username: e.target.value,
+                        }))
+                      }
+                      placeholder="ornek: ahmet"
+                      autoComplete="off"
+                      disabled={creatingAdminUser}
+                    />
+                  </label>
+
+                  <label>
+                    Ad Soyad
+                    <input
+                      type="text"
+                      value={newAdminUser.full_name}
+                      onChange={(e) =>
+                        setNewAdminUser((current) => ({
+                          ...current,
+                          full_name: e.target.value,
+                        }))
+                      }
+                      placeholder="Kullanıcı adı"
+                      autoComplete="off"
+                      disabled={creatingAdminUser}
+                    />
+                  </label>
+
+                  <label>
+                    Şifre
+                    <input
+                      type="password"
+                      value={newAdminUser.password}
+                      onChange={(e) =>
+                        setNewAdminUser((current) => ({
+                          ...current,
+                          password: e.target.value,
+                        }))
+                      }
+                      placeholder="Şifre"
+                      autoComplete="new-password"
+                      disabled={creatingAdminUser}
+                    />
+                  </label>
+
+                  <label>
+                    Rol
+                    <select
+                      value={newAdminUser.role}
+                      onChange={(e) =>
+                        setNewAdminUser((current) => ({
+                          ...current,
+                          role: e.target.value,
+                        }))
+                      }
+                      disabled={creatingAdminUser}
+                    >
+                      <option value="user">Kullanıcı</option>
+                      <option value="admin">Admin</option>
+                    </select>
+                  </label>
+                </div>
+
+                <div className="adminPermissionPanel">
+                  <strong>Başlangıç Rapor Yetkileri</strong>
+                  <label className="adminPermissionToggle">
+                    <input
+                      type="checkbox"
+                      checked={
+                        newAdminUser.role === 'admin' ||
+                        newAdminUser.can_view_fixing_report
+                      }
+                      disabled={creatingAdminUser || newAdminUser.role === 'admin'}
+                      onChange={(e) =>
+                        setNewAdminUser((current) => ({
+                          ...current,
+                          can_view_fixing_report: e.target.checked,
+                        }))
+                      }
+                    />
+                    <span>Fikse Bekleyenler</span>
+                  </label>
+
+                  <label className="adminPermissionToggle">
+                    <input
+                      type="checkbox"
+                      checked={
+                        newAdminUser.role === 'admin' ||
+                        newAdminUser.can_view_shipment_report
+                      }
+                      disabled={creatingAdminUser || newAdminUser.role === 'admin'}
+                      onChange={(e) =>
+                        setNewAdminUser((current) => ({
+                          ...current,
+                          can_view_shipment_report: e.target.checked,
+                        }))
+                      }
+                    />
+                    <span>Sevkiyat Takip</span>
+                  </label>
+                  {newAdminUser.role === 'admin' && (
+                    <small>Admin kullanıcıları tüm raporları görebilir.</small>
+                  )}
+                </div>
+
+                <button
+                  type="submit"
+                  className="mainButton"
+                  disabled={creatingAdminUser}
+                >
+                  {creatingAdminUser ? 'Ekleniyor...' : 'Kullanıcı Ekle'}
+                </button>
+              </form>
+            </section>
+          )}
+        </main>
       </div>
     )
   }
@@ -3094,8 +3764,13 @@ function App() {
   }
 
   return (
-    <div className="page" dir={isArabic ? 'rtl' : 'ltr'}>
-      <div className="card">
+    <div
+      className={screen === 'desktop-admin' ? 'desktopAdminLoginPage' : 'page'}
+      dir={isArabic ? 'rtl' : 'ltr'}
+    >
+      <div
+        className={screen === 'desktop-admin' ? 'card desktopAdminLoginCard' : 'card'}
+      >
         <div className="topBar">
           <img src="/elvan-logo.png" alt="Elvan Dyeing" className="appLogo" />
 
@@ -3113,8 +3788,14 @@ function App() {
 
         <div className="loginHero">
           <span className="eyebrow">ELVAN DYEING</span>
-          <h1>{t.appTitle}</h1>
-          <p className="subtitle">{t.appSubtitle}</p>
+          <h1>
+            {screen === 'desktop-admin' ? 'ELVAN Yönetim' : t.appTitle}
+          </h1>
+          <p className="subtitle">
+            {screen === 'desktop-admin'
+              ? 'Bilgisayar yönetim paneli'
+              : t.appSubtitle}
+          </p>
         </div>
 
         <form onSubmit={handleLogin}>
