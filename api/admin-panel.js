@@ -153,7 +153,7 @@ async function getAdminData(supabaseAdmin) {
     .from('report_logs')
     .select('id, user_id, barcode, report_code, report_name, device_name, app_version, created_at')
     .order('created_at', { ascending: false })
-    .limit(30)
+    .range(0, 9999)
 
   if (reportLogsError) {
     throw new Error(reportLogsError.message)

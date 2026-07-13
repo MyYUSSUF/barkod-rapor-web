@@ -18,8 +18,8 @@ const NOTIFICATION_PERMISSION_ASKED_KEY = 'barkod_rapor_notification_permission_
 const REPORT_TIMEOUT_MS = 45000
 const DEVICE_ACCESS_CHECK_MS = 10000
 const DESKTOP_ADMIN_PATH = '/yonetim'
-const APP_VERSION = 'v1.24'
-const APP_LOG_VERSION = 'web-v1.24'
+const APP_VERSION = 'v1.25'
+const APP_LOG_VERSION = 'web-v1.25'
 
 const SHIPMENT_CUSTOMERS = [
   {
@@ -2101,7 +2101,7 @@ function App() {
     (user) => user.is_active !== false
   ).length
   const inactiveUserCount = adminData.users.length - activeUserCount
-  const latestAdminActivity = [
+  const allAdminActivity = [
     ...adminData.loginLogs.map((log) => ({
       ...log,
       activityType: 'login',
@@ -2116,7 +2116,7 @@ function App() {
     .sort((left, right) => {
       return new Date(right.created_at) - new Date(left.created_at)
     })
-    .slice(0, 10)
+  const latestAdminActivity = allAdminActivity.slice(0, 10)
   const cleanDesktopSearch = desktopAdminSearch.trim().toLowerCase()
   const textMatchesDesktopSearch = (...values) => {
     if (!cleanDesktopSearch) {
@@ -2149,7 +2149,7 @@ function App() {
       user.is_active === false ? 'pasif' : 'aktif'
     )
   })
-  const filteredDesktopActivity = latestAdminActivity.filter((log) => {
+  const filteredDesktopActivity = allAdminActivity.filter((log) => {
     return textMatchesDesktopSearch(
       log.user_name,
       log.user_email,
