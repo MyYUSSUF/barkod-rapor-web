@@ -17,8 +17,8 @@ const DEVICE_TOKEN_KEY = 'barkod_rapor_device_token_v1'
 const NOTIFICATION_PERMISSION_ASKED_KEY = 'barkod_rapor_notification_permission_asked_v2'
 const REPORT_TIMEOUT_MS = 45000
 const DEVICE_ACCESS_CHECK_MS = 10000
-const APP_VERSION = 'v1.21'
-const APP_LOG_VERSION = 'web-v1.21'
+const APP_VERSION = 'v1.22'
+const APP_LOG_VERSION = 'web-v1.22'
 
 const SHIPMENT_CUSTOMERS = [
   {
@@ -579,6 +579,7 @@ function App() {
   const [expandedAdminLogId, setExpandedAdminLogId] = useState('')
   const [adminLogView, setAdminLogView] = useState('login')
   const [adminLogLimit, setAdminLogLimit] = useState(12)
+  const [activeAdminSection, setActiveAdminSection] = useState('logs')
   const [newAdminUser, setNewAdminUser] = useState({
     username: '',
     full_name: '',
@@ -1037,6 +1038,7 @@ function App() {
   }
 
   const openAdminPanel = async () => {
+    setActiveAdminSection('logs')
     setScreen('admin')
     await loadAdminPanelData()
   }
@@ -1070,6 +1072,50 @@ function App() {
       }
 
       setAdminMessage('Kullanıcı güncellendi.')
+      await loadAdminPanelData()
+    } catch (err) {
+      setAdminMessage(err.message)
+    }
+  }
+
+  const deleteAdminUser = async (user) => {
+    const userName = user.full_name || user.email || user.id
+    const confirmed = window.confirm(
+      `${userName} kullanıcısı kalıcı olarak silinecek. Bu işlem geri alınamaz. Devam edilsin mi?`
+    )
+
+    if (!confirmed) {
+      return
+    }
+
+    setAdminMessage('')
+
+    try {
+      const accessToken = await getAccessToken()
+
+      if (!accessToken) {
+        setAdminMessage(t.sessionMissing)
+        return
+      }
+
+      const response = await fetch(`${API_BASE_URL}/api/admin-panel`, {
+        method: 'DELETE',
+        headers: makeAuthorizedHeaders(accessToken, {
+          'Content-Type': 'application/json',
+        }),
+        body: JSON.stringify({
+          userId: user.id,
+        }),
+      })
+
+      const result = await response.json().catch(() => ({}))
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Kullanıcı silinemedi.')
+      }
+
+      setExpandedAdminUserId('')
+      setAdminMessage('Kullanıcı tamamen silindi.')
       await loadAdminPanelData()
     } catch (err) {
       setAdminMessage(err.message)
@@ -1151,8 +1197,8 @@ function App() {
 
       setAdminMessage(
         action === 'approve_device'
-          ? 'Cihaz onaylandı. Önceki cihaz erişimi kapatıldı.'
-          : 'Cihaz erişimi iptal edildi.'
+          ? 'Cihaz onaylandı.'
+          : 'Cihaz izni kaldırıldı veya istek reddedildi.'
       )
       await loadAdminPanelData()
     } catch (err) {
@@ -2018,6 +2064,34 @@ function App() {
   const selectedAdminLogs =
     adminLogView === 'login' ? adminData.loginLogs : adminData.reportLogs
   const visibleAdminLogs = selectedAdminLogs.slice(0, adminLogLimit)
+  const pendingDeviceCount = adminData.devices.filter(
+    (device) => device.status === 'pending'
+  ).length
+  const activeUserCount = adminData.users.filter(
+    (user) => user.is_active !== false
+  ).length
+  const adminSections = [
+    {
+      key: 'logs',
+      title: 'Son Hareketler',
+      summary: `${selectedAdminLogs.length} kayıt`,
+    },
+    {
+      key: 'users',
+      title: 'Kullanıcı ve Cihaz Yönetimi',
+      summary: `${adminData.users.length} kullanıcı`,
+    },
+    {
+      key: 'create',
+      title: 'Kullanıcı Ekle',
+      summary: 'Yeni hesap',
+    },
+    {
+      key: 'notify',
+      title: 'Bildirim Gönder',
+      summary: `${adminData.subscriptionCount} cihaz`,
+    },
+  ]
 
   const dateRangeDayCount = getDateRangeDayCount(startDate, endDate)
 
@@ -2102,7 +2176,7 @@ function App() {
             <div className="adminStatBox" style={statBoxStyle}>
               <strong>Kullanıcı</strong>
               <p className="subtitle" style={{ margin: '8px 0 0' }}>
-                {adminData.users.length}
+                {activeUserCount} aktif / {adminData.users.length} toplam
               </p>
             </div>
 
@@ -2130,7 +2204,7 @@ function App() {
             <div className="adminStatBox" style={statBoxStyle}>
               <strong>Onay Bekleyen Cihaz</strong>
               <p className="subtitle" style={{ margin: '8px 0 0' }}>
-                {adminData.devices.filter((device) => device.status === 'pending').length}
+                {pendingDeviceCount}
               </p>
             </div>
           </div>
@@ -2146,7 +2220,26 @@ function App() {
 
           {adminMessage && <p className="message">{adminMessage}</p>}
 
-          <div className="historyBox">
+          <div className="adminSectionNav" role="tablist" aria-label="Admin bölümleri">
+            {adminSections.map((section) => (
+              <button
+                key={section.key}
+                type="button"
+                role="tab"
+                aria-selected={activeAdminSection === section.key}
+                className={`adminSectionButton${
+                  activeAdminSection === section.key ? ' isActive' : ''
+                }`}
+                onClick={() => setActiveAdminSection(section.key)}
+              >
+                <strong>{section.title}</strong>
+                <span>{section.summary}</span>
+              </button>
+            ))}
+          </div>
+
+          {activeAdminSection === 'notify' && (
+          <div className="historyBox adminSectionPanel">
             <div className="historyHeader">
               <strong>Bildirim Gönder</strong>
             </div>
@@ -2185,8 +2278,10 @@ function App() {
               <p className="message">{adminNotificationMessage}</p>
             )}
           </div>
+          )}
 
-          <div className="historyBox">
+          {activeAdminSection === 'create' && (
+          <div className="historyBox adminSectionPanel">
             <div className="historyHeader">
               <strong>Kullanıcı Ekle</strong>
             </div>
@@ -2313,8 +2408,10 @@ function App() {
               </button>
             </form>
           </div>
+          )}
 
-          <div className="historyBox">
+          {activeAdminSection === 'users' && (
+          <div className="historyBox adminSectionPanel">
             <div className="historyHeader">
               <strong>Kullanıcı ve Cihaz Yönetimi</strong>
               <span className="adminSectionCount">{adminData.users.length}</span>
@@ -2495,6 +2592,10 @@ function App() {
                           )}
                         </div>
 
+                        <p className="adminActionNote">
+                          Pasif kullanıcı giriş yapamaz. Cihaz iznini kaldırmak sadece seçili cihazı etkiler.
+                        </p>
+
                         <div className="adminCardActions">
                           <button
                             type="button"
@@ -2509,7 +2610,9 @@ function App() {
                               })
                             }
                           >
-                            {user.is_active === false ? 'Aktif Yap' : 'Pasif Yap'}
+                            {user.is_active === false
+                              ? 'Kullanıcıyı Aktif Yap'
+                              : 'Kullanıcıyı Pasif Yap'}
                           </button>
 
                           <button
@@ -2523,6 +2626,20 @@ function App() {
                           >
                             {user.role === 'admin' ? 'Kullanıcı Yap' : 'Admin Yap'}
                           </button>
+
+                          <button
+                            type="button"
+                            className="adminSmallButton adminDeleteUserButton"
+                            onClick={() => deleteAdminUser(user)}
+                            disabled={user.id === userProfile.id}
+                            title={
+                              user.id === userProfile.id
+                                ? 'Kendi kullanıcını buradan silemezsin.'
+                                : 'Kullanıcıyı tamamen sil'
+                            }
+                          >
+                            Kullanıcıyı Tamamen Sil
+                          </button>
                         </div>
                       </div>
                     )}
@@ -2535,8 +2652,10 @@ function App() {
               )}
             </div>
           </div>
+          )}
 
-          <div className="historyBox">
+          {activeAdminSection === 'logs' && (
+          <div className="historyBox adminSectionPanel">
             <div className="historyHeader">
               <strong>Son Hareketler</strong>
             </div>
@@ -2660,6 +2779,7 @@ function App() {
               </button>
             )}
           </div>
+          )}
 
           <button type="button" className="logoutButton" onClick={handleLogout}>
             {t.logout}

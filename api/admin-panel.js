@@ -79,7 +79,10 @@ function enrichProfiles(profiles, devices) {
       summary.last_device_seen_at = device.last_seen_at
     }
 
-    userDevices.push(device)
+    if (device.status !== 'revoked') {
+      userDevices.push(device)
+    }
+
     deviceSummaryMap.set(device.user_id, summary)
     devicesByUserMap.set(device.user_id, userDevices)
   }
@@ -176,9 +179,13 @@ async function getAdminData(supabaseAdmin) {
     throw new Error(devicesError.message)
   }
 
+  const visibleDevices = (devices || []).filter(
+    (device) => device.status !== 'revoked'
+  )
+
   return {
     users: enrichProfiles(profiles || [], devices || []),
-    devices: enrichLogs(devices || [], profileMap),
+    devices: enrichLogs(visibleDevices, profileMap),
     loginLogs: enrichLogs(loginLogs || [], profileMap),
     reportLogs: enrichLogs(reportLogs || [], profileMap),
     subscriptionCount: subscriptionCount || 0,
@@ -303,6 +310,82 @@ async function createUser(req, supabaseAdmin) {
   return profile
 }
 
+async function deleteUser(req, supabaseAdmin, authResult) {
+  const body = parseBody(req)
+  const userId = body.userId
+
+  if (!isNotBlank(userId)) {
+    throw new Error('Kullanıcı ID eksik.')
+  }
+
+  if (userId === authResult.userId) {
+    throw new Error('Kendi kullanıcını silemezsin.')
+  }
+
+  const { data: profile, error: profileError } = await supabaseAdmin
+    .from('profiles')
+    .select('id, email, full_name')
+    .eq('id', userId)
+    .maybeSingle()
+
+  if (profileError) {
+    throw new Error(profileError.message)
+  }
+
+  const deleteSteps = [
+    async () =>
+      supabaseAdmin
+        .from('user_devices')
+        .update({ approved_by: null })
+        .eq('approved_by', userId),
+    async () =>
+      supabaseAdmin
+        .from('push_subscriptions')
+        .delete()
+        .eq('user_id', userId),
+    async () =>
+      supabaseAdmin
+        .from('report_logs')
+        .delete()
+        .eq('user_id', userId),
+    async () =>
+      supabaseAdmin
+        .from('login_logs')
+        .delete()
+        .eq('user_id', userId),
+    async () =>
+      supabaseAdmin
+        .from('user_devices')
+        .delete()
+        .eq('user_id', userId),
+    async () =>
+      supabaseAdmin
+        .from('profiles')
+        .delete()
+        .eq('id', userId),
+  ]
+
+  for (const runStep of deleteSteps) {
+    const { error } = await runStep()
+
+    if (error) {
+      throw new Error(error.message)
+    }
+  }
+
+  const { error: authDeleteError } = await supabaseAdmin.auth.admin.deleteUser(userId)
+
+  if (authDeleteError) {
+    throw new Error(authDeleteError.message)
+  }
+
+  return {
+    id: userId,
+    email: profile?.email || '',
+    full_name: profile?.full_name || '',
+  }
+}
+
 async function updateDevice(req, supabaseAdmin, authResult) {
   const body = parseBody(req)
   const deviceId = body.deviceId
@@ -327,17 +410,6 @@ async function updateDevice(req, supabaseAdmin, authResult) {
   }
 
   if (action === 'approve_device') {
-    const { error: revokeError } = await supabaseAdmin
-      .from('user_devices')
-      .update({ status: 'revoked' })
-      .eq('user_id', targetDevice.user_id)
-      .eq('status', 'approved')
-      .neq('id', targetDevice.id)
-
-    if (revokeError) {
-      throw new Error(revokeError.message)
-    }
-
     const { data, error } = await supabaseAdmin
       .from('user_devices')
       .update({
@@ -380,9 +452,9 @@ export default async function handler(req, res) {
   }
 
   try {
-    if (!['GET', 'POST', 'PATCH'].includes(req.method)) {
+    if (!['GET', 'POST', 'PATCH', 'DELETE'].includes(req.method)) {
       return res.status(405).json({
-        error: 'Sadece GET, POST ve PATCH desteklenir.',
+        error: 'Sadece GET, POST, PATCH ve DELETE desteklenir.',
       })
     }
 
@@ -423,6 +495,15 @@ export default async function handler(req, res) {
       return res.status(200).json({
         success: true,
         user: updatedUser,
+      })
+    }
+
+    if (req.method === 'DELETE') {
+      const deletedUser = await deleteUser(req, supabaseAdmin, authResult)
+
+      return res.status(200).json({
+        success: true,
+        user: deletedUser,
       })
     }
 
