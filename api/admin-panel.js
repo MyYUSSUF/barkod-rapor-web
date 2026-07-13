@@ -245,6 +245,32 @@ async function updateUser(req, supabaseAdmin, authResult) {
   return data
 }
 
+async function updateUserPassword(req, supabaseAdmin) {
+  const body = parseBody(req)
+  const userId = body.userId
+  const password = String(body.password || '')
+
+  if (!isNotBlank(userId)) {
+    throw new Error('Kullanıcı ID eksik.')
+  }
+
+  if (!isNotBlank(password)) {
+    throw new Error('Yeni şifre boş olamaz.')
+  }
+
+  const { data, error } = await supabaseAdmin.auth.admin.updateUserById(userId, {
+    password,
+  })
+
+  if (error) {
+    throw new Error(error.message)
+  }
+
+  return {
+    id: data?.user?.id || userId,
+  }
+}
+
 async function createUser(req, supabaseAdmin) {
   const body = parseBody(req)
   const username = normalizeUsername(body.username)
@@ -480,6 +506,15 @@ export default async function handler(req, res) {
 
     if (req.method === 'PATCH') {
       const body = parseBody(req)
+
+      if (body.action === 'update_password') {
+        const updatedPasswordUser = await updateUserPassword(req, supabaseAdmin)
+
+        return res.status(200).json({
+          success: true,
+          user: updatedPasswordUser,
+        })
+      }
 
       if (['approve_device', 'revoke_device'].includes(body.action)) {
         const updatedDevice = await updateDevice(req, supabaseAdmin, authResult)

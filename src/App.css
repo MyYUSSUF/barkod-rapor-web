@@ -1411,6 +1411,15 @@ form button {
   font-weight: 950;
 }
 
+.desktopPanelHeader small {
+  display: block;
+  margin-top: 3px;
+  color: #667085;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.35;
+}
+
 .desktopPanelHeader span {
   min-width: 28px;
   padding: 4px 8px;
@@ -1420,6 +1429,279 @@ form button {
   text-align: center;
   font-size: 12px;
   font-weight: 900;
+}
+
+.desktopEntityGrid,
+.desktopUserGrid,
+.desktopGroupSummaryGrid,
+.desktopTimeline,
+.desktopToolsGrid {
+  display: grid;
+  gap: 10px;
+}
+
+.desktopEntityGrid {
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+}
+
+.desktopUserGrid {
+  grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+}
+
+.desktopToolsGrid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+}
+
+.desktopEntityCard {
+  min-width: 0;
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid #dbe4ed;
+  border-left: 4px solid #94a3b8;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 7px 18px rgba(16, 24, 40, 0.05);
+}
+
+.desktopEntityCard.is-pending {
+  border-left-color: #b8892f;
+}
+
+.desktopEntityCard.is-approved {
+  border-left-color: #0f766e;
+}
+
+.desktopEntityMain {
+  min-width: 0;
+}
+
+.desktopEntityMain strong,
+.desktopEntityMain small,
+.desktopEntityMain p {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.desktopEntityMain strong {
+  margin-top: 7px;
+  color: #17324d;
+  font-size: 15px;
+  font-weight: 950;
+  white-space: nowrap;
+}
+
+.desktopEntityMain small {
+  margin-top: 2px;
+  color: #667085;
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.desktopEntityMain p {
+  margin: 9px 0 0;
+  color: #334155;
+  font-size: 12px;
+  font-weight: 750;
+  line-height: 1.45;
+}
+
+.desktopMiniMeta {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+
+.desktopMiniMeta div {
+  min-width: 0;
+  padding: 9px 10px;
+  border: 1px solid #e4eaf0;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.desktopMiniMeta dt,
+.desktopMiniMeta dd {
+  overflow: hidden;
+  margin: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.desktopMiniMeta dt {
+  color: #667085;
+  font-size: 10px;
+  font-weight: 950;
+  text-transform: uppercase;
+}
+
+.desktopMiniMeta dd {
+  margin-top: 3px;
+  color: #17324d;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.desktopUserCardHeader {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 0.9fr);
+  gap: 12px;
+  align-items: start;
+}
+
+.desktopUserBodyGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+  gap: 10px;
+}
+
+.desktopSubPanel {
+  min-width: 0;
+  padding: 11px;
+  border: 1px solid #e4eaf0;
+  border-radius: 8px;
+  background: #fbfcfe;
+}
+
+.desktopSubPanel > strong {
+  display: block;
+  margin-bottom: 8px;
+  color: #17324d;
+  font-size: 12px;
+  font-weight: 950;
+}
+
+.desktopSubPanel small {
+  display: block;
+  color: #667085;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1.4;
+}
+
+.desktopInlineForm {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+}
+
+.desktopInlineForm input {
+  min-height: 42px;
+  padding: 10px 12px;
+  font-size: 14px;
+}
+
+.desktopDeviceChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.desktopDeviceChip {
+  max-width: 100%;
+  min-height: 28px;
+  padding: 6px 8px;
+  overflow: hidden;
+  border: 1px solid #dbe4ed;
+  border-radius: 999px;
+  background: #ffffff;
+  color: #475467;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  font-weight: 850;
+}
+
+.desktopDeviceChip.is-approved {
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+  color: #166534;
+}
+
+.desktopDeviceChip.is-pending {
+  border-color: #fde68a;
+  background: #fffbeb;
+  color: #92400e;
+}
+
+.desktopTimelineItem {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 11px 0;
+  border-bottom: 1px solid #edf1f5;
+}
+
+.desktopTimelineItem:last-child {
+  border-bottom: 0;
+}
+
+.desktopTimelineItem span,
+.desktopTimelineItem strong,
+.desktopTimelineItem small,
+.desktopTimelineItem time {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.desktopTimelineItem span {
+  color: #0f766e;
+  font-size: 10px;
+  font-weight: 950;
+  text-transform: uppercase;
+}
+
+.desktopTimelineItem strong {
+  margin-top: 2px;
+  color: #17324d;
+  font-size: 13px;
+  font-weight: 950;
+}
+
+.desktopTimelineItem small,
+.desktopTimelineItem time {
+  color: #667085;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.desktopGroupSummaryGrid {
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+}
+
+.desktopGroupSummaryGrid article {
+  min-width: 0;
+  padding: 13px;
+  border: 1px solid #e4eaf0;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.desktopGroupSummaryGrid span,
+.desktopGroupSummaryGrid small {
+  display: block;
+  overflow: hidden;
+  color: #667085;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  font-weight: 850;
+}
+
+.desktopGroupSummaryGrid strong {
+  display: block;
+  margin: 7px 0 4px;
+  color: #17324d;
+  font-size: 24px;
+  line-height: 1;
+  font-weight: 950;
 }
 
 .desktopAdminList,
@@ -2287,6 +2569,14 @@ form button {
   .desktopAdminTwoColumn {
     grid-template-columns: 1fr;
   }
+
+  .desktopToolsGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .desktopUserGrid {
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  }
 }
 
 @media (max-width: 720px) {
@@ -2336,6 +2626,20 @@ form button {
   }
 
   .desktopAdminStats {
+    grid-template-columns: 1fr;
+  }
+
+  .desktopEntityGrid,
+  .desktopUserGrid,
+  .desktopGroupSummaryGrid,
+  .desktopToolsGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .desktopUserCardHeader,
+  .desktopUserBodyGrid,
+  .desktopInlineForm,
+  .desktopTimelineItem {
     grid-template-columns: 1fr;
   }
 
