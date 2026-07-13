@@ -1282,6 +1282,66 @@ form button {
   font-size: 13px;
 }
 
+.desktopAdminHeaderActions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex: 1 1 620px;
+  min-width: 0;
+}
+
+.desktopAdminHeaderActions input,
+.desktopAdminHeaderActions select {
+  min-height: 44px;
+  margin: 0;
+  border-radius: 8px;
+  background: #ffffff;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.desktopAdminHeaderActions input {
+  min-width: 260px;
+  flex: 1 1 320px;
+}
+
+.desktopAdminHeaderActions select {
+  width: auto;
+  min-width: 150px;
+  padding: 10px 36px 10px 12px;
+}
+
+.desktopAdminRuleStrip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 14px;
+  padding: 11px 13px;
+  border: 1px solid rgba(15, 118, 110, 0.20);
+  border-radius: 8px;
+  background: #e8f3f1;
+  color: #0f766e;
+}
+
+.desktopAdminRuleStrip strong,
+.desktopAdminRuleStrip span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.desktopAdminRuleStrip strong {
+  font-size: 13px;
+  font-weight: 950;
+}
+
+.desktopAdminRuleStrip span {
+  color: #275b56;
+  font-size: 12px;
+  font-weight: 850;
+}
+
 .desktopAdminContent {
   display: grid;
   gap: 16px;
@@ -2246,6 +2306,28 @@ form button {
   .desktopAdminHeader {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .desktopAdminHeaderActions {
+    align-items: stretch;
+    flex-direction: column;
+    flex-basis: auto;
+  }
+
+  .desktopAdminHeaderActions input,
+  .desktopAdminHeaderActions select {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .desktopAdminRuleStrip {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .desktopAdminRuleStrip strong,
+  .desktopAdminRuleStrip span {
+    white-space: normal;
   }
 
   .desktopAdminRefresh,

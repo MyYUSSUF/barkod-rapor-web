@@ -18,8 +18,8 @@ const NOTIFICATION_PERMISSION_ASKED_KEY = 'barkod_rapor_notification_permission_
 const REPORT_TIMEOUT_MS = 45000
 const DEVICE_ACCESS_CHECK_MS = 10000
 const DESKTOP_ADMIN_PATH = '/yonetim'
-const APP_VERSION = 'v1.23'
-const APP_LOG_VERSION = 'web-v1.23'
+const APP_VERSION = 'v1.24'
+const APP_LOG_VERSION = 'web-v1.24'
 
 const SHIPMENT_CUSTOMERS = [
   {
@@ -584,6 +584,8 @@ function App() {
   const [adminLogLimit, setAdminLogLimit] = useState(12)
   const [activeAdminSection, setActiveAdminSection] = useState('logs')
   const [activeDesktopAdminView, setActiveDesktopAdminView] = useState('dashboard')
+  const [desktopAdminSearch, setDesktopAdminSearch] = useState('')
+  const [desktopDeviceFilter, setDesktopDeviceFilter] = useState('all')
   const [newAdminUser, setNewAdminUser] = useState({
     username: '',
     full_name: '',
@@ -1309,7 +1311,7 @@ function App() {
           register: true,
         })
 
-        if (!deviceResult.approved) {
+        if (!deviceResult.approved && profileData.role !== 'admin') {
           await supabase.auth.signOut()
           showUserMessage(getDeviceAccessMessage(deviceResult), 'warning')
           setRestoringSession(false)
@@ -1385,7 +1387,7 @@ function App() {
 
         const deviceResult = await checkDeviceAccess(accessToken)
 
-        if (!deviceResult.approved) {
+        if (!deviceResult.approved && userProfile.role !== 'admin') {
           stopScanner()
           await supabase.auth.signOut()
           resetUserState()
@@ -1818,7 +1820,7 @@ function App() {
         register: true,
       })
 
-      if (!deviceResult.approved) {
+      if (!deviceResult.approved && profileData.role !== 'admin') {
         await supabase.auth.signOut()
         showUserMessage(getDeviceAccessMessage(deviceResult), 'warning')
         setLoading(false)
@@ -2092,9 +2094,6 @@ function App() {
   const pendingDeviceCount = adminData.devices.filter(
     (device) => device.status === 'pending'
   ).length
-  const pendingAdminDevices = adminData.devices.filter(
-    (device) => device.status === 'pending'
-  )
   const approvedAdminDevices = adminData.devices.filter(
     (device) => device.status === 'approved'
   )
@@ -2118,6 +2117,47 @@ function App() {
       return new Date(right.created_at) - new Date(left.created_at)
     })
     .slice(0, 10)
+  const cleanDesktopSearch = desktopAdminSearch.trim().toLowerCase()
+  const textMatchesDesktopSearch = (...values) => {
+    if (!cleanDesktopSearch) {
+      return true
+    }
+
+    return values.some((value) => {
+      return String(value || '').toLowerCase().includes(cleanDesktopSearch)
+    })
+  }
+  const filteredDesktopDevices = adminData.devices.filter((device) => {
+    return (
+      (desktopDeviceFilter === 'all' || device.status === desktopDeviceFilter) &&
+      textMatchesDesktopSearch(
+        device.user_name,
+        device.user_email,
+        device.device_name,
+        device.status
+      )
+    )
+  })
+  const filteredPendingAdminDevices = filteredDesktopDevices.filter(
+    (device) => device.status === 'pending'
+  )
+  const filteredDesktopUsers = adminData.users.filter((user) => {
+    return textMatchesDesktopSearch(
+      user.full_name,
+      user.email,
+      user.role,
+      user.is_active === false ? 'pasif' : 'aktif'
+    )
+  })
+  const filteredDesktopActivity = latestAdminActivity.filter((log) => {
+    return textMatchesDesktopSearch(
+      log.user_name,
+      log.user_email,
+      log.activityLabel,
+      log.barcode,
+      log.device_name
+    )
+  })
   const adminSections = [
     {
       key: 'logs',
@@ -2294,17 +2334,44 @@ function App() {
               </h1>
             </div>
 
-            <button
-              type="button"
-              className="desktopAdminRefresh"
-              onClick={loadAdminPanelData}
-              disabled={adminLoading}
-            >
-              {adminLoading ? 'Yenileniyor...' : 'Verileri Yenile'}
-            </button>
+            <div className="desktopAdminHeaderActions">
+              <input
+                type="search"
+                value={desktopAdminSearch}
+                onChange={(e) => setDesktopAdminSearch(e.target.value)}
+                placeholder="Kullanıcı, cihaz, barkod ara"
+                aria-label="Yönetim panelinde ara"
+              />
+
+              <select
+                value={desktopDeviceFilter}
+                onChange={(e) => setDesktopDeviceFilter(e.target.value)}
+                aria-label="Cihaz durum filtresi"
+              >
+                <option value="all">Tüm cihazlar</option>
+                <option value="pending">Onay bekleyen</option>
+                <option value="approved">Onaylı</option>
+              </select>
+
+              <button
+                type="button"
+                className="desktopAdminRefresh"
+                onClick={loadAdminPanelData}
+                disabled={adminLoading}
+              >
+                {adminLoading ? 'Yenileniyor...' : 'Verileri Yenile'}
+              </button>
+            </div>
           </header>
 
           {adminMessage && <p className="message">{adminMessage}</p>}
+
+          <section className="desktopAdminRuleStrip">
+            <strong>Cihaz kuralı</strong>
+            <span>
+              Admin cihazları otomatik onaylanır. Normal kullanıcıda ilk cihaz otomatik açılır, sonraki cihazlar onay bekler.
+            </span>
+          </section>
 
           {activeDesktopAdminView === 'dashboard' && (
             <section className="desktopAdminContent">
@@ -2335,11 +2402,11 @@ function App() {
                 <section className="desktopAdminPanel">
                   <div className="desktopPanelHeader">
                     <strong>Bekleyen Cihazlar</strong>
-                    <span>{pendingAdminDevices.length}</span>
+                    <span>{filteredPendingAdminDevices.length}</span>
                   </div>
 
                   <div className="desktopAdminList">
-                    {pendingAdminDevices.map((device) => (
+                    {filteredPendingAdminDevices.map((device) => (
                       <article key={device.id} className="desktopDeviceItem">
                         <div>
                           <strong>{device.user_name || device.user_email || '-'}</strong>
@@ -2369,7 +2436,7 @@ function App() {
                       </article>
                     ))}
 
-                    {pendingAdminDevices.length === 0 && (
+                    {filteredPendingAdminDevices.length === 0 && (
                       <p className="adminEmptyState">Onay bekleyen cihaz yok.</p>
                     )}
                   </div>
@@ -2378,11 +2445,11 @@ function App() {
                 <section className="desktopAdminPanel">
                   <div className="desktopPanelHeader">
                     <strong>Son Hareketler</strong>
-                    <span>{latestAdminActivity.length}</span>
+                    <span>{filteredDesktopActivity.length}</span>
                   </div>
 
                   <div className="desktopActivityList">
-                    {latestAdminActivity.map((log) => (
+                    {filteredDesktopActivity.map((log) => (
                       <article key={`${log.activityType}-${log.id}`}>
                         <div>
                           <strong>{log.user_name || log.user_email || '-'}</strong>
@@ -2392,7 +2459,7 @@ function App() {
                       </article>
                     ))}
 
-                    {latestAdminActivity.length === 0 && (
+                    {filteredDesktopActivity.length === 0 && (
                       <p className="adminEmptyState">Kayıt bulunamadı.</p>
                     )}
                   </div>
@@ -2405,7 +2472,7 @@ function App() {
             <section className="desktopAdminPanel">
               <div className="desktopPanelHeader">
                 <strong>Cihaz Onayları</strong>
-                <span>{adminData.devices.length}</span>
+                <span>{filteredDesktopDevices.length}</span>
               </div>
 
               <div className="desktopTableWrap">
@@ -2421,7 +2488,7 @@ function App() {
                     </tr>
                   </thead>
                   <tbody>
-                    {adminData.devices.map((device) => (
+                    {filteredDesktopDevices.map((device) => (
                       <tr key={device.id}>
                         <td>
                           <strong>{device.user_name || '-'}</strong>
@@ -2486,7 +2553,7 @@ function App() {
             <section className="desktopAdminPanel">
               <div className="desktopPanelHeader">
                 <strong>Kullanıcılar</strong>
-                <span>{adminData.users.length}</span>
+                <span>{filteredDesktopUsers.length}</span>
               </div>
 
               <div className="desktopTableWrap">
@@ -2502,7 +2569,7 @@ function App() {
                     </tr>
                   </thead>
                   <tbody>
-                    {adminData.users.map((user) => (
+                    {filteredDesktopUsers.map((user) => (
                       <tr key={user.id}>
                         <td>
                           <strong>{user.full_name || user.email || '-'}</strong>
@@ -2610,7 +2677,7 @@ function App() {
             <section className="desktopAdminPanel">
               <div className="desktopPanelHeader">
                 <strong>Son Hareketler</strong>
-                <span>{latestAdminActivity.length}</span>
+                <span>{filteredDesktopActivity.length}</span>
               </div>
 
               <div className="desktopTableWrap">
@@ -2625,7 +2692,7 @@ function App() {
                     </tr>
                   </thead>
                   <tbody>
-                    {latestAdminActivity.map((log) => (
+                    {filteredDesktopActivity.map((log) => (
                       <tr key={`${log.activityType}-${log.id}`}>
                         <td>{formatDateTime(log.created_at)}</td>
                         <td>

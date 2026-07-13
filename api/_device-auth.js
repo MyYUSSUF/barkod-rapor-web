@@ -1,6 +1,7 @@
 import crypto from 'crypto'
 import { createClient } from '@supabase/supabase-js'
 import {
+  approveAdminDevice,
   approveFirstPendingDevice,
   hasRegisteredDevice,
   notifyAdminsAboutDeviceAccess,
@@ -166,6 +167,22 @@ export async function requestDeviceAccess(req, deviceName = '') {
   const result = normalizeDeviceResult(data)
   let status = result.status || 'pending'
 
+  if (authResult.profile.role === 'admin' && status !== 'approved') {
+    try {
+      const adminDeviceApproved = await approveAdminDevice(
+        authResult.userId,
+        deviceHash,
+        deviceName
+      )
+
+      if (adminDeviceApproved) {
+        status = 'approved'
+      }
+    } catch (approvalError) {
+      console.error('Admin cihazı otomatik onaylanamadı:', approvalError)
+    }
+  }
+
   if (status === 'pending') {
     try {
       const firstDeviceApproved = await approveFirstPendingDevice(
@@ -181,7 +198,11 @@ export async function requestDeviceAccess(req, deviceName = '') {
     }
   }
 
-  if (['approved', 'pending'].includes(status) && !deviceWasRegistered) {
+  if (
+    authResult.profile.role !== 'admin' &&
+    ['approved', 'pending'].includes(status) &&
+    !deviceWasRegistered
+  ) {
     try {
       await notifyAdminsAboutDeviceAccess({
         userId: authResult.userId,
@@ -239,7 +260,19 @@ export async function verifyApprovedDeviceRequest(req, options = {}) {
   }
 
   const result = normalizeDeviceResult(data)
-  const status = result.status || (typeof data === 'string' ? data : 'missing')
+  let status = result.status || (typeof data === 'string' ? data : 'missing')
+
+  if (authResult.profile.role === 'admin' && status !== 'approved') {
+    const adminDeviceApproved = await approveAdminDevice(
+      authResult.userId,
+      hashDeviceToken(deviceToken),
+      getHeader(req, 'user-agent')
+    )
+
+    if (adminDeviceApproved) {
+      status = 'approved'
+    }
+  }
 
   if (status !== 'approved') {
     return {
