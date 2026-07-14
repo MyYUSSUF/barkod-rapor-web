@@ -3371,3 +3371,247 @@ form button {
     min-height: 116px;
   }
 }
+
+/* ELVAN Admin Panel — geniş masaüstü web sitesi düzeni */
+.desktopAdminLoginPage {
+  display: grid;
+  grid-template-columns: minmax(420px, 0.9fr) minmax(520px, 1.1fr);
+  align-items: stretch;
+  justify-content: stretch;
+  padding: 0;
+  background: var(--admin-canvas);
+}
+
+.desktopAdminLoginIntro {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 48px;
+  padding: clamp(36px, 5vw, 76px);
+  color: #ffffff;
+  background:
+    radial-gradient(circle at 18% 18%, rgba(47, 167, 154, 0.30), transparent 32%),
+    radial-gradient(circle at 82% 78%, rgba(117, 102, 184, 0.38), transparent 34%),
+    linear-gradient(145deg, #1d2845 0%, #18233f 58%, #202d4f 100%);
+}
+
+.desktopAdminLoginBrand {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  font-size: 13px;
+  font-weight: 900;
+  letter-spacing: 0.16em;
+}
+
+.desktopAdminLoginBrand .appLogo {
+  width: 138px;
+  max-height: 58px;
+  padding: 8px 12px;
+  border-radius: 14px;
+  background: #ffffff;
+}
+
+.desktopAdminLoginMessage {
+  max-width: 610px;
+}
+
+.desktopAdminLoginMessage .eyebrow {
+  color: #7de0d4;
+}
+
+.desktopAdminLoginMessage h1 {
+  max-width: 560px;
+  margin: 14px 0 22px;
+  color: #ffffff;
+  font-size: clamp(46px, 5.2vw, 76px);
+  line-height: 0.98;
+  letter-spacing: -0.055em;
+}
+
+.desktopAdminLoginMessage p {
+  max-width: 540px;
+  margin: 0;
+  color: rgba(255, 255, 255, 0.68);
+  font-size: clamp(16px, 1.4vw, 20px);
+  line-height: 1.7;
+}
+
+.desktopAdminLoginHighlights {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.desktopAdminLoginHighlights span {
+  min-height: 78px;
+  display: flex;
+  align-items: flex-end;
+  padding: 15px;
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.07);
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.45;
+}
+
+.desktopAdminLoginCard {
+  width: min(520px, calc(100% - 64px));
+  max-width: none;
+  align-self: center;
+  justify-self: center;
+}
+
+.desktopAdminPage {
+  grid-template-columns: 280px minmax(0, 1fr);
+  background: var(--admin-canvas);
+}
+
+.desktopAdminSidebarFooter {
+  display: grid;
+  gap: 10px;
+}
+
+.desktopAdminProfile {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr);
+  align-items: center;
+  gap: 11px;
+  padding: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.desktopAdminProfileAvatar {
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  background: linear-gradient(135deg, var(--admin-teal), var(--admin-lavender));
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 950;
+}
+
+.desktopAdminProfile div {
+  min-width: 0;
+}
+
+.desktopAdminProfile strong,
+.desktopAdminProfile small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.desktopAdminProfile strong {
+  color: #ffffff;
+  font-size: 13px;
+}
+
+.desktopAdminProfile small {
+  margin-top: 3px;
+  color: rgba(255, 255, 255, 0.52);
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.desktopAdminHeaderCopy {
+  min-width: 210px;
+}
+
+.desktopAdminHeaderCopy p {
+  margin: 7px 0 0;
+  color: var(--admin-muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+@media (min-width: 1121px) {
+  .desktopAdminSidebar {
+    position: fixed;
+    inset: 0 auto 0 0;
+    width: 280px;
+    height: 100vh;
+    overflow-y: auto;
+  }
+
+  .desktopAdminMain {
+    grid-column: 2;
+    width: 100%;
+    min-height: 100vh;
+  }
+
+  .desktopAdminHeader {
+    position: sticky;
+    top: 0;
+    z-index: 8;
+    margin: calc(clamp(24px, 3vw, 42px) * -1);
+    margin-bottom: 22px;
+    padding: 24px clamp(24px, 3vw, 42px) 18px;
+    border-bottom: 1px solid rgba(225, 221, 238, 0.86);
+    background: rgba(244, 242, 250, 0.90);
+    backdrop-filter: blur(18px);
+  }
+}
+
+@media (max-width: 1120px) {
+  .desktopAdminLoginPage {
+    grid-template-columns: minmax(340px, 0.82fr) minmax(470px, 1.18fr);
+  }
+
+  .desktopAdminLoginIntro {
+    padding: 38px;
+  }
+
+  .desktopAdminLoginHighlights {
+    grid-template-columns: 1fr;
+  }
+
+  .desktopAdminLoginHighlights span {
+    min-height: 56px;
+    align-items: center;
+  }
+}
+
+@media (max-width: 860px) {
+  .desktopAdminLoginPage {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 28px;
+    background:
+      radial-gradient(circle at 88% 8%, rgba(117, 102, 184, 0.16), transparent 26%),
+      radial-gradient(circle at 72% 88%, rgba(47, 167, 154, 0.12), transparent 24%),
+      var(--admin-canvas);
+  }
+
+  .desktopAdminLoginIntro {
+    display: none;
+  }
+
+  .desktopAdminLoginCard {
+    width: min(520px, 100%);
+  }
+}
+
+@media (max-width: 760px) {
+  .desktopAdminLoginPage {
+    padding: 14px;
+  }
+
+  .desktopAdminProfile {
+    display: none;
+  }
+
+  .desktopAdminHeaderCopy p {
+    font-size: 12px;
+  }
+}

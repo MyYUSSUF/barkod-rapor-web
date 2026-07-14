@@ -18,8 +18,8 @@ const NOTIFICATION_PERMISSION_ASKED_KEY = 'barkod_rapor_notification_permission_
 const REPORT_TIMEOUT_MS = 45000
 const DEVICE_ACCESS_CHECK_MS = 10000
 const DESKTOP_ADMIN_PATH = '/yonetim'
-const APP_VERSION = 'v1.27'
-const APP_LOG_VERSION = 'web-v1.27'
+const APP_VERSION = 'v1.28'
+const APP_LOG_VERSION = 'web-v1.28'
 
 const SHIPMENT_CUSTOMERS = [
   {
@@ -2683,24 +2683,41 @@ function App() {
             ))}
           </nav>
 
-          <button
-            type="button"
-            className="desktopAdminLogout"
-            onClick={handleLogout}
-          >
-            {t.logout}
-          </button>
+          <div className="desktopAdminSidebarFooter">
+            <div className="desktopAdminProfile">
+              <span className="desktopAdminProfileAvatar" aria-hidden="true">
+                {(userProfile.full_name || userProfile.email || 'A')
+                  .slice(0, 2)
+                  .toUpperCase()}
+              </span>
+              <div>
+                <strong>
+                  {userProfile.full_name || userProfile.email || 'Yönetici'}
+                </strong>
+                <small>Yönetici hesabı</small>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              className="desktopAdminLogout"
+              onClick={handleLogout}
+            >
+              {t.logout}
+            </button>
+          </div>
         </aside>
 
         <main className="desktopAdminMain">
           <header className="desktopAdminHeader">
-            <div>
+            <div className="desktopAdminHeaderCopy">
               <span className="eyebrow">ELVAN ADMIN PANEL</span>
               <h1>
                 {desktopAdminSections.find(
                   (section) => section.key === activeDesktopAdminView
                 )?.title || 'Yönetim'}
               </h1>
+              <p>Canlı kullanıcı, cihaz ve rapor yönetimi</p>
             </div>
 
             <div className="desktopAdminHeaderActions">
@@ -4084,6 +4101,30 @@ function App() {
       className={screen === 'desktop-admin' ? 'desktopAdminLoginPage' : 'page'}
       dir={isArabic ? 'rtl' : 'ltr'}
     >
+      {screen === 'desktop-admin' && (
+        <aside className="desktopAdminLoginIntro" dir="ltr">
+          <div className="desktopAdminLoginBrand">
+            <img src="/elvan-logo.png" alt="Elvan Dyeing" className="appLogo" />
+            <span>ELVAN DYEING</span>
+          </div>
+
+          <div className="desktopAdminLoginMessage">
+            <span className="eyebrow">YÖNETİM MERKEZİ</span>
+            <h1>Operasyonunuz tek ekranda.</h1>
+            <p>
+              Kullanıcılar, cihaz izinleri ve rapor hareketleri için güvenli
+              masaüstü çalışma alanı.
+            </p>
+          </div>
+
+          <div className="desktopAdminLoginHighlights">
+            <span>Canlı kullanıcı yönetimi</span>
+            <span>Cihaz onay ve erişim kontrolü</span>
+            <span>Rapor hareketleri ve yetkiler</span>
+          </div>
+        </aside>
+      )}
+
       <div
         className={screen === 'desktop-admin' ? 'card desktopAdminLoginCard' : 'card'}
       >
