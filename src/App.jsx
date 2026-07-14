@@ -1,4 +1,4 @@
-import { Fragment, lazy, Suspense, useEffect, useRef, useState } from 'react'
+import { Fragment, lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { isSupabaseConfigured, supabase } from './lib/supabaseClient'
 import './App.css'
 
@@ -532,6 +532,326 @@ function AppFooter({ text, privacyLabel }) {
   )
 }
 
+function StartupSplash({ onComplete }) {
+  const canvasRef = useRef(null)
+  const brandFrameRef = useRef(null)
+  const animationFrameRef = useRef(0)
+  const completeTimerRef = useRef(0)
+
+  useEffect(() => {
+    const canvas = canvasRef.current
+    const brandFrame = brandFrameRef.current
+
+    if (!canvas || !brandFrame) {
+      onComplete()
+      return undefined
+    }
+
+    const ctx = canvas.getContext('2d')
+
+    if (!ctx) {
+      onComplete()
+      return undefined
+    }
+
+    const sourceLogo = new Image()
+    const particles = []
+    const solidRed = [220, 0, 0]
+    const solidBlack = [0, 0, 0]
+    let logoMask = null
+    let startedAt = 0
+    let disposed = false
+    let started = false
+
+    const clamp = (value, min = 0, max = 1) => Math.min(max, Math.max(min, value))
+    const getLuminance = (red, green, blue) => red * 0.299 + green * 0.587 + blue * 0.114
+    const easeOutCubic = (value) => 1 - Math.pow(1 - value, 3)
+
+    const getSolidLogoColor = (red, green, blue, x, y, width, height) => {
+      const isRedDominant = red > green + 24 && red > blue + 24
+      const isElvanWord = x < width * 0.5 && y > height * 0.43 && y < height * 0.73
+
+      return isRedDominant || isElvanWord ? solidRed : solidBlack
+    }
+
+    const isSymbolShadowArtifact = (red, green, blue, x, y, width, height) => {
+      const isRedDominant = red > green + 24 && red > blue + 24
+      const isCenteredSymbolArea =
+        x > width * 0.26 && x < width * 0.74 && y < height * 0.55
+
+      return isCenteredSymbolArea && !isRedDominant
+    }
+
+    const getLogoPixelAlpha = (red, green, blue, sourceAlpha, x, y, width, height) => {
+      if (isSymbolShadowArtifact(red, green, blue, x, y, width, height)) {
+        return 0
+      }
+
+      const color = getSolidLogoColor(red, green, blue, x, y, width, height)
+      const sourceAlphaFactor = sourceAlpha / 255
+      const luminance = getLuminance(red, green, blue)
+      const darkness = clamp((245 - luminance) / 160)
+      const redDominance = red - Math.max(green, blue)
+      const redStrength = clamp((redDominance - 8) / 96)
+      const whiteDistance = Math.max(255 - red, 255 - green, 255 - blue)
+      const edgeStrength = clamp((whiteDistance - 8) / 88)
+      const isRedColor = color === solidRed
+      const alphaStrength = isRedColor
+        ? Math.max(redStrength, darkness * 0.72) * edgeStrength
+        : darkness
+
+      return clamp(alphaStrength * sourceAlphaFactor)
+    }
+
+    const resizeCanvas = () => {
+      const rect = canvas.getBoundingClientRect()
+      const dpr = Math.min(window.devicePixelRatio || 1, 2)
+      canvas.width = Math.max(1, Math.floor(rect.width * dpr))
+      canvas.height = Math.max(1, Math.floor(rect.height * dpr))
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+    }
+
+    const buildParticles = () => {
+      particles.length = 0
+      logoMask = null
+      resizeCanvas()
+
+      const rect = canvas.getBoundingClientRect()
+      const logoWidth = sourceLogo.naturalWidth || sourceLogo.width
+      const logoHeight = sourceLogo.naturalHeight || sourceLogo.height
+
+      if (!logoWidth || !logoHeight || rect.width <= 0 || rect.height <= 0) {
+        return
+      }
+
+      const targetWidth = Math.min(rect.width * 0.78, 560)
+      const targetHeight = targetWidth * (logoHeight / logoWidth)
+      const targetX = (rect.width - targetWidth) / 2
+      const targetY = (rect.height - targetHeight) / 2
+      const sampleWidth = Math.round(targetWidth)
+      const sampleHeight = Math.round(targetHeight)
+      const sampleCanvas = document.createElement('canvas')
+      const sampleCtx = sampleCanvas.getContext('2d', {
+        willReadFrequently: true,
+      })
+      const maskCanvas = document.createElement('canvas')
+      const maskCtx = maskCanvas.getContext('2d')
+
+      if (!sampleCtx || !maskCtx) {
+        return
+      }
+
+      sampleCanvas.width = sampleWidth
+      sampleCanvas.height = sampleHeight
+      maskCanvas.width = sampleWidth
+      maskCanvas.height = sampleHeight
+      sampleCtx.drawImage(sourceLogo, 0, 0, sampleWidth, sampleHeight)
+
+      const imageData = sampleCtx.getImageData(0, 0, sampleWidth, sampleHeight)
+      const pixels = imageData.data
+      const cleanImageData = sampleCtx.createImageData(sampleWidth, sampleHeight)
+      const cleanPixels = cleanImageData.data
+
+      for (let i = 0; i < pixels.length; i += 4) {
+        const pixelIndex = i / 4
+        const x = pixelIndex % sampleWidth
+        const y = Math.floor(pixelIndex / sampleWidth)
+        const red = pixels[i]
+        const green = pixels[i + 1]
+        const blue = pixels[i + 2]
+        const alpha = pixels[i + 3]
+        const logoAlpha = getLogoPixelAlpha(
+          red,
+          green,
+          blue,
+          alpha,
+          x,
+          y,
+          sampleWidth,
+          sampleHeight
+        )
+        const solidColor = getSolidLogoColor(
+          red,
+          green,
+          blue,
+          x,
+          y,
+          sampleWidth,
+          sampleHeight
+        )
+
+        cleanPixels[i] = solidColor[0]
+        cleanPixels[i + 1] = solidColor[1]
+        cleanPixels[i + 2] = solidColor[2]
+        cleanPixels[i + 3] = logoAlpha <= 0.015 ? 0 : Math.round(logoAlpha * 255)
+      }
+
+      maskCtx.putImageData(cleanImageData, 0, 0)
+
+      const step = rect.width < 620 ? 4 : 3
+      const candidates = []
+
+      for (let y = 0; y < sampleHeight; y += step) {
+        for (let x = 0; x < sampleWidth; x += step) {
+          const index = (y * sampleWidth + x) * 4
+          const red = pixels[index]
+          const green = pixels[index + 1]
+          const blue = pixels[index + 2]
+          const alpha = pixels[index + 3]
+          const logoAlpha = getLogoPixelAlpha(
+            red,
+            green,
+            blue,
+            alpha,
+            x,
+            y,
+            sampleWidth,
+            sampleHeight
+          )
+
+          if (logoAlpha > 0.18) {
+            const solidColor = getSolidLogoColor(
+              red,
+              green,
+              blue,
+              x,
+              y,
+              sampleWidth,
+              sampleHeight
+            )
+
+            candidates.push({
+              x: targetX + x,
+              y: targetY + y,
+              color: `rgba(${solidColor[0]}, ${solidColor[1]}, ${solidColor[2]}, 1)`,
+            })
+          }
+        }
+      }
+
+      const maxParticles = rect.width < 620 ? 2400 : 5600
+      const stride = Math.max(1, Math.ceil(candidates.length / maxParticles))
+
+      for (let i = 0; i < candidates.length; i += stride) {
+        const target = candidates[i]
+
+        particles.push({
+          sx: -80 - Math.random() * rect.width * 0.55,
+          sy: Math.random() * rect.height,
+          tx: target.x,
+          ty: target.y,
+          r: 1.35 + Math.random() * 1.75,
+          delay: Math.random() * 520,
+          color: target.color,
+        })
+      }
+
+      logoMask = {
+        canvas: maskCanvas,
+        x: targetX,
+        y: targetY,
+        width: targetWidth,
+        height: targetHeight,
+      }
+    }
+
+    const draw = (now) => {
+      if (disposed) {
+        return
+      }
+
+      const rect = canvas.getBoundingClientRect()
+      const elapsed = now - startedAt
+
+      ctx.clearRect(0, 0, rect.width, rect.height)
+
+      for (const particle of particles) {
+        const raw = clamp((elapsed - particle.delay) / 1450)
+        const eased = easeOutCubic(raw)
+        const settle = clamp((elapsed - 1700) / 650)
+        const drift =
+          Math.sin((elapsed + particle.tx) * 0.006) *
+          (1 - eased) *
+          (18 - settle * 12)
+        const x = particle.sx + (particle.tx - particle.sx) * eased
+        const y = particle.sy + (particle.ty - particle.sy) * eased + drift
+        const alpha = raw < 0.08 ? raw / 0.08 : 1
+        const sharpen = clamp((elapsed - 1780) / 300)
+
+        ctx.globalAlpha = alpha * (1 - sharpen)
+        ctx.fillStyle = particle.color
+        ctx.beginPath()
+        ctx.arc(x, y, particle.r * (1 + settle * 0.08), 0, Math.PI * 2)
+        ctx.fill()
+      }
+
+      ctx.globalAlpha = 1
+
+      if (logoMask) {
+        const cleanLogoAlpha = clamp((elapsed - 1720) / 340)
+        ctx.globalAlpha = cleanLogoAlpha
+        ctx.drawImage(
+          logoMask.canvas,
+          logoMask.x,
+          logoMask.y,
+          logoMask.width,
+          logoMask.height
+        )
+        ctx.globalAlpha = 1
+      }
+
+      if (elapsed > 2700) {
+        brandFrame.classList.add('isLeaving')
+      }
+
+      if (elapsed < 3300) {
+        animationFrameRef.current = requestAnimationFrame(draw)
+      }
+    }
+
+    const start = () => {
+      if (started) {
+        return
+      }
+
+      started = true
+      buildParticles()
+      startedAt = performance.now()
+      animationFrameRef.current = requestAnimationFrame(draw)
+      completeTimerRef.current = window.setTimeout(onComplete, 3250)
+    }
+
+    sourceLogo.onload = start
+    sourceLogo.onerror = onComplete
+    sourceLogo.src = '/elvan-logo.png'
+
+    if (sourceLogo.complete && sourceLogo.naturalWidth > 0) {
+      start()
+    }
+
+    const handleResize = () => {
+      buildParticles()
+    }
+
+    window.addEventListener('resize', handleResize)
+
+    return () => {
+      disposed = true
+      window.removeEventListener('resize', handleResize)
+      window.cancelAnimationFrame(animationFrameRef.current)
+      window.clearTimeout(completeTimerRef.current)
+    }
+  }, [onComplete])
+
+  return (
+    <div className="startupSplash" role="status" aria-label="ELVAN açılıyor">
+      <div className="startupSplashFrame" ref={brandFrameRef}>
+        <canvas ref={canvasRef} className="startupSplashCanvas" />
+      </div>
+    </div>
+  )
+}
+
 function App() {
   const videoRef = useRef(null)
   const shipmentDateBoxRef = useRef(null)
@@ -552,6 +872,7 @@ function App() {
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
+  const [startupSplashVisible, setStartupSplashVisible] = useState(true)
   const [restoringSession, setRestoringSession] = useState(true)
   const [selectedReportCode, setSelectedReportCode] = useState('')
   const [dateRangeReportCode, setDateRangeReportCode] = useState('')
@@ -608,6 +929,10 @@ function App() {
     setMessageKind(kind)
     setMessage(value)
   }
+
+  const hideStartupSplash = useCallback(() => {
+    setStartupSplashVisible(false)
+  }, [])
 
   const clearUserMessage = () => {
     setMessage('')
@@ -2583,6 +2908,10 @@ function App() {
   )
 
   const dateRangeDayCount = getDateRangeDayCount(startDate, endDate)
+
+  if (startupSplashVisible) {
+    return <StartupSplash onComplete={hideStartupSplash} />
+  }
 
   if (pdfViewerData) {
     return (
