@@ -18,8 +18,8 @@ const NOTIFICATION_PERMISSION_ASKED_KEY = 'barkod_rapor_notification_permission_
 const REPORT_TIMEOUT_MS = 45000
 const DEVICE_ACCESS_CHECK_MS = 10000
 const DESKTOP_ADMIN_PATH = '/yonetim'
-const APP_VERSION = 'v1.28'
-const APP_LOG_VERSION = 'web-v1.28'
+const APP_VERSION = 'v1.29'
+const APP_LOG_VERSION = 'web-v1.29'
 
 const SHIPMENT_CUSTOMERS = [
   {
@@ -69,6 +69,12 @@ const REPORTS = [
     requiresBarcode: false,
     requiresDateRange: true,
     permissionKey: 'can_view_shipment_report',
+  },
+  {
+    code: 'RAR00037',
+    key: 'yarnStock',
+    icon: 'stock',
+    requiresBarcode: false,
   },
 ]
 
@@ -135,6 +141,7 @@ const LANGUAGES = {
     surfaceControl: 'Yüzey Kontrol Raporu',
     fixingWaiting: 'Fikse Bekleyenler',
     shipmentTracking: 'Sevkiyat Takip',
+    yarnStock: 'İplik Stok Raporu',
     startDate: 'Başlangıç Tarihi',
     endDate: 'Bitiş Tarihi',
     reportPagePreparing: 'Rapor hazırlanıyor...',
@@ -213,6 +220,7 @@ const LANGUAGES = {
     surfaceControl: 'Surface Control Report',
     fixingWaiting: 'Fixing Waiting List',
     shipmentTracking: 'Shipment Tracking',
+    yarnStock: 'Yarn Stock Report',
     startDate: 'Start Date',
     endDate: 'End Date',
     reportPagePreparing: 'Report is preparing...',
@@ -291,6 +299,7 @@ const LANGUAGES = {
     surfaceControl: 'تقرير مراقبة السطح',
     fixingWaiting: 'قائمة انتظار التثبيت',
     shipmentTracking: 'متابعة الشحن',
+    yarnStock: 'Yarn Stock Report',
     startDate: 'تاريخ البداية',
     endDate: 'تاريخ النهاية',
     reportPagePreparing: 'جارٍ تجهيز التقرير...',
