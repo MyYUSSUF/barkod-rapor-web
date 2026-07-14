@@ -18,8 +18,8 @@ const NOTIFICATION_PERMISSION_ASKED_KEY = 'barkod_rapor_notification_permission_
 const REPORT_TIMEOUT_MS = 45000
 const DEVICE_ACCESS_CHECK_MS = 10000
 const DESKTOP_ADMIN_PATH = '/yonetim'
-const APP_VERSION = 'v1.26'
-const APP_LOG_VERSION = 'web-v1.26'
+const APP_VERSION = 'v1.27'
+const APP_LOG_VERSION = 'web-v1.27'
 
 const SHIPMENT_CUSTOMERS = [
   {
@@ -2662,8 +2662,8 @@ function App() {
           <div className="desktopAdminBrand">
             <img src="/elvan-logo.png" alt="Elvan Dyeing" className="appLogo" />
             <div>
-              <strong>ELVAN Yönetim</strong>
-              <span>Bilgisayar paneli</span>
+              <strong>ELVAN Admin Panel</strong>
+              <span>Kullanıcı, cihaz ve rapor yönetimi</span>
             </div>
           </div>
 
@@ -2695,7 +2695,7 @@ function App() {
         <main className="desktopAdminMain">
           <header className="desktopAdminHeader">
             <div>
-              <span className="eyebrow">YÖNETİM PANELİ</span>
+              <span className="eyebrow">ELVAN ADMIN PANEL</span>
               <h1>
                 {desktopAdminSections.find(
                   (section) => section.key === activeDesktopAdminView
@@ -4105,11 +4105,11 @@ function App() {
         <div className="loginHero">
           <span className="eyebrow">ELVAN DYEING</span>
           <h1>
-            {screen === 'desktop-admin' ? 'ELVAN Yönetim' : t.appTitle}
+            {screen === 'desktop-admin' ? 'ELVAN Admin Panel' : t.appTitle}
           </h1>
           <p className="subtitle">
             {screen === 'desktop-admin'
-              ? 'Bilgisayar yönetim paneli'
+              ? 'Kullanıcı, cihaz ve rapor yönetimi'
               : t.appSubtitle}
           </p>
         </div>

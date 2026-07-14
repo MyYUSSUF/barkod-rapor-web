@@ -2877,3 +2877,497 @@ form button {
     display: none;
   }
 }
+
+/* ELVAN Admin Panel — yumuşak modern görünüm */
+.desktopAdminPage,
+.desktopAdminLoginPage {
+  --admin-navy: #18233f;
+  --admin-sidebar: #1d2845;
+  --admin-teal: #2fa79a;
+  --admin-teal-dark: #23877d;
+  --admin-lavender: #7566b8;
+  --admin-amber: #e9a94d;
+  --admin-canvas: #f4f2fa;
+  --admin-surface: #ffffff;
+  --admin-soft: #eeebf7;
+  --admin-line: #e1ddee;
+  --admin-muted: #6c7590;
+  background:
+    radial-gradient(circle at 88% 8%, rgba(117, 102, 184, 0.16), transparent 26%),
+    radial-gradient(circle at 72% 88%, rgba(47, 167, 154, 0.12), transparent 24%),
+    var(--admin-canvas);
+}
+
+.desktopAdminLoginPage {
+  padding: clamp(20px, 5vw, 64px);
+}
+
+.desktopAdminLoginCard {
+  width: min(520px, 100%);
+  padding: clamp(24px, 4vw, 42px);
+  border: 1px solid rgba(225, 221, 238, 0.92);
+  border-radius: 26px;
+  background: rgba(255, 255, 255, 0.97);
+  box-shadow: 0 28px 80px rgba(44, 35, 82, 0.14);
+}
+
+.desktopAdminLoginCard .loginHero {
+  margin: 22px 0 26px;
+  padding: 24px;
+  border: 1px solid var(--admin-line);
+  border-radius: 20px;
+  background:
+    linear-gradient(135deg, rgba(117, 102, 184, 0.12), rgba(47, 167, 154, 0.10));
+}
+
+.desktopAdminLoginCard .loginHero h1 {
+  color: var(--admin-navy);
+  letter-spacing: -0.04em;
+}
+
+.desktopAdminLoginCard .eyebrow {
+  color: var(--admin-lavender);
+}
+
+.desktopAdminLoginCard input,
+.desktopAdminLoginCard .languageSelect {
+  border-color: var(--admin-line);
+  border-radius: 14px;
+  background: #fbfafd;
+}
+
+.desktopAdminLoginCard form > button {
+  border-radius: 14px;
+  background: linear-gradient(135deg, var(--admin-teal), var(--admin-teal-dark));
+  box-shadow: 0 12px 26px rgba(47, 167, 154, 0.24);
+}
+
+.desktopAdminPage {
+  grid-template-columns: 260px minmax(0, 1fr);
+  color: var(--admin-navy);
+}
+
+.desktopAdminSidebar {
+  gap: 24px;
+  padding: 26px 18px;
+  border-right: 0;
+  color: #ffffff;
+  background:
+    linear-gradient(180deg, #1d2845 0%, #18233f 100%);
+  box-shadow: 10px 0 34px rgba(24, 35, 63, 0.12);
+}
+
+.desktopAdminBrand {
+  gap: 14px;
+  padding: 2px 8px 22px;
+  border-bottom-color: rgba(255, 255, 255, 0.12);
+}
+
+.desktopAdminBrand .appLogo {
+  width: 100%;
+  max-width: 168px;
+  max-height: 66px;
+  padding: 9px 12px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.96);
+}
+
+.desktopAdminBrand strong {
+  color: #ffffff;
+  font-size: 17px;
+  letter-spacing: -0.02em;
+}
+
+.desktopAdminBrand span {
+  max-width: 190px;
+  color: rgba(255, 255, 255, 0.58);
+  line-height: 1.4;
+}
+
+.desktopAdminNav {
+  gap: 7px;
+}
+
+.desktopAdminNav button {
+  min-height: 60px;
+  padding: 11px 13px;
+  border-color: transparent;
+  border-radius: 14px;
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.desktopAdminNav button:hover:not(:disabled) {
+  border-color: rgba(255, 255, 255, 0.10);
+  background: rgba(255, 255, 255, 0.08);
+  color: #ffffff;
+}
+
+.desktopAdminNav button.isActive {
+  border-color: rgba(47, 167, 154, 0.42);
+  background: linear-gradient(135deg, rgba(47, 167, 154, 0.30), rgba(117, 102, 184, 0.22));
+  color: #ffffff;
+  box-shadow: inset 3px 0 0 var(--admin-teal);
+}
+
+.desktopAdminNav small {
+  color: rgba(255, 255, 255, 0.48);
+}
+
+.desktopAdminNav button.isActive small {
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.desktopAdminLogout {
+  min-height: 46px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.07);
+  color: #ffffff;
+}
+
+.desktopAdminLogout:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.desktopAdminMain {
+  padding: clamp(24px, 3vw, 42px);
+}
+
+.desktopAdminHeader {
+  margin-bottom: 22px;
+}
+
+.desktopAdminHeader .eyebrow {
+  color: var(--admin-lavender);
+}
+
+.desktopAdminHeader h1 {
+  margin-top: 7px;
+  color: var(--admin-navy);
+  font-size: clamp(28px, 3vw, 40px);
+  letter-spacing: -0.045em;
+}
+
+.desktopAdminHeaderActions input,
+.desktopAdminHeaderActions select {
+  min-height: 46px;
+  border-color: var(--admin-line);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.92);
+  color: var(--admin-navy);
+  box-shadow: 0 8px 24px rgba(44, 35, 82, 0.05);
+}
+
+.desktopAdminHeaderActions input:focus,
+.desktopAdminHeaderActions select:focus,
+.desktopAdminLoginCard input:focus,
+.desktopAdminLoginCard .languageSelect:focus {
+  border-color: var(--admin-teal);
+  box-shadow: 0 0 0 4px rgba(47, 167, 154, 0.14);
+}
+
+.desktopAdminRefresh {
+  min-height: 46px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, var(--admin-teal), var(--admin-teal-dark));
+  box-shadow: 0 10px 24px rgba(47, 167, 154, 0.22);
+}
+
+.desktopAdminRefresh:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 14px 28px rgba(47, 167, 154, 0.28);
+}
+
+.desktopAdminRuleStrip {
+  margin-bottom: 18px;
+  padding: 13px 15px;
+  border-color: rgba(47, 167, 154, 0.22);
+  border-radius: 14px;
+  background: rgba(223, 242, 239, 0.72);
+  color: var(--admin-teal-dark);
+}
+
+.desktopAdminRuleStrip span {
+  color: #4a716f;
+}
+
+.desktopAdminContent {
+  gap: 18px;
+}
+
+.desktopAdminStats {
+  gap: 14px;
+}
+
+.desktopAdminStats article,
+.desktopAdminPanel,
+.desktopAdminAccessCard {
+  border-color: var(--admin-line);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 16px 44px rgba(44, 35, 82, 0.07);
+}
+
+.desktopAdminStats article {
+  min-height: 134px;
+  padding: 20px;
+  position: relative;
+  overflow: hidden;
+}
+
+.desktopAdminStats article::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 70px;
+  height: 70px;
+  border-radius: 0 0 0 70px;
+  background: rgba(47, 167, 154, 0.10);
+}
+
+.desktopAdminStats article:nth-child(2)::after {
+  background: rgba(233, 169, 77, 0.15);
+}
+
+.desktopAdminStats article:nth-child(3)::after {
+  background: rgba(117, 102, 184, 0.14);
+}
+
+.desktopAdminStats article:nth-child(4)::after {
+  background: rgba(47, 167, 154, 0.10);
+}
+
+.desktopAdminStats span,
+.desktopAdminStats small {
+  color: var(--admin-muted);
+}
+
+.desktopAdminStats strong {
+  margin: 15px 0 6px;
+  color: var(--admin-navy);
+  font-size: 34px;
+  letter-spacing: -0.05em;
+}
+
+.desktopAdminTwoColumn {
+  gap: 16px;
+}
+
+.desktopAdminPanel {
+  padding: 20px;
+}
+
+.desktopPanelHeader {
+  margin-bottom: 16px;
+}
+
+.desktopPanelHeader strong {
+  color: var(--admin-navy);
+  font-size: 17px;
+}
+
+.desktopPanelHeader small {
+  color: var(--admin-muted);
+}
+
+.desktopPanelHeader span {
+  min-width: 32px;
+  padding: 6px 10px;
+  background: var(--admin-soft);
+  color: var(--admin-lavender);
+}
+
+.desktopEntityGrid,
+.desktopUserGrid,
+.desktopGroupSummaryGrid,
+.desktopTimeline,
+.desktopToolsGrid {
+  gap: 12px;
+}
+
+.desktopEntityCard {
+  padding: 16px;
+  border-color: var(--admin-line);
+  border-left-width: 4px;
+  border-radius: 16px;
+  background: #ffffff;
+  box-shadow: 0 8px 24px rgba(44, 35, 82, 0.055);
+}
+
+.desktopEntityCard.is-pending {
+  border-left-color: var(--admin-amber);
+}
+
+.desktopEntityCard.is-approved {
+  border-left-color: var(--admin-teal);
+}
+
+.desktopEntityMain strong,
+.desktopMiniMeta dd,
+.desktopSubPanel > strong,
+.desktopTimelineItem strong,
+.desktopGroupSummaryGrid strong,
+.desktopDeviceItem strong,
+.desktopActivityList strong {
+  color: var(--admin-navy);
+}
+
+.desktopEntityMain small,
+.desktopMiniMeta dt,
+.desktopSubPanel small,
+.desktopTimelineItem small,
+.desktopTimelineItem time,
+.desktopGroupSummaryGrid span,
+.desktopGroupSummaryGrid small,
+.desktopDeviceItem small,
+.desktopDeviceItem time,
+.desktopActivityList small,
+.desktopActivityList time {
+  color: var(--admin-muted);
+}
+
+.desktopMiniMeta div,
+.desktopSubPanel,
+.desktopGroupSummaryGrid article,
+.desktopDeviceItem,
+.desktopActivityList article,
+.desktopAdminTable th {
+  border-color: var(--admin-line);
+  border-radius: 14px;
+  background: #faf9fd;
+}
+
+.desktopDeviceChip {
+  border-color: var(--admin-line);
+  background: #faf9fd;
+  color: var(--admin-muted);
+}
+
+.desktopDeviceChip.is-approved {
+  border-color: rgba(47, 167, 154, 0.28);
+  background: #eaf7f5;
+  color: var(--admin-teal-dark);
+}
+
+.desktopDeviceChip.is-pending {
+  border-color: rgba(233, 169, 77, 0.34);
+  background: #fff7e9;
+  color: #94651f;
+}
+
+.desktopTimelineItem {
+  border-bottom-color: var(--admin-line);
+}
+
+.desktopTimelineItem span {
+  color: var(--admin-teal-dark);
+}
+
+.desktopTableWrap {
+  border-color: var(--admin-line);
+  border-radius: 16px;
+}
+
+.desktopAdminTable {
+  background: #ffffff;
+}
+
+.desktopAdminTable th,
+.desktopAdminTable td {
+  border-bottom-color: #efedf5;
+}
+
+.desktopAdminTable th {
+  color: var(--admin-muted);
+}
+
+.desktopAdminTable td {
+  color: var(--admin-navy);
+}
+
+.desktopPermissionCheck {
+  color: var(--admin-navy);
+}
+
+.desktopPermissionCheck input {
+  accent-color: var(--admin-teal);
+}
+
+.desktopAdminRowActions .adminSmallButton,
+.desktopInlineForm .adminSmallButton,
+.desktopFormPanel .mainButton {
+  border-radius: 10px;
+}
+
+.desktopAdminPage .adminApproveButton {
+  background: var(--admin-teal);
+}
+
+.desktopAdminPage .adminRoleButton {
+  background: var(--admin-lavender);
+}
+
+.desktopAdminPage .adminRejectButton {
+  background: #f1a7a7;
+  color: #672828;
+}
+
+.desktopAdminPage .adminDeleteUserButton {
+  background: #bc5362;
+}
+
+.desktopAdminAccessCard h1 {
+  color: var(--admin-navy);
+}
+
+@media (max-width: 1120px) {
+  .desktopAdminSidebar {
+    background: linear-gradient(135deg, #1d2845, #27365b);
+  }
+
+  .desktopAdminBrand {
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+  }
+
+  .desktopAdminBrand .appLogo {
+    max-width: 150px;
+  }
+
+  .desktopAdminNav {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .desktopAdminMain {
+    padding: 16px;
+  }
+
+  .desktopAdminSidebar {
+    padding: 16px;
+  }
+
+  .desktopAdminBrand {
+    grid-template-columns: 1fr;
+  }
+
+  .desktopAdminNav {
+    display: flex;
+    overflow-x: auto;
+    padding-bottom: 4px;
+  }
+
+  .desktopAdminNav button {
+    min-width: 152px;
+  }
+
+  .desktopAdminHeader h1 {
+    font-size: 30px;
+  }
+
+  .desktopAdminStats article {
+    min-height: 116px;
+  }
+}
