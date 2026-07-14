@@ -18,8 +18,8 @@ const NOTIFICATION_PERMISSION_ASKED_KEY = 'barkod_rapor_notification_permission_
 const REPORT_TIMEOUT_MS = 45000
 const DEVICE_ACCESS_CHECK_MS = 10000
 const DESKTOP_ADMIN_PATH = '/yonetim'
-const APP_VERSION = 'v1.29'
-const APP_LOG_VERSION = 'web-v1.29'
+const APP_VERSION = 'v1.30'
+const APP_LOG_VERSION = 'web-v1.30'
 
 const SHIPMENT_CUSTOMERS = [
   {
@@ -505,6 +505,14 @@ const REPORT_ICON_PATHS = {
       <path d="M14 11h4l3 3v2h-7v-5z" />
       <path d="M7 18a2 2 0 1 0 0-4 2 2 0 0 0 0 4z" />
       <path d="M17 18a2 2 0 1 0 0-4 2 2 0 0 0 0 4z" />
+    </>
+  ),
+  stock: (
+    <>
+      <path d="M5 8c0-1.7 3.1-3 7-3s7 1.3 7 3-3.1 3-7 3-7-1.3-7-3z" />
+      <path d="M5 8v8c0 1.7 3.1 3 7 3s7-1.3 7-3V8" />
+      <path d="M5 12c0 1.7 3.1 3 7 3s7-1.3 7-3" />
+      <path d="M9 8h6" />
     </>
   ),
 }
