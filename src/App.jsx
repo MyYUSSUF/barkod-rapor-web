@@ -107,6 +107,9 @@ const LANGUAGES = {
     barcode: 'Barkod',
     noBarcodeRequired: 'Barkod gerekmez',
     barcodePlaceholder: 'Barkodu gir veya okut',
+    barcodeWorkTitle: 'Barkod İşlemi',
+    reportsTitle: 'Raporlar',
+    reportsSubtitle: 'Yetkili raporlarınıza hızlı erişim',
     clearBarcode: 'Temizle',
     scanBarcode: 'Kamerayla Barkod Okut',
     cameraOpen: 'Kamera Açık',
@@ -203,6 +206,9 @@ const LANGUAGES = {
     barcode: 'Barcode',
     noBarcodeRequired: 'No barcode required',
     barcodePlaceholder: 'Enter or scan barcode',
+    barcodeWorkTitle: 'Barcode Operation',
+    reportsTitle: 'Reports',
+    reportsSubtitle: 'Quick access to your authorized reports',
     clearBarcode: 'Clear',
     scanBarcode: 'Scan Barcode with Camera',
     cameraOpen: 'Camera Open',
@@ -299,6 +305,9 @@ const LANGUAGES = {
     barcode: 'الباركود',
     noBarcodeRequired: 'لا يحتاج إلى باركود',
     barcodePlaceholder: 'أدخل أو امسح الباركود',
+    barcodeWorkTitle: 'عملية الباركود',
+    reportsTitle: 'التقارير',
+    reportsSubtitle: 'وصول سريع إلى التقارير المصرح بها',
     clearBarcode: 'مسح',
     scanBarcode: 'مسح الباركود بالكاميرا',
     cameraOpen: 'الكاميرا مفتوحة',
@@ -4668,69 +4677,87 @@ function App() {
 
   if (userProfile) {
     return (
-      <div className="page" dir={isArabic ? 'rtl' : 'ltr'}>
+      <div className="mobileAppShell" dir={isArabic ? 'rtl' : 'ltr'}>
         {renderAppUpdateNotice()}
-        <div className="card">
-          <div className="topBar">
-            <img src="/elvan-logo.png" alt="Elvan Dyeing" className="appLogo" />
-
-            <select
-              className="languageSelect"
-              aria-label="Dil seçimi"
-              value={language}
-              onChange={(e) => changeLanguage(e.target.value)}
-            >
-              <option value="tr">Türkçe</option>
-              <option value="en">English</option>
-              <option value="ar">العربية</option>
-            </select>
-          </div>
-
-          <div className="welcomeBox">
-            <span className="eyebrow">{t.appSubtitle}</span>
-            <h1>{displayName ? `${t.welcome}, ${displayName}` : t.welcome}</h1>
-          </div>
-
-          {userProfile?.role === 'admin' && (
-            <button
-              type="button"
-              className="scanButton"
-              onClick={openAdminPanel}
-            >
-              Admin Panel
-            </button>
-          )}
-
-          <label htmlFor="barcodeInput">{t.barcode}</label>
-          <div className="barcodeInputRow">
-            <input
-              id="barcodeInput"
-              type="text"
-              inputMode="text"
-              autoComplete="off"
-              placeholder={t.barcodePlaceholder}
-              value={barcode}
-              onChange={(e) => setBarcode(e.target.value)}
+        <header className="mobileAppHeader">
+          <div className="mobileAppHeaderBar">
+            <img
+              src="/elvan-logo.png"
+              alt="Elvan Dyeing"
+              className="appLogo mobileAppLogo"
             />
 
-            <button
-              type="button"
-              className="clearBarcodeButton"
-              onClick={clearBarcodeInput}
-              disabled={!barcode || loading}
-            >
-              {t.clearBarcode}
-            </button>
+            <div className="mobileHeaderActions">
+              {userProfile?.role === 'admin' && (
+                <button
+                  type="button"
+                  className="mobileHeaderButton"
+                  onClick={openAdminPanel}
+                >
+                  Admin Panel
+                </button>
+              )}
+
+              <select
+                className="languageSelect mobileLanguageSelect"
+                aria-label="Dil seçimi"
+                value={language}
+                onChange={(e) => changeLanguage(e.target.value)}
+              >
+                <option value="tr">Türkçe</option>
+                <option value="en">English</option>
+                <option value="ar">العربية</option>
+              </select>
+            </div>
           </div>
 
-          <button
-            type="button"
-            className="scanButton"
-            onClick={startScanner}
-            disabled={loading}
-          >
-            {scannerOpen ? t.cameraOpen : t.scanBarcode}
-          </button>
+          <div className="mobileWelcome">
+            <span className="eyebrow">ELVAN DYEING</span>
+            <h1>{displayName ? `${t.welcome}, ${displayName}` : t.welcome}</h1>
+            <p>{t.appSubtitle}</p>
+          </div>
+        </header>
+
+        <main className="mobileAppMain">
+          <section className="mobileAppSection mobileBarcodeSection">
+            <div className="mobileSectionHeader">
+              <div>
+                <strong>{t.barcodeWorkTitle}</strong>
+                <small>{t.barcodePlaceholder}</small>
+              </div>
+            </div>
+
+            <label htmlFor="barcodeInput">{t.barcode}</label>
+            <div className="barcodeInputRow">
+              <input
+                id="barcodeInput"
+                type="text"
+                inputMode="text"
+                autoComplete="off"
+                placeholder={t.barcodePlaceholder}
+                value={barcode}
+                onChange={(e) => setBarcode(e.target.value)}
+              />
+
+              <button
+                type="button"
+                className="clearBarcodeButton"
+                onClick={clearBarcodeInput}
+                disabled={!barcode || loading}
+              >
+                {t.clearBarcode}
+              </button>
+            </div>
+
+            <button
+              type="button"
+              className="scanButton mobileScanButton"
+              onClick={startScanner}
+              disabled={loading}
+            >
+              {scannerOpen ? t.cameraOpen : t.scanBarcode}
+            </button>
+          </section>
 
           {scannerOpen && (
             <div className="scannerOverlay">
@@ -4804,116 +4831,127 @@ function App() {
             </div>
           )}
 
-          <div className="reportButtons">
-            {visibleReports.map((report, index) => (
-              <Fragment key={report.code}>
-                <button
-                  type="button"
-                  className={`mainButton reportButton reportButton${index + 1}${
-                    loading && selectedReportCode === report.code
-                      ? ' reportButtonLoading'
-                      : ''
-                  }`}
-                  onClick={() => openReport(report)}
-                  disabled={loading}
-                >
-                  <span className="reportButtonMark">
-                    <ReportIcon type={report.icon} />
-                  </span>
+          <section className="mobileAppSection mobileReportsSection">
+            <div className="mobileSectionHeader">
+              <div>
+                <strong>{t.reportsTitle}</strong>
+                <small>{t.reportsSubtitle}</small>
+              </div>
+              <span>{visibleReports.length}</span>
+            </div>
 
-                  <span className="reportButtonBody">
-                    <strong>
-                      {loading && selectedReportCode === report.code
-                        ? `${getReportName(report)} ${t.reportPreparing}`
-                        : getReportName(report)}
-                    </strong>
-                    <small>{getReportMeta(report)}</small>
-                  </span>
+            <div className="reportButtons">
+              {visibleReports.map((report, index) => (
+                <Fragment key={report.code}>
+                  <button
+                    type="button"
+                    className={`mainButton reportButton reportButton${index + 1}${
+                      loading && selectedReportCode === report.code
+                        ? ' reportButtonLoading'
+                        : ''
+                    }`}
+                    onClick={() => openReport(report)}
+                    disabled={loading}
+                  >
+                    <span className="reportButtonMark">
+                      <ReportIcon type={report.icon} />
+                    </span>
 
-                  {loading && selectedReportCode === report.code && (
-                    <span className="reportButtonProgressBar"></span>
-                  )}
-                </button>
+                    <span className="reportButtonBody">
+                      <strong>
+                        {loading && selectedReportCode === report.code
+                          ? `${getReportName(report)} ${t.reportPreparing}`
+                          : getReportName(report)}
+                      </strong>
+                      <small>{getReportMeta(report)}</small>
+                    </span>
 
-                {report.requiresDateRange && dateRangeReportCode === report.code && (
-                  <div className="dateRangeBox" ref={shipmentDateBoxRef}>
-                    <div className="shipmentCustomerField">
-                      <label htmlFor="shipmentCustomer">{t.customer}</label>
-                      <select
-                        id="shipmentCustomer"
-                        ref={shipmentCustomerSelectRef}
-                        value={shipmentCustomerCode}
-                        onChange={(e) => setShipmentCustomerCode(e.target.value)}
-                        disabled={loading}
-                      >
-                        <option value="">{t.selectCustomer}</option>
-                        {SHIPMENT_CUSTOMERS.map((customer) => (
-                          <option key={customer.code} value={customer.code}>
-                            {customer.name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
+                    {loading && selectedReportCode === report.code && (
+                      <span className="reportButtonProgressBar"></span>
+                    )}
+                  </button>
 
-                    <div className="dateInputGrid">
-                      <div>
-                        <label htmlFor="shipmentStartDate">{t.startDate}</label>
-                        <input
-                          id="shipmentStartDate"
-                          ref={shipmentStartInputRef}
-                          type="date"
-                          value={startDate}
-                          onChange={(e) => setStartDate(e.target.value)}
-                          disabled={loading}
-                        />
-                      </div>
+                  {report.requiresDateRange &&
+                    dateRangeReportCode === report.code && (
+                      <div className="dateRangeBox" ref={shipmentDateBoxRef}>
+                        <div className="shipmentCustomerField">
+                          <label htmlFor="shipmentCustomer">{t.customer}</label>
+                          <select
+                            id="shipmentCustomer"
+                            ref={shipmentCustomerSelectRef}
+                            value={shipmentCustomerCode}
+                            onChange={(e) => setShipmentCustomerCode(e.target.value)}
+                            disabled={loading}
+                          >
+                            <option value="">{t.selectCustomer}</option>
+                            {SHIPMENT_CUSTOMERS.map((customer) => (
+                              <option key={customer.code} value={customer.code}>
+                                {customer.name}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
 
-                      <div>
-                        <label htmlFor="shipmentEndDate">{t.endDate}</label>
-                        <input
-                          id="shipmentEndDate"
-                          type="date"
-                          value={endDate}
-                          onChange={(e) => setEndDate(e.target.value)}
-                          disabled={loading}
-                        />
-                      </div>
-                    </div>
+                        <div className="dateInputGrid">
+                          <div>
+                            <label htmlFor="shipmentStartDate">{t.startDate}</label>
+                            <input
+                              id="shipmentStartDate"
+                              ref={shipmentStartInputRef}
+                              type="date"
+                              value={startDate}
+                              onChange={(e) => setStartDate(e.target.value)}
+                              disabled={loading}
+                            />
+                          </div>
 
-                    {startDate && endDate && (
-                      <div className="dateRangeSummary">
-                        <strong>{t.selectedDateRange}</strong>
-                        <span>
-                          {formatDisplayDate(startDate)} - {formatDisplayDate(endDate)}
-                          {dateRangeDayCount && (
-                            <> · {dateRangeDayCount} {t.selectedDayCount}</>
-                          )}
-                        </span>
-                        {shipmentCustomerCode && (
-                          <>
-                            <strong className="shipmentCustomerSummaryLabel">
-                              {t.selectedCustomer}
-                            </strong>
+                          <div>
+                            <label htmlFor="shipmentEndDate">{t.endDate}</label>
+                            <input
+                              id="shipmentEndDate"
+                              type="date"
+                              value={endDate}
+                              onChange={(e) => setEndDate(e.target.value)}
+                              disabled={loading}
+                            />
+                          </div>
+                        </div>
+
+                        {startDate && endDate && (
+                          <div className="dateRangeSummary">
+                            <strong>{t.selectedDateRange}</strong>
                             <span>
-                              {
-                                SHIPMENT_CUSTOMERS.find(
-                                  (customer) =>
-                                    customer.code === shipmentCustomerCode
-                                )?.name
-                              }
+                              {formatDisplayDate(startDate)} - {formatDisplayDate(endDate)}
+                              {dateRangeDayCount && (
+                                <> · {dateRangeDayCount} {t.selectedDayCount}</>
+                              )}
                             </span>
-                          </>
+                            {shipmentCustomerCode && (
+                              <>
+                                <strong className="shipmentCustomerSummaryLabel">
+                                  {t.selectedCustomer}
+                                </strong>
+                                <span>
+                                  {
+                                    SHIPMENT_CUSTOMERS.find(
+                                      (customer) =>
+                                        customer.code === shipmentCustomerCode
+                                    )?.name
+                                  }
+                                </span>
+                              </>
+                            )}
+                          </div>
                         )}
                       </div>
                     )}
-                  </div>
-                )}
-              </Fragment>
-            ))}
-          </div>
+                </Fragment>
+              ))}
+            </div>
+          </section>
 
           {barcodeHistory.length > 0 && (
-            <div className="historyBox">
+            <section className="mobileAppSection historyBox mobileHistorySection">
               <div className="historyHeader">
                 <strong>{t.recentBarcodes}</strong>
                 <button
@@ -4940,7 +4978,7 @@ function App() {
                   </button>
                 ))}
               </div>
-            </div>
+            </section>
           )}
 
           {message && (
@@ -4952,8 +4990,14 @@ function App() {
               {message}
             </p>
           )}
+        </main>
 
-          <button type="button" className="logoutButton" onClick={handleLogout}>
+        <footer className="mobileAppFooter">
+          <button
+            type="button"
+            className="logoutButton mobileLogoutButton"
+            onClick={handleLogout}
+          >
             {t.logout}
           </button>
 
@@ -4961,7 +5005,7 @@ function App() {
             text={`${t.versionText} ${APP_VERSION}`}
             privacyLabel={t.privacyPolicy}
           />
-        </div>
+        </footer>
       </div>
     )
   }
