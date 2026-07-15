@@ -764,7 +764,7 @@ function StartupSplash({ onComplete }) {
 
     const sourceLogo = new Image()
     const particles = []
-    const solidRed = [220, 0, 0]
+    const solidRed = [237, 0, 0]
     const solidBlack = [0, 0, 0]
     let logoMask = null
     let startedAt = 0
@@ -772,6 +772,7 @@ function StartupSplash({ onComplete }) {
     let started = false
 
     const clamp = (value, min = 0, max = 1) => Math.min(max, Math.max(min, value))
+    const getSplashDpr = () => Math.min(Math.max(window.devicePixelRatio || 1, 1), 3)
     const getLuminance = (red, green, blue) => red * 0.299 + green * 0.587 + blue * 0.114
     const easeOutCubic = (value) => 1 - Math.pow(1 - value, 3)
 
@@ -785,7 +786,7 @@ function StartupSplash({ onComplete }) {
     const isSymbolShadowArtifact = (red, green, blue, x, y, width, height) => {
       const isRedDominant = red > green + 24 && red > blue + 24
       const isCenteredSymbolArea =
-        x > width * 0.26 && x < width * 0.74 && y < height * 0.55
+        x > width * 0.26 && x < width * 0.74 && y < height * 0.43
 
       return isCenteredSymbolArea && !isRedDominant
     }
@@ -813,10 +814,12 @@ function StartupSplash({ onComplete }) {
 
     const resizeCanvas = () => {
       const rect = canvas.getBoundingClientRect()
-      const dpr = Math.min(window.devicePixelRatio || 1, 2)
+      const dpr = getSplashDpr()
       canvas.width = Math.max(1, Math.floor(rect.width * dpr))
       canvas.height = Math.max(1, Math.floor(rect.height * dpr))
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+      ctx.imageSmoothingEnabled = true
+      ctx.imageSmoothingQuality = 'high'
     }
 
     const buildParticles = () => {
@@ -836,8 +839,9 @@ function StartupSplash({ onComplete }) {
       const targetHeight = targetWidth * (logoHeight / logoWidth)
       const targetX = (rect.width - targetWidth) / 2
       const targetY = (rect.height - targetHeight) / 2
-      const sampleWidth = Math.round(targetWidth)
-      const sampleHeight = Math.round(targetHeight)
+      const renderScale = getSplashDpr()
+      const sampleWidth = Math.max(1, Math.round(targetWidth * renderScale))
+      const sampleHeight = Math.max(1, Math.round(targetHeight * renderScale))
       const sampleCanvas = document.createElement('canvas')
       const sampleCtx = sampleCanvas.getContext('2d', {
         willReadFrequently: true,
@@ -853,6 +857,10 @@ function StartupSplash({ onComplete }) {
       sampleCanvas.height = sampleHeight
       maskCanvas.width = sampleWidth
       maskCanvas.height = sampleHeight
+      sampleCtx.imageSmoothingEnabled = true
+      sampleCtx.imageSmoothingQuality = 'high'
+      maskCtx.imageSmoothingEnabled = true
+      maskCtx.imageSmoothingQuality = 'high'
       sampleCtx.drawImage(sourceLogo, 0, 0, sampleWidth, sampleHeight)
 
       const imageData = sampleCtx.getImageData(0, 0, sampleWidth, sampleHeight)
@@ -891,12 +899,14 @@ function StartupSplash({ onComplete }) {
         cleanPixels[i] = solidColor[0]
         cleanPixels[i + 1] = solidColor[1]
         cleanPixels[i + 2] = solidColor[2]
-        cleanPixels[i + 3] = logoAlpha <= 0.015 ? 0 : Math.round(logoAlpha * 255)
+        cleanPixels[i + 3] =
+          logoAlpha <= 0.015 ? 0 : Math.round(clamp(logoAlpha * 1.18) * 255)
       }
 
       maskCtx.putImageData(cleanImageData, 0, 0)
 
-      const step = rect.width < 620 ? 4 : 3
+      const cssStep = rect.width < 620 ? 4 : 3
+      const step = Math.max(1, Math.round(cssStep * renderScale))
       const candidates = []
 
       for (let y = 0; y < sampleHeight; y += step) {
@@ -929,8 +939,8 @@ function StartupSplash({ onComplete }) {
             )
 
             candidates.push({
-              x: targetX + x,
-              y: targetY + y,
+              x: targetX + x / renderScale,
+              y: targetY + y / renderScale,
               color: `rgba(${solidColor[0]}, ${solidColor[1]}, ${solidColor[2]}, 1)`,
             })
           }
@@ -1031,7 +1041,7 @@ function StartupSplash({ onComplete }) {
 
     sourceLogo.onload = start
     sourceLogo.onerror = onComplete
-    sourceLogo.src = '/elvan-logo.png'
+    sourceLogo.src = '/elvan-splash-logo.svg'
 
     if (sourceLogo.complete && sourceLogo.naturalWidth > 0) {
       start()
