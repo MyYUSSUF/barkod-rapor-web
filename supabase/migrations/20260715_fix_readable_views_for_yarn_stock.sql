@@ -16,6 +16,88 @@ create index if not exists report_logs_created_at_idx
 create index if not exists push_subscriptions_user_updated_at_idx
   on public.push_subscriptions (user_id, updated_at desc);
 
+create or replace function public.readable_user_name(
+  p_full_name text,
+  p_email text,
+  p_user_id uuid
+)
+returns text
+language sql
+immutable
+set search_path = public
+as $$
+  select coalesce(
+    nullif(trim(regexp_replace(coalesce(p_full_name, ''), '\s+', ' ', 'g')), ''),
+    nullif(split_part(coalesce(p_email, ''), '@', 1), ''),
+    p_user_id::text
+  );
+$$;
+
+create or replace function public.readable_browser_name(p_user_agent text)
+returns text
+language sql
+immutable
+set search_path = public
+as $$
+  select case
+    when lower(coalesce(p_user_agent, '')) like '%edg/%' then 'Microsoft Edge'
+    when lower(coalesce(p_user_agent, '')) like '%opr/%'
+      or lower(coalesce(p_user_agent, '')) like '%opera%' then 'Opera'
+    when lower(coalesce(p_user_agent, '')) like '%firefox/%' then 'Firefox'
+    when lower(coalesce(p_user_agent, '')) like '%samsungbrowser/%' then 'Samsung Internet'
+    when lower(coalesce(p_user_agent, '')) like '%chrome/%'
+      or lower(coalesce(p_user_agent, '')) like '%crios/%' then 'Google Chrome'
+    when lower(coalesce(p_user_agent, '')) like '%safari/%' then 'Safari'
+    when lower(coalesce(p_user_agent, '')) like '%wv%' then 'Android WebView'
+    else 'Bilinmeyen tarayici'
+  end;
+$$;
+
+create or replace function public.readable_operating_system(p_user_agent text)
+returns text
+language sql
+immutable
+set search_path = public
+as $$
+  select case
+    when lower(coalesce(p_user_agent, '')) like '%android%' then 'Android'
+    when lower(coalesce(p_user_agent, '')) like '%iphone%'
+      or lower(coalesce(p_user_agent, '')) like '%ipad%' then 'iOS'
+    when lower(coalesce(p_user_agent, '')) like '%windows%' then 'Windows'
+    when lower(coalesce(p_user_agent, '')) like '%mac os%' then 'macOS'
+    when lower(coalesce(p_user_agent, '')) like '%linux%' then 'Linux'
+    else 'Bilinmeyen sistem'
+  end;
+$$;
+
+create or replace function public.readable_device_label(p_user_agent text)
+returns text
+language sql
+immutable
+set search_path = public
+as $$
+  select case
+    when coalesce(p_user_agent, '') = '' then 'Bilinmeyen cihaz'
+    when lower(p_user_agent) like '%iphone%' then 'iPhone'
+    when lower(p_user_agent) like '%ipad%' then 'iPad'
+    when lower(p_user_agent) like '%android%' and lower(p_user_agent) like '%wv%' then 'Android uygulama'
+    when lower(p_user_agent) like '%android%' then 'Android tarayici'
+    when lower(p_user_agent) like '%windows%' then 'Windows bilgisayar'
+    when lower(p_user_agent) like '%macintosh%' or lower(p_user_agent) like '%mac os%' then 'Mac bilgisayar'
+    else left(p_user_agent, 80)
+  end;
+$$;
+
+revoke all on function public.readable_user_name(text, text, uuid) from public, anon, authenticated;
+revoke all on function public.readable_browser_name(text) from public, anon, authenticated;
+revoke all on function public.readable_operating_system(text) from public, anon, authenticated;
+revoke all on function public.readable_device_label(text) from public, anon, authenticated;
+
+grant execute on function public.readable_user_name(text, text, uuid) to service_role;
+grant execute on function public.readable_browser_name(text) to service_role;
+grant execute on function public.readable_operating_system(text) to service_role;
+grant execute on function public.readable_device_label(text) to service_role;
+
 drop view if exists public.database_overview_readable;
 drop view if exists public.report_logs_readable;
 drop view if exists public.login_logs_readable;
