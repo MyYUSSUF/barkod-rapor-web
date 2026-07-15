@@ -3,6 +3,7 @@ import crypto from 'crypto'
 const REPORT_PERMISSION_FIELDS = {
   RAR00035: 'can_view_fixing_report',
   RAR00036: 'can_view_shipment_report',
+  RAR00037: 'can_view_yarn_stock_report',
 }
 
 function getSigningSecret() {

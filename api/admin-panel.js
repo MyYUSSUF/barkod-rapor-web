@@ -121,17 +121,123 @@ function getEmailFromUsername(username) {
   return `${username}@app.local`
 }
 
-async function getAdminData(supabaseAdmin) {
-  const { data: profiles, error: profilesError } = await supabaseAdmin
+const PROFILE_SELECT =
+  'id, email, full_name, role, is_active, can_view_fixing_report, can_view_shipment_report, can_view_yarn_stock_report'
+const PROFILE_SELECT_FALLBACK =
+  'id, email, full_name, role, is_active, can_view_fixing_report, can_view_shipment_report'
+
+function normalizeProfile(profile) {
+  if (!profile) {
+    return profile
+  }
+
+  return {
+    ...profile,
+    can_view_yarn_stock_report:
+      profile.can_view_yarn_stock_report === true,
+  }
+}
+
+function isMissingYarnStockPermissionColumn(error) {
+  const message = `${error?.message || ''} ${error?.details || ''}`
+
+  return message.includes('can_view_yarn_stock_report')
+}
+
+async function listProfiles(supabaseAdmin) {
+  let { data, error } = await supabaseAdmin
     .from('profiles')
-    .select(
-      'id, email, full_name, role, is_active, can_view_fixing_report, can_view_shipment_report'
-    )
+    .select(PROFILE_SELECT)
     .order('email', { ascending: true })
 
-  if (profilesError) {
-    throw new Error(profilesError.message)
+  if (error && isMissingYarnStockPermissionColumn(error)) {
+    const fallbackResult = await supabaseAdmin
+      .from('profiles')
+      .select(PROFILE_SELECT_FALLBACK)
+      .order('email', { ascending: true })
+
+    data = fallbackResult.data
+    error = fallbackResult.error
   }
+
+  if (error) {
+    throw new Error(error.message)
+  }
+
+  return (data || []).map(normalizeProfile)
+}
+
+async function updateProfile(supabaseAdmin, userId, updatePayload) {
+  let { data, error } = await supabaseAdmin
+    .from('profiles')
+    .update(updatePayload)
+    .eq('id', userId)
+    .select(PROFILE_SELECT)
+    .single()
+
+  if (error && isMissingYarnStockPermissionColumn(error)) {
+    const fallbackPayload = { ...updatePayload }
+    delete fallbackPayload.can_view_yarn_stock_report
+
+    if (Object.keys(fallbackPayload).length === 0) {
+      const profileResult = await supabaseAdmin
+        .from('profiles')
+        .select(PROFILE_SELECT_FALLBACK)
+        .eq('id', userId)
+        .single()
+
+      data = profileResult.data
+      error = profileResult.error
+    } else {
+      const fallbackResult = await supabaseAdmin
+        .from('profiles')
+        .update(fallbackPayload)
+        .eq('id', userId)
+        .select(PROFILE_SELECT_FALLBACK)
+        .single()
+
+      data = fallbackResult.data
+      error = fallbackResult.error
+    }
+  }
+
+  if (error) {
+    throw new Error(error.message)
+  }
+
+  return normalizeProfile(data)
+}
+
+async function upsertProfile(supabaseAdmin, profilePayload) {
+  let { data, error } = await supabaseAdmin
+    .from('profiles')
+    .upsert(profilePayload, { onConflict: 'id' })
+    .select(PROFILE_SELECT)
+    .single()
+
+  if (error && isMissingYarnStockPermissionColumn(error)) {
+    const fallbackPayload = { ...profilePayload }
+    delete fallbackPayload.can_view_yarn_stock_report
+
+    const fallbackResult = await supabaseAdmin
+      .from('profiles')
+      .upsert(fallbackPayload, { onConflict: 'id' })
+      .select(PROFILE_SELECT_FALLBACK)
+      .single()
+
+    data = fallbackResult.data
+    error = fallbackResult.error
+  }
+
+  if (error) {
+    throw new Error(error.message)
+  }
+
+  return normalizeProfile(data)
+}
+
+async function getAdminData(supabaseAdmin) {
+  const profiles = await listProfiles(supabaseAdmin)
 
   const profileMap = new Map()
 
@@ -225,24 +331,15 @@ async function updateUser(req, supabaseAdmin, authResult) {
     updatePayload.can_view_shipment_report = body.can_view_shipment_report
   }
 
+  if (typeof body.can_view_yarn_stock_report === 'boolean') {
+    updatePayload.can_view_yarn_stock_report = body.can_view_yarn_stock_report
+  }
+
   if (Object.keys(updatePayload).length === 0) {
     throw new Error('Güncellenecek alan yok.')
   }
 
-  const { data, error } = await supabaseAdmin
-    .from('profiles')
-    .update(updatePayload)
-    .eq('id', userId)
-    .select(
-      'id, email, full_name, role, is_active, can_view_fixing_report, can_view_shipment_report'
-    )
-    .single()
-
-  if (error) {
-    throw new Error(error.message)
-  }
-
-  return data
+  return updateProfile(supabaseAdmin, userId, updatePayload)
 }
 
 async function updateUserPassword(req, supabaseAdmin) {
@@ -318,22 +415,16 @@ async function createUser(req, supabaseAdmin) {
       role === 'admin' ? true : body.can_view_fixing_report === true,
     can_view_shipment_report:
       role === 'admin' ? true : body.can_view_shipment_report === true,
+    can_view_yarn_stock_report:
+      role === 'admin' ? true : body.can_view_yarn_stock_report === true,
   }
 
-  const { data: profile, error: profileError } = await supabaseAdmin
-    .from('profiles')
-    .upsert(profilePayload, { onConflict: 'id' })
-    .select(
-      'id, email, full_name, role, is_active, can_view_fixing_report, can_view_shipment_report'
-    )
-    .single()
-
-  if (profileError) {
+  try {
+    return await upsertProfile(supabaseAdmin, profilePayload)
+  } catch (profileError) {
     await supabaseAdmin.auth.admin.deleteUser(authData.user.id).catch(() => {})
-    throw new Error(profileError.message)
+    throw new Error(profileError.message, { cause: profileError })
   }
-
-  return profile
 }
 
 async function deleteUser(req, supabaseAdmin, authResult) {

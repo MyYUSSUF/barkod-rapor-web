@@ -59,6 +59,53 @@ function createUserClient(accessToken) {
   })
 }
 
+const PROFILE_SELECT =
+  'id, email, full_name, role, is_active, can_view_fixing_report, can_view_shipment_report, can_view_yarn_stock_report'
+const PROFILE_SELECT_FALLBACK =
+  'id, email, full_name, role, is_active, can_view_fixing_report, can_view_shipment_report'
+
+function normalizeProfile(profile) {
+  if (!profile) {
+    return profile
+  }
+
+  return {
+    ...profile,
+    can_view_yarn_stock_report:
+      profile.can_view_yarn_stock_report === true,
+  }
+}
+
+function isMissingYarnStockPermissionColumn(error) {
+  const message = `${error?.message || ''} ${error?.details || ''}`
+
+  return message.includes('can_view_yarn_stock_report')
+}
+
+async function fetchProfileById(supabase, userId) {
+  let { data, error } = await supabase
+    .from('profiles')
+    .select(PROFILE_SELECT)
+    .eq('id', userId)
+    .single()
+
+  if (error && isMissingYarnStockPermissionColumn(error)) {
+    const fallbackResult = await supabase
+      .from('profiles')
+      .select(PROFILE_SELECT_FALLBACK)
+      .eq('id', userId)
+      .single()
+
+    data = fallbackResult.data
+    error = fallbackResult.error
+  }
+
+  return {
+    data: normalizeProfile(data),
+    error,
+  }
+}
+
 function normalizeDeviceResult(data) {
   if (Array.isArray(data)) {
     return data[0] || {}
@@ -96,13 +143,10 @@ async function verifyUserRequest(req) {
   }
 
   const userId = userData.user.id
-  const { data: profile, error: profileError } = await supabase
-    .from('profiles')
-    .select(
-      'id, email, full_name, role, is_active, can_view_fixing_report, can_view_shipment_report'
-    )
-    .eq('id', userId)
-    .single()
+  const { data: profile, error: profileError } = await fetchProfileById(
+    supabase,
+    userId
+  )
 
   if (profileError || !profile) {
     return {

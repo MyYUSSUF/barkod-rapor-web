@@ -6,6 +6,7 @@ import {
   AppUpdateResultCode,
   FlexibleUpdateInstallStatus,
 } from '@capawesome/capacitor-app-update'
+import { Animation, StatusBar } from '@capacitor/status-bar'
 import { isSupabaseConfigured, supabase } from './lib/supabaseClient'
 import './App.css'
 
@@ -25,9 +26,13 @@ const NOTIFICATION_PERMISSION_ASKED_KEY = 'barkod_rapor_notification_permission_
 const REPORT_TIMEOUT_MS = 45000
 const DEVICE_ACCESS_CHECK_MS = 10000
 const DESKTOP_ADMIN_PATH = '/yonetim'
-const APP_VERSION = 'v1.31'
-const APP_LOG_VERSION = 'web-v1.31'
+const APP_VERSION = 'v1.32'
+const APP_LOG_VERSION = 'web-v1.32'
 const APP_UPDATE_PACKAGE_NAME = 'com.elvandying.barkodrapor'
+const PROFILE_SELECT_FIELDS =
+  'id, email, full_name, role, is_active, can_view_fixing_report, can_view_shipment_report, can_view_yarn_stock_report'
+const PROFILE_SELECT_FALLBACK_FIELDS =
+  'id, email, full_name, role, is_active, can_view_fixing_report, can_view_shipment_report'
 
 const SHIPMENT_CUSTOMERS = [
   {
@@ -83,6 +88,7 @@ const REPORTS = [
     key: 'yarnStock',
     icon: 'stock',
     requiresBarcode: false,
+    permissionKey: 'can_view_yarn_stock_report',
   },
 ]
 
@@ -467,6 +473,48 @@ const formatDateTime = (value) => {
     }).format(new Date(value))
   } catch {
     return value
+  }
+}
+
+function normalizeProfile(profile) {
+  if (!profile) {
+    return profile
+  }
+
+  return {
+    ...profile,
+    can_view_yarn_stock_report:
+      profile.can_view_yarn_stock_report === true,
+  }
+}
+
+function isMissingYarnStockPermissionColumn(error) {
+  const message = `${error?.message || ''} ${error?.details || ''}`
+
+  return message.includes('can_view_yarn_stock_report')
+}
+
+async function fetchProfileById(userId) {
+  let { data, error } = await supabase
+    .from('profiles')
+    .select(PROFILE_SELECT_FIELDS)
+    .eq('id', userId)
+    .single()
+
+  if (error && isMissingYarnStockPermissionColumn(error)) {
+    const fallbackResult = await supabase
+      .from('profiles')
+      .select(PROFILE_SELECT_FALLBACK_FIELDS)
+      .eq('id', userId)
+      .single()
+
+    data = fallbackResult.data
+    error = fallbackResult.error
+  }
+
+  return {
+    data: normalizeProfile(data),
+    error,
   }
 }
 
@@ -1082,6 +1130,7 @@ function App() {
     role: 'user',
     can_view_fixing_report: false,
     can_view_shipment_report: false,
+    can_view_yarn_stock_report: false,
   })
   const [creatingAdminUser, setCreatingAdminUser] = useState(false)
   const [adminData, setAdminData] = useState({
@@ -1833,6 +1882,7 @@ function App() {
         role: 'user',
         can_view_fixing_report: false,
         can_view_shipment_report: false,
+        can_view_yarn_stock_report: false,
       })
       setAdminMessage('Kullanıcı eklendi.')
       await loadAdminPanelData()
@@ -1937,6 +1987,19 @@ function App() {
     return () => {
       stopScanner()
     }
+  }, [])
+
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform() || Capacitor.getPlatform() !== 'android') {
+      return
+    }
+
+    StatusBar.setOverlaysWebView({ overlay: true }).catch((err) => {
+      console.log('Status bar overlay ayarlanamadı:', err)
+    })
+    StatusBar.hide({ animation: Animation.None }).catch((err) => {
+      console.log('Status bar gizlenemedi:', err)
+    })
   }, [])
 
   useEffect(() => {
@@ -2080,13 +2143,9 @@ function App() {
           return
         }
 
-        const { data: profileData, error: profileError } = await supabase
-          .from('profiles')
-          .select(
-            'id, email, full_name, role, is_active, can_view_fixing_report, can_view_shipment_report'
-          )
-          .eq('id', session.user.id)
-          .single()
+        const { data: profileData, error: profileError } = await fetchProfileById(
+          session.user.id
+        )
 
         if (profileError || !profileData) {
           await supabase.auth.signOut()
@@ -2580,13 +2639,8 @@ function App() {
 
       const userId = authData.user.id
 
-      const { data: profileData, error: profileError } = await supabase
-        .from('profiles')
-        .select(
-          'id, email, full_name, role, is_active, can_view_fixing_report, can_view_shipment_report'
-        )
-        .eq('id', userId)
-        .single()
+      const { data: profileData, error: profileError } =
+        await fetchProfileById(userId)
 
       if (profileError || !profileData) {
         await supabase.auth.signOut()
@@ -3222,6 +3276,22 @@ function App() {
               />
               Sevkiyat Takip
             </label>
+            <label className="desktopPermissionCheck">
+              <input
+                type="checkbox"
+                checked={
+                  user.role === 'admin' ||
+                  user.can_view_yarn_stock_report === true
+                }
+                disabled={user.role === 'admin'}
+                onChange={(e) =>
+                  updateAdminUser(user.id, {
+                    can_view_yarn_stock_report: e.target.checked,
+                  })
+                }
+              />
+              İplik Stok Raporu
+            </label>
             {user.role === 'admin' && (
               <small>Admin hesapları tüm raporları görür.</small>
             )}
@@ -3835,6 +3905,24 @@ function App() {
                       />
                       <span>Sevkiyat Takip</span>
                     </label>
+
+                    <label className="adminPermissionToggle">
+                      <input
+                        type="checkbox"
+                        checked={
+                          newAdminUser.role === 'admin' ||
+                          newAdminUser.can_view_yarn_stock_report
+                        }
+                        disabled={creatingAdminUser || newAdminUser.role === 'admin'}
+                        onChange={(e) =>
+                          setNewAdminUser((current) => ({
+                            ...current,
+                            can_view_yarn_stock_report: e.target.checked,
+                          }))
+                        }
+                      />
+                      <span>İplik Stok Raporu</span>
+                    </label>
                     {newAdminUser.role === 'admin' && (
                       <small>Admin kullanıcıları tüm raporları görebilir.</small>
                     )}
@@ -4144,6 +4232,24 @@ function App() {
                   />
                   <span>Sevkiyat Takip</span>
                 </label>
+
+                <label className="adminPermissionToggle">
+                  <input
+                    type="checkbox"
+                    checked={
+                      newAdminUser.role === 'admin' ||
+                      newAdminUser.can_view_yarn_stock_report
+                    }
+                    disabled={creatingAdminUser || newAdminUser.role === 'admin'}
+                    onChange={(e) =>
+                      setNewAdminUser((current) => ({
+                        ...current,
+                        can_view_yarn_stock_report: e.target.checked,
+                      }))
+                    }
+                  />
+                  <span>İplik Stok Raporu</span>
+                </label>
                 {newAdminUser.role === 'admin' && (
                   <small>Admin kullanıcıları tüm raporları görebilir.</small>
                 )}
@@ -4336,6 +4442,22 @@ function App() {
                               }
                             />
                             <span>Sevkiyat Takip</span>
+                          </label>
+                          <label className="adminPermissionToggle">
+                            <input
+                              type="checkbox"
+                              checked={
+                                user.role === 'admin' ||
+                                user.can_view_yarn_stock_report === true
+                              }
+                              disabled={user.role === 'admin'}
+                              onChange={(e) =>
+                                updateAdminUser(user.id, {
+                                  can_view_yarn_stock_report: e.target.checked,
+                                })
+                              }
+                            />
+                            <span>İplik Stok Raporu</span>
                           </label>
                           {user.role === 'admin' && (
                             <small>Admin kullanıcıları tüm raporları görebilir.</small>
