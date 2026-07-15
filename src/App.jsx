@@ -1,4 +1,11 @@
 import { Fragment, lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
+import { Capacitor } from '@capacitor/core'
+import {
+  AppUpdate,
+  AppUpdateAvailability,
+  AppUpdateResultCode,
+  FlexibleUpdateInstallStatus,
+} from '@capawesome/capacitor-app-update'
 import { isSupabaseConfigured, supabase } from './lib/supabaseClient'
 import './App.css'
 
@@ -18,8 +25,9 @@ const NOTIFICATION_PERMISSION_ASKED_KEY = 'barkod_rapor_notification_permission_
 const REPORT_TIMEOUT_MS = 45000
 const DEVICE_ACCESS_CHECK_MS = 10000
 const DESKTOP_ADMIN_PATH = '/yonetim'
-const APP_VERSION = 'v1.30'
-const APP_LOG_VERSION = 'web-v1.30'
+const APP_VERSION = 'v1.31'
+const APP_LOG_VERSION = 'web-v1.31'
+const APP_UPDATE_PACKAGE_NAME = 'com.elvandying.barkodrapor'
 
 const SHIPMENT_CUSTOMERS = [
   {
@@ -157,6 +165,23 @@ const LANGUAGES = {
     devicePending: 'Bu cihaz yönetici onayı bekliyor.',
     deviceRevoked: 'Bu cihazın erişim izni kaldırıldı.',
     deviceAccessFailed: 'Cihaz doğrulaması yapılamadı: ',
+    appUpdateTitle: 'Yeni sürüm mevcut',
+    appUpdateBody:
+      'ELVAN için yeni bir güncelleme var. Şimdi güncelleyebilir veya daha sonra devam edebilirsiniz.',
+    appUpdateNow: 'Güncelle',
+    appUpdateLater: 'Sonra',
+    appUpdateOpening: 'Güncelleme hazırlanıyor...',
+    appUpdateDownloading: 'Güncelleme indiriliyor',
+    appUpdateDownloaded: 'Güncelleme indirildi',
+    appUpdateDownloadedBody:
+      'İndirme tamamlandı. Kurulum için uygulama yeniden başlatılacak.',
+    appUpdateRestart: 'Yükle ve Yeniden Başlat',
+    appUpdateStore: "Google Play'de Aç",
+    appUpdateFailed:
+      'Güncelleme başlatılamadı. Google Play üzerinden güncelleyebilirsiniz.',
+    appUpdateCanceled:
+      'Güncelleme iptal edildi. Daha sonra tekrar deneyebilirsiniz.',
+    appUpdateVersion: 'Sürüm',
   },
   en: {
     appTitle: 'Barcode Report Web',
@@ -236,6 +261,23 @@ const LANGUAGES = {
     devicePending: 'This device is waiting for administrator approval.',
     deviceRevoked: 'Access for this device has been revoked.',
     deviceAccessFailed: 'Device verification failed: ',
+    appUpdateTitle: 'New version available',
+    appUpdateBody:
+      'A new ELVAN update is available. You can update now or continue later.',
+    appUpdateNow: 'Update',
+    appUpdateLater: 'Later',
+    appUpdateOpening: 'Preparing update...',
+    appUpdateDownloading: 'Downloading update',
+    appUpdateDownloaded: 'Update downloaded',
+    appUpdateDownloadedBody:
+      'Download is complete. The app will restart to install the update.',
+    appUpdateRestart: 'Install and Restart',
+    appUpdateStore: 'Open Google Play',
+    appUpdateFailed:
+      'The update could not be started. You can update from Google Play.',
+    appUpdateCanceled:
+      'The update was cancelled. You can try again later.',
+    appUpdateVersion: 'Version',
   },
   ar: {
     appTitle: 'نظام تقارير الباركود',
@@ -315,6 +357,23 @@ const LANGUAGES = {
     devicePending: 'هذا الجهاز بانتظار موافقة المسؤول.',
     deviceRevoked: 'تم إلغاء صلاحية هذا الجهاز.',
     deviceAccessFailed: 'تعذر التحقق من الجهاز: ',
+    appUpdateTitle: 'يتوفر إصدار جديد',
+    appUpdateBody:
+      'يتوفر تحديث جديد لتطبيق ELVAN. يمكنك التحديث الآن أو المتابعة لاحقًا.',
+    appUpdateNow: 'تحديث',
+    appUpdateLater: 'لاحقًا',
+    appUpdateOpening: 'جارٍ تجهيز التحديث...',
+    appUpdateDownloading: 'جارٍ تنزيل التحديث',
+    appUpdateDownloaded: 'تم تنزيل التحديث',
+    appUpdateDownloadedBody:
+      'اكتمل التنزيل. ستتم إعادة تشغيل التطبيق لتثبيت التحديث.',
+    appUpdateRestart: 'تثبيت وإعادة تشغيل',
+    appUpdateStore: 'فتح Google Play',
+    appUpdateFailed:
+      'تعذر بدء التحديث. يمكنك التحديث من Google Play.',
+    appUpdateCanceled:
+      'تم إلغاء التحديث. يمكنك المحاولة لاحقًا.',
+    appUpdateVersion: 'الإصدار',
   },
 }
 
@@ -546,6 +605,90 @@ function AppFooter({ text, privacyLabel }) {
         {privacyLabel}
       </a>
     </p>
+  )
+}
+
+function AppUpdateNotice({
+  notice,
+  texts,
+  onComplete,
+  onDismiss,
+  onOpenStore,
+  onStart,
+}) {
+  if (!notice.visible) {
+    return null
+  }
+
+  const isBusy = notice.status === 'starting' || notice.status === 'downloading'
+  const isDownloaded = notice.status === 'downloaded'
+  const isFailed = notice.status === 'failed' || notice.status === 'canceled'
+  const availableVersion =
+    notice.info?.availableVersionName || notice.info?.availableVersionCode || ''
+  const currentVersion =
+    notice.info?.currentVersionName || notice.info?.currentVersionCode || ''
+  const versionText =
+    availableVersion && currentVersion
+      ? `${texts.appUpdateVersion} ${currentVersion} → ${availableVersion}`
+      : availableVersion
+        ? `${texts.appUpdateVersion} ${availableVersion}`
+        : ''
+
+  let bodyText = texts.appUpdateBody
+
+  if (notice.status === 'starting') {
+    bodyText = texts.appUpdateOpening
+  } else if (notice.status === 'downloading') {
+    bodyText = `${texts.appUpdateDownloading}${
+      notice.progress ? ` · ${notice.progress}%` : ''
+    }`
+  } else if (isDownloaded) {
+    bodyText = texts.appUpdateDownloadedBody
+  } else if (notice.status === 'failed') {
+    bodyText = texts.appUpdateFailed
+  } else if (notice.status === 'canceled') {
+    bodyText = texts.appUpdateCanceled
+  }
+
+  return (
+    <aside className="appUpdateNotice" role="status" aria-live="polite">
+      <div className="appUpdateNoticeIcon" aria-hidden="true">
+        ↑
+      </div>
+
+      <div className="appUpdateNoticeBody">
+        <strong>
+          {isDownloaded ? texts.appUpdateDownloaded : texts.appUpdateTitle}
+        </strong>
+        <span>{bodyText}</span>
+        {versionText ? <small>{versionText}</small> : null}
+      </div>
+
+      <div className="appUpdateNoticeActions">
+        <button
+          type="button"
+          className="appUpdateLaterButton"
+          onClick={onDismiss}
+          disabled={notice.status === 'starting'}
+        >
+          {texts.appUpdateLater}
+        </button>
+
+        {isDownloaded ? (
+          <button type="button" onClick={onComplete}>
+            {texts.appUpdateRestart}
+          </button>
+        ) : isFailed ? (
+          <button type="button" onClick={onOpenStore}>
+            {texts.appUpdateStore}
+          </button>
+        ) : (
+          <button type="button" onClick={onStart} disabled={isBusy}>
+            {isBusy ? texts.appUpdateOpening : texts.appUpdateNow}
+          </button>
+        )}
+      </div>
+    </aside>
   )
 }
 
@@ -878,6 +1021,7 @@ function App() {
   const scannerResultHandledRef = useRef(false)
   const scannerStartingRef = useRef(false)
   const scannerStartTokenRef = useRef(0)
+  const appUpdateCheckedRef = useRef(false)
 
   const [language, setLanguage] = useState(() => {
     return localStorage.getItem(LANGUAGE_KEY) || 'tr'
@@ -908,6 +1052,12 @@ function App() {
     return window.location.pathname === DESKTOP_ADMIN_PATH ? 'desktop-admin' : 'main'
   })
   const [pdfViewerData, setPdfViewerData] = useState(null)
+  const [appUpdateNotice, setAppUpdateNotice] = useState({
+    visible: false,
+    info: null,
+    status: 'idle',
+    progress: 0,
+  })
 
   const [adminNotificationTitle, setAdminNotificationTitle] = useState('Elvan Barkod Rapor')
   const [adminNotificationBody, setAdminNotificationBody] = useState('')
@@ -955,6 +1105,128 @@ function App() {
     setMessage('')
     setMessageKind('info')
   }
+
+  const dismissAppUpdateNotice = () => {
+    setAppUpdateNotice((current) => ({
+      ...current,
+      visible: false,
+    }))
+  }
+
+  const openAppUpdateStore = async () => {
+    try {
+      await AppUpdate.openAppStore({
+        androidPackageName: APP_UPDATE_PACKAGE_NAME,
+      })
+      setAppUpdateNotice((current) => ({
+        ...current,
+        visible: false,
+        status: 'idle',
+      }))
+    } catch (err) {
+      console.log('Google Play açma hatası:', err)
+      setAppUpdateNotice((current) => ({
+        ...current,
+        visible: true,
+        status: 'failed',
+      }))
+    }
+  }
+
+  const startOptionalAppUpdate = async () => {
+    setAppUpdateNotice((current) => ({
+      ...current,
+      visible: true,
+      status: 'starting',
+      progress: 0,
+    }))
+
+    try {
+      const info = await AppUpdate.getAppUpdateInfo()
+
+      setAppUpdateNotice((current) => ({
+        ...current,
+        info,
+      }))
+
+      if (info.installStatus === FlexibleUpdateInstallStatus.DOWNLOADED) {
+        setAppUpdateNotice((current) => ({
+          ...current,
+          visible: true,
+          info,
+          status: 'downloaded',
+          progress: 100,
+        }))
+        return
+      }
+
+      if (info.updateAvailability !== AppUpdateAvailability.UPDATE_AVAILABLE) {
+        await openAppUpdateStore()
+        return
+      }
+
+      if (!info.flexibleUpdateAllowed) {
+        await openAppUpdateStore()
+        return
+      }
+
+      const result = await AppUpdate.startFlexibleUpdate()
+
+      if (result.code === AppUpdateResultCode.OK) {
+        setAppUpdateNotice((current) => ({
+          ...current,
+          visible: true,
+          info,
+          status: 'downloading',
+          progress: 0,
+        }))
+        return
+      }
+
+      setAppUpdateNotice((current) => ({
+        ...current,
+        visible: true,
+        info,
+        status:
+          result.code === AppUpdateResultCode.CANCELED
+            ? 'canceled'
+            : 'failed',
+        progress: 0,
+      }))
+    } catch (err) {
+      console.log('Güncelleme başlatma hatası:', err)
+      setAppUpdateNotice((current) => ({
+        ...current,
+        visible: true,
+        status: 'failed',
+        progress: 0,
+      }))
+    }
+  }
+
+  const completeOptionalAppUpdate = async () => {
+    try {
+      await AppUpdate.completeFlexibleUpdate()
+    } catch (err) {
+      console.log('Güncelleme tamamlama hatası:', err)
+      setAppUpdateNotice((current) => ({
+        ...current,
+        visible: true,
+        status: 'failed',
+      }))
+    }
+  }
+
+  const renderAppUpdateNotice = () => (
+    <AppUpdateNotice
+      notice={appUpdateNotice}
+      texts={t}
+      onComplete={completeOptionalAppUpdate}
+      onDismiss={dismissAppUpdateNotice}
+      onOpenStore={openAppUpdateStore}
+      onStart={startOptionalAppUpdate}
+    />
+  )
 
   const changeLanguage = (value) => {
     setLanguage(value)
@@ -1666,6 +1938,131 @@ function App() {
       stopScanner()
     }
   }, [])
+
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform() || Capacitor.getPlatform() !== 'android') {
+      return undefined
+    }
+
+    let active = true
+    let listenerHandle = null
+
+    AppUpdate.addListener('onFlexibleUpdateStateChange', (state) => {
+      if (!active) {
+        return
+      }
+
+      const totalBytes = state.totalBytesToDownload || 0
+      const downloadedBytes = state.bytesDownloaded || 0
+      const progress =
+        totalBytes > 0
+          ? Math.min(100, Math.round((downloadedBytes / totalBytes) * 100))
+          : 0
+
+      if (state.installStatus === FlexibleUpdateInstallStatus.DOWNLOADING) {
+        setAppUpdateNotice((current) => ({
+          ...current,
+          visible: true,
+          status: 'downloading',
+          progress,
+        }))
+        return
+      }
+
+      if (
+        state.installStatus === FlexibleUpdateInstallStatus.DOWNLOADED ||
+        state.installStatus === FlexibleUpdateInstallStatus.INSTALLED
+      ) {
+        setAppUpdateNotice((current) => ({
+          ...current,
+          visible: true,
+          status: 'downloaded',
+          progress: 100,
+        }))
+        return
+      }
+
+      if (state.installStatus === FlexibleUpdateInstallStatus.FAILED) {
+        setAppUpdateNotice((current) => ({
+          ...current,
+          visible: true,
+          status: 'failed',
+        }))
+        return
+      }
+
+      if (state.installStatus === FlexibleUpdateInstallStatus.CANCELED) {
+        setAppUpdateNotice((current) => ({
+          ...current,
+          visible: true,
+          status: 'canceled',
+        }))
+      }
+    })
+      .then((handle) => {
+        listenerHandle = handle
+      })
+      .catch((err) => {
+        console.log('Güncelleme dinleyici hatası:', err)
+      })
+
+    return () => {
+      active = false
+      listenerHandle?.remove()
+    }
+  }, [])
+
+  useEffect(() => {
+    if (startupSplashVisible || appUpdateCheckedRef.current) {
+      return undefined
+    }
+
+    if (!Capacitor.isNativePlatform() || Capacitor.getPlatform() !== 'android') {
+      return undefined
+    }
+
+    appUpdateCheckedRef.current = true
+    let active = true
+
+    const checkTimer = window.setTimeout(async () => {
+      try {
+        const info = await AppUpdate.getAppUpdateInfo()
+
+        if (!active) {
+          return
+        }
+
+        const hasUpdate =
+          info.updateAvailability === AppUpdateAvailability.UPDATE_AVAILABLE ||
+          info.updateAvailability === AppUpdateAvailability.UPDATE_IN_PROGRESS ||
+          info.installStatus === FlexibleUpdateInstallStatus.DOWNLOADED
+
+        if (!hasUpdate) {
+          return
+        }
+
+        setAppUpdateNotice({
+          visible: true,
+          info,
+          status:
+            info.installStatus === FlexibleUpdateInstallStatus.DOWNLOADED
+              ? 'downloaded'
+              : 'available',
+          progress:
+            info.installStatus === FlexibleUpdateInstallStatus.DOWNLOADED
+              ? 100
+              : 0,
+        })
+      } catch (err) {
+        console.log('Güncelleme kontrol hatası:', err)
+      }
+    }, 1200)
+
+    return () => {
+      active = false
+      window.clearTimeout(checkTimer)
+    }
+  }, [startupSplashVisible])
 
   useEffect(() => {
     const restoreSession = async () => {
@@ -2957,6 +3354,7 @@ function App() {
   if (restoringSession) {
     return (
       <div className="page" dir={isArabic ? 'rtl' : 'ltr'}>
+        {renderAppUpdateNotice()}
         <div className="card">
           <div className="topBar">
             <img src="/elvan-logo.png" alt="Elvan Dyeing" className="appLogo" />
@@ -2972,6 +3370,7 @@ function App() {
   if (!isSupabaseConfigured) {
     return (
       <div className="page" dir="ltr">
+        {renderAppUpdateNotice()}
         <div className="card">
           <div className="topBar">
             <img src="/elvan-logo.png" alt="Elvan Dyeing" className="appLogo" />
@@ -2990,6 +3389,7 @@ function App() {
     if (userProfile.role !== 'admin') {
       return (
         <div className="desktopAdminPage" dir="ltr">
+          {renderAppUpdateNotice()}
           <main className="desktopAdminAccessCard">
             <img src="/elvan-logo.png" alt="Elvan Dyeing" className="appLogo" />
             <h1>Yönetim erişimi yok</h1>
@@ -3004,6 +3404,7 @@ function App() {
 
     return (
       <div className="desktopAdminPage" dir="ltr">
+        {renderAppUpdateNotice()}
         <aside className="desktopAdminSidebar">
           <div className="desktopAdminBrand">
             <img src="/elvan-logo.png" alt="Elvan Dyeing" className="appLogo" />
@@ -4146,6 +4547,7 @@ function App() {
   if (userProfile) {
     return (
       <div className="page" dir={isArabic ? 'rtl' : 'ltr'}>
+        {renderAppUpdateNotice()}
         <div className="card">
           <div className="topBar">
             <img src="/elvan-logo.png" alt="Elvan Dyeing" className="appLogo" />
@@ -4447,6 +4849,7 @@ function App() {
       className={screen === 'desktop-admin' ? 'desktopAdminLoginPage' : 'page'}
       dir={isArabic ? 'rtl' : 'ltr'}
     >
+      {renderAppUpdateNotice()}
       {screen === 'desktop-admin' && (
         <aside className="desktopAdminLoginIntro" dir="ltr">
           <div className="desktopAdminLoginBrand">
