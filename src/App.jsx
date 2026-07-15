@@ -1041,7 +1041,7 @@ function StartupSplash({ onComplete }) {
 
     sourceLogo.onload = start
     sourceLogo.onerror = onComplete
-    sourceLogo.src = '/elvan-splash-logo.svg'
+    sourceLogo.src = '/elvan-logo.png'
 
     if (sourceLogo.complete && sourceLogo.naturalWidth > 0) {
       start()
