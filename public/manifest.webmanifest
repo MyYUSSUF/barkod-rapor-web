@@ -1,6 +1,7 @@
 {
   "name": "ELVAN",
   "short_name": "ELVAN",
+  "id": "/",
   "description": "Elvan Dyeing barkod okutma ve rapor görüntüleme uygulaması",
   "start_url": "/",
   "scope": "/",
