@@ -11,8 +11,13 @@ import {
   confirmBarcodeCandidate,
   isBarcodeCenteredInFrame,
 } from './lib/scannerValidation'
+import {
+  applyCameraTorch,
+  supportsCameraTorch,
+} from './lib/cameraTorch'
 import { isSupabaseConfigured, supabase } from './lib/supabaseClient'
 import './App.css'
+import './IndustrialTheme.css'
 
 const NativePdfViewer = lazy(() => import('./NativePdfViewer'))
 
@@ -121,6 +126,9 @@ const LANGUAGES = {
     cameraAreaMissing: 'Kamera alanı bulunamadı.',
     cameraUnsupported: 'Bu cihaz kamera erişimini desteklemiyor.',
     cameraError: 'Kamera açılamadı: ',
+    flashlight: 'Fener',
+    turnFlashlightOn: 'Feneri aç',
+    turnFlashlightOff: 'Feneri kapat',
     barcodeRead: 'Barkod okundu',
     recentBarcodes: 'Son Barkodlar',
     clear: 'Temizle',
@@ -217,6 +225,9 @@ const LANGUAGES = {
     cameraAreaMissing: 'Camera area not found.',
     cameraUnsupported: 'This device does not support camera access.',
     cameraError: 'Camera could not be opened: ',
+    flashlight: 'Light',
+    turnFlashlightOn: 'Turn light on',
+    turnFlashlightOff: 'Turn light off',
     barcodeRead: 'Barcode read',
     recentBarcodes: 'Recent Barcodes',
     clear: 'Clear',
@@ -313,6 +324,9 @@ const LANGUAGES = {
     cameraAreaMissing: 'لم يتم العثور على مساحة الكاميرا.',
     cameraUnsupported: 'هذا الجهاز لا يدعم الوصول إلى الكاميرا.',
     cameraError: 'تعذر فتح الكاميرا: ',
+    flashlight: 'المصباح',
+    turnFlashlightOn: 'تشغيل المصباح',
+    turnFlashlightOff: 'إطفاء المصباح',
     barcodeRead: 'تمت قراءة الباركود',
     recentBarcodes: 'آخر الباركودات',
     clear: 'مسح',
@@ -1077,6 +1091,9 @@ function StartupSplash({ onComplete }) {
 function App() {
   const videoRef = useRef(null)
   const scanFrameRef = useRef(null)
+  const scannerPanelRef = useRef(null)
+  const scannerTriggerRef = useRef(null)
+  const scannerCloseButtonRef = useRef(null)
   const shipmentDateBoxRef = useRef(null)
   const shipmentCustomerSelectRef = useRef(null)
   const shipmentStartInputRef = useRef(null)
@@ -1085,6 +1102,8 @@ function App() {
   const scannerResultHandledRef = useRef(false)
   const scannerStartingRef = useRef(false)
   const scannerStartTokenRef = useRef(0)
+  const scannerTorchTrackRef = useRef(null)
+  const scannerTorchChangingRef = useRef(null)
   const appUpdateCheckedRef = useRef(false)
 
   const [language, setLanguage] = useState(() => {
@@ -1112,6 +1131,8 @@ function App() {
   const [messageKind, setMessageKind] = useState('error')
   const [scannerOpen, setScannerOpen] = useState(false)
   const [scannerMessage, setScannerMessage] = useState('')
+  const [scannerTorchSupported, setScannerTorchSupported] = useState(false)
+  const [scannerTorchOn, setScannerTorchOn] = useState(false)
   const [screen, setScreen] = useState(() => {
     return window.location.pathname === DESKTOP_ADMIN_PATH ? 'desktop-admin' : 'main'
   })
@@ -1320,6 +1341,21 @@ function App() {
     scannerStartTokenRef.current += 1
     scannerStartingRef.current = false
     scannerCandidateRef.current = null
+
+    const torchTrack = scannerTorchTrackRef.current
+    scannerTorchTrackRef.current = null
+    scannerTorchChangingRef.current = null
+    setScannerTorchSupported(false)
+    setScannerTorchOn(false)
+
+    if (torchTrack && torchTrack.readyState !== 'ended') {
+      try {
+        applyCameraTorch(torchTrack, false).catch(() => {})
+        torchTrack.stop()
+      } catch (err) {
+        console.log('Camera torch release skipped:', err)
+      }
+    }
 
     try {
       if (scannerControlsRef.current) {
@@ -2007,6 +2043,74 @@ function App() {
   }, [])
 
   useEffect(() => {
+    if (!scannerOpen) {
+      return undefined
+    }
+
+    const previouslyFocused = document.activeElement
+    const scannerTrigger = scannerTriggerRef.current
+    const previousBodyOverflow = document.body.style.overflow
+    const focusTimer = window.setTimeout(() => {
+      scannerCloseButtonRef.current?.focus()
+    }, 0)
+    const closeOnEscape = (event) => {
+      if (event.key === 'Escape') {
+        stopScanner()
+        return
+      }
+
+      if (event.key !== 'Tab') {
+        return
+      }
+
+      const focusableButtons = Array.from(
+        scannerPanelRef.current?.querySelectorAll('button:not(:disabled)') || []
+      ).filter((button) => button.offsetParent !== null)
+
+      if (focusableButtons.length === 0) {
+        return
+      }
+
+      const firstButton = focusableButtons[0]
+      const lastButton = focusableButtons[focusableButtons.length - 1]
+
+      if (
+        event.shiftKey &&
+        (document.activeElement === firstButton ||
+          !scannerPanelRef.current?.contains(document.activeElement))
+      ) {
+        event.preventDefault()
+        lastButton.focus()
+      } else if (
+        !event.shiftKey &&
+        (document.activeElement === lastButton ||
+          !scannerPanelRef.current?.contains(document.activeElement))
+      ) {
+        event.preventDefault()
+        firstButton.focus()
+      }
+    }
+
+    document.body.style.overflow = 'hidden'
+    document.addEventListener('keydown', closeOnEscape)
+
+    return () => {
+      window.clearTimeout(focusTimer)
+      document.body.style.overflow = previousBodyOverflow
+      document.removeEventListener('keydown', closeOnEscape)
+
+      const focusTarget =
+        previouslyFocused === document.body
+          ? scannerTrigger
+          : previouslyFocused
+
+      if (typeof focusTarget?.focus === 'function') {
+        focusTarget.focus()
+      }
+    }
+  }, [scannerOpen])
+
+  useEffect(() => {
     if (!Capacitor.isNativePlatform() || Capacitor.getPlatform() !== 'android') {
       return
     }
@@ -2367,6 +2471,54 @@ function App() {
     }
   }
 
+  const toggleScannerTorch = async () => {
+    const track = scannerTorchTrackRef.current
+
+    if (!scannerTorchSupported || !supportsCameraTorch(track)) {
+      if (scannerTorchOn) {
+        stopScanner()
+        return
+      }
+
+      scannerTorchTrackRef.current = null
+      setScannerTorchSupported(false)
+      setScannerTorchOn(false)
+      return
+    }
+
+    if (scannerTorchChangingRef.current) {
+      return
+    }
+
+    const nextTorchState = !scannerTorchOn
+    scannerTorchChangingRef.current = track
+
+    try {
+      await applyCameraTorch(track, nextTorchState)
+
+      if (scannerTorchTrackRef.current === track) {
+        setScannerTorchOn(nextTorchState)
+      }
+    } catch (err) {
+      console.log('Camera torch change skipped:', err)
+
+      if (scannerTorchTrackRef.current === track) {
+        if (!nextTorchState) {
+          stopScanner()
+          return
+        }
+
+        scannerTorchTrackRef.current = null
+        setScannerTorchSupported(false)
+        setScannerTorchOn(false)
+      }
+    } finally {
+      if (scannerTorchChangingRef.current === track) {
+        scannerTorchChangingRef.current = null
+      }
+    }
+  }
+
   const getCameraConstraintProfiles = () => [
     {
       audio: false,
@@ -2531,6 +2683,10 @@ function App() {
     setScannerMessage(t.cameraOpening)
     scannerResultHandledRef.current = false
     scannerCandidateRef.current = null
+    scannerTorchTrackRef.current = null
+    scannerTorchChangingRef.current = null
+    setScannerTorchSupported(false)
+    setScannerTorchOn(false)
 
     try {
       await new Promise((resolve) => window.setTimeout(resolve, 300))
@@ -2636,6 +2792,18 @@ function App() {
 
       await improveCameraTrack(stream)
 
+      if (scannerStartTokenRef.current !== startToken) {
+        stopMediaStream(stream)
+        return
+      }
+
+      const cameraTrack = stream.getVideoTracks()[0]
+
+      if (supportsCameraTorch(cameraTrack)) {
+        scannerTorchTrackRef.current = cameraTrack
+        setScannerTorchSupported(true)
+      }
+
       const controls = await codeReader.decodeFromStream(
         stream,
         videoRef.current,
@@ -2652,10 +2820,7 @@ function App() {
       setScannerMessage(t.alignBarcode)
     } catch (err) {
       if (scannerStartTokenRef.current === startToken) {
-        scannerControlsRef.current = null
-        scannerStartingRef.current = false
-        setScannerOpen(false)
-        setScannerMessage('')
+        stopScanner()
         showUserMessage(t.cameraError + err.message, 'error')
       }
     }
@@ -4779,16 +4944,27 @@ function App() {
             className="scanButton"
             onClick={startScanner}
             disabled={loading}
+            ref={scannerTriggerRef}
+            aria-haspopup="dialog"
+            aria-expanded={scannerOpen}
+            aria-controls={scannerOpen ? 'barcodeScannerDialog' : undefined}
           >
             {scannerOpen ? t.cameraOpen : t.scanBarcode}
           </button>
 
           {scannerOpen && (
             <div className="scannerOverlay">
-              <div className="scannerPanel">
+              <div
+                id="barcodeScannerDialog"
+                className="scannerPanel"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="barcodeScannerTitle"
+                ref={scannerPanelRef}
+              >
                 <div className="scannerTop">
                   <div>
-                    <strong>{t.cameraOpen}</strong>
+                    <strong id="barcodeScannerTitle">{t.cameraOpen}</strong>
                     <span>{t.alignBarcode}</span>
                   </div>
 
@@ -4796,6 +4972,7 @@ function App() {
                     type="button"
                     className="scannerCloseSmall"
                     onClick={stopScanner}
+                    ref={scannerCloseButtonRef}
                   >
                     {t.close}
                   </button>
@@ -4828,10 +5005,45 @@ function App() {
                   </div>
 
                   {scannerMessage && (
-                    <p className="scannerMessage">{scannerMessage}</p>
+                    <p
+                      className="scannerMessage"
+                      role="status"
+                      aria-live="polite"
+                    >
+                      {scannerMessage}
+                    </p>
                   )}
 
                   <p className="scannerHint">{t.cameraHint}</p>
+
+                  {scannerTorchSupported && (
+                    <button
+                      type="button"
+                      className={`scannerTorchButton${scannerTorchOn ? ' is-active' : ''}`}
+                      onClick={toggleScannerTorch}
+                      aria-pressed={scannerTorchOn}
+                      aria-label={
+                        scannerTorchOn
+                          ? t.turnFlashlightOff
+                          : t.turnFlashlightOn
+                      }
+                      title={
+                        scannerTorchOn
+                          ? t.turnFlashlightOff
+                          : t.turnFlashlightOn
+                      }
+                    >
+                      <svg
+                        viewBox="0 0 24 24"
+                        aria-hidden="true"
+                        focusable="false"
+                      >
+                        <path d="M9 2h6l1 6H8l1-6Z" />
+                        <path d="M9 8h6l-1.5 4.5V21h-3v-8.5L9 8Z" />
+                      </svg>
+                      <span>{t.flashlight}</span>
+                    </button>
+                  )}
 
                   <button
                     type="button"
