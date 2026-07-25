@@ -516,6 +516,18 @@ form button:hover:not(:disabled) {
   margin-left: 0;
 }
 
+@media (max-width: 600px) {
+  .shipmentOpenButton,
+  [dir="rtl"] .shipmentOpenButton {
+    width: 88px;
+    min-width: 0;
+    margin: 0;
+    padding: 7px 6px;
+    font-size: 11px;
+    white-space: nowrap;
+  }
+}
+
 .shipmentOpenButton:hover:not(:disabled) {
   border-color: #6f141f;
   background: #8d1a26;

@@ -1042,9 +1042,18 @@ form button {
 }
 
 .dateInputGrid input {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
   min-height: 44px;
   padding: 11px 12px;
   border-radius: 8px;
+}
+
+.shipmentStartField,
+.shipmentEndField,
+.shipmentOpenField {
+  min-width: 0;
 }
 
 .shipmentOpenField {
@@ -2900,7 +2909,8 @@ form button {
   }
 
   .dateInputGrid {
-    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-columns: minmax(0, 1fr) 88px;
+    gap: 10px;
   }
 
   .shipmentStartField {
