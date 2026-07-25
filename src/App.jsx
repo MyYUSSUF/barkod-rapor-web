@@ -7,6 +7,10 @@ import {
   FlexibleUpdateInstallStatus,
 } from '@capawesome/capacitor-app-update'
 import { Animation, StatusBar } from '@capacitor/status-bar'
+import {
+  confirmBarcodeCandidate,
+  isBarcodeCenteredInFrame,
+} from './lib/scannerValidation'
 import { isSupabaseConfigured, supabase } from './lib/supabaseClient'
 import './App.css'
 
@@ -1072,10 +1076,12 @@ function StartupSplash({ onComplete }) {
 
 function App() {
   const videoRef = useRef(null)
+  const scanFrameRef = useRef(null)
   const shipmentDateBoxRef = useRef(null)
   const shipmentCustomerSelectRef = useRef(null)
   const shipmentStartInputRef = useRef(null)
   const scannerControlsRef = useRef(null)
+  const scannerCandidateRef = useRef(null)
   const scannerResultHandledRef = useRef(false)
   const scannerStartingRef = useRef(false)
   const scannerStartTokenRef = useRef(0)
@@ -1313,6 +1319,7 @@ function App() {
 
     scannerStartTokenRef.current += 1
     scannerStartingRef.current = false
+    scannerCandidateRef.current = null
 
     try {
       if (scannerControlsRef.current) {
@@ -2523,6 +2530,7 @@ function App() {
     setScannerOpen(true)
     setScannerMessage(t.cameraOpening)
     scannerResultHandledRef.current = false
+    scannerCandidateRef.current = null
 
     try {
       await new Promise((resolve) => window.setTimeout(resolve, 300))
@@ -2560,6 +2568,40 @@ function App() {
         const scannedText = String(result.getText() || '').trim()
 
         if (!scannedText) {
+          return
+        }
+
+        const video = videoRef.current
+        const scanFrame = scanFrameRef.current
+        const resultPoints = result.getResultPoints?.() || []
+        const points = resultPoints.map((point) => ({
+          x: Number(point?.getX?.()),
+          y: Number(point?.getY?.()),
+        }))
+        const isCentered =
+          video &&
+          scanFrame &&
+          isBarcodeCenteredInFrame({
+            points,
+            sourceWidth: video.videoWidth,
+            sourceHeight: video.videoHeight,
+            videoRect: video.getBoundingClientRect(),
+            frameRect: scanFrame.getBoundingClientRect(),
+          })
+
+        if (!isCentered) {
+          return
+        }
+
+        const confirmation = confirmBarcodeCandidate(
+          scannerCandidateRef.current,
+          scannedText,
+          performance.now()
+        )
+
+        scannerCandidateRef.current = confirmation.candidate
+
+        if (!confirmation.confirmed) {
           return
         }
 
@@ -2834,7 +2876,6 @@ function App() {
         body: JSON.stringify({
           barcode: requiresBarcode ? cleanBarcode : '',
           reportCode: report.code,
-          requiresBarcode,
           reportLanguage: getReportLanguageForAppLanguage(),
           startDate: requiresDateRange ? cleanStartDate : undefined,
           endDate: requiresDateRange ? cleanEndDate : undefined,
@@ -4771,7 +4812,7 @@ function App() {
 
                   <div className="scannerShade"></div>
 
-                  <div className="scanFrame">
+                  <div ref={scanFrameRef} className="scanFrame">
                     <span className="corner cornerTopLeft"></span>
                     <span className="corner cornerTopRight"></span>
                     <span className="corner cornerBottomLeft"></span>

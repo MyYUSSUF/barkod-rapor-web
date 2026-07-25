@@ -1,9 +1,48 @@
 import crypto from 'crypto'
 
-const REPORT_PERMISSION_FIELDS = {
-  RAR00035: 'can_view_fixing_report',
-  RAR00036: 'can_view_shipment_report',
-  RAR00037: 'can_view_yarn_stock_report',
+const REPORT_CATALOG = Object.freeze({
+  RAR00032: Object.freeze({
+    requiresBarcode: true,
+    requiresDateRange: false,
+    requiresCustomer: false,
+    permissionField: null,
+  }),
+  RAR00033: Object.freeze({
+    requiresBarcode: true,
+    requiresDateRange: false,
+    requiresCustomer: false,
+    permissionField: null,
+  }),
+  RAR00034: Object.freeze({
+    requiresBarcode: true,
+    requiresDateRange: false,
+    requiresCustomer: false,
+    permissionField: null,
+  }),
+  RAR00035: Object.freeze({
+    requiresBarcode: false,
+    requiresDateRange: false,
+    requiresCustomer: false,
+    permissionField: 'can_view_fixing_report',
+  }),
+  RAR00036: Object.freeze({
+    requiresBarcode: false,
+    requiresDateRange: true,
+    requiresCustomer: true,
+    permissionField: 'can_view_shipment_report',
+  }),
+  RAR00037: Object.freeze({
+    requiresBarcode: false,
+    requiresDateRange: false,
+    requiresCustomer: false,
+    permissionField: 'can_view_yarn_stock_report',
+  }),
+})
+
+export function getReportDefinition(reportCode) {
+  const cleanReportCode = String(reportCode || '').trim()
+
+  return REPORT_CATALOG[cleanReportCode] || null
 }
 
 function getSigningSecret() {
@@ -24,12 +63,16 @@ function makeSignature(value) {
 }
 
 export function canProfileViewReport(profile, reportCode) {
-  const permissionField = REPORT_PERMISSION_FIELDS[reportCode]
+  const reportDefinition = getReportDefinition(reportCode)
+
+  if (!reportDefinition) {
+    return false
+  }
 
   return (
-    !permissionField ||
+    !reportDefinition.permissionField ||
     profile?.role === 'admin' ||
-    profile?.[permissionField] === true
+    profile?.[reportDefinition.permissionField] === true
   )
 }
 
@@ -39,9 +82,15 @@ export function createReportAccessToken({
   pdfUrl,
   expiresInSeconds = 300,
 }) {
+  const cleanReportCode = String(reportCode || '').trim()
+
+  if (!getReportDefinition(cleanReportCode)) {
+    throw new Error('Desteklenmeyen rapor kodu.')
+  }
+
   const payload = {
     userId,
-    reportCode,
+    reportCode: cleanReportCode,
     pdfUrl,
     expiresAt: Date.now() + expiresInSeconds * 1000,
   }
@@ -51,6 +100,12 @@ export function createReportAccessToken({
 }
 
 export function verifyReportAccessToken(token, expected = {}) {
+  const expectedReportCode = String(expected.reportCode || '').trim()
+
+  if (!getReportDefinition(expectedReportCode)) {
+    return false
+  }
+
   const [encodedPayload, signature] = String(token || '').split('.')
 
   if (!encodedPayload || !signature) {
@@ -79,7 +134,7 @@ export function verifyReportAccessToken(token, expected = {}) {
   return (
     Number(payload.expiresAt) > Date.now() &&
     payload.userId === expected.userId &&
-    payload.reportCode === expected.reportCode &&
+    payload.reportCode === expectedReportCode &&
     payload.pdfUrl === expected.pdfUrl
   )
 }

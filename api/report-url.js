@@ -2,6 +2,7 @@ import { verifyApprovedDeviceRequest } from './_device-auth.js'
 import {
   canProfileViewReport,
   createReportAccessToken,
+  getReportDefinition,
 } from './_report-access.js'
 import { handleCors } from './_cors.js'
 
@@ -285,42 +286,49 @@ export default async function handler(req, res) {
     const {
       barcode,
       reportCode,
-      requiresBarcode,
       reportLanguage,
       startDate,
       endDate,
       customerCode,
     } = req.body || {}
-    const mustHaveBarcode = requiresBarcode !== false
-    const isShipmentReport = reportCode === 'RAR00036'
+    const cleanReportCode = String(reportCode || '').trim()
 
-    if (!isNotBlank(reportCode)) {
+    if (!isNotBlank(cleanReportCode)) {
       return res.status(400).json({ error: 'Rapor kodu zorunludur.' })
     }
 
-    if (!canProfileViewReport(authResult.profile, reportCode)) {
+    const reportDefinition = getReportDefinition(cleanReportCode)
+
+    if (!reportDefinition) {
+      return res.status(400).json({ error: 'Desteklenmeyen rapor kodu.' })
+    }
+
+    if (!canProfileViewReport(authResult.profile, cleanReportCode)) {
       return res.status(403).json({
         error: 'Bu rapor için kullanıcı yetkiniz bulunmuyor.',
       })
     }
 
-    if (mustHaveBarcode && !isNotBlank(barcode)) {
+    if (reportDefinition.requiresBarcode && !isNotBlank(barcode)) {
       return res.status(400).json({ error: 'Barkod zorunludur.' })
     }
 
-    if (isShipmentReport && (!isNotBlank(startDate) || !isNotBlank(endDate))) {
+    if (
+      reportDefinition.requiresDateRange &&
+      (!isNotBlank(startDate) || !isNotBlank(endDate))
+    ) {
       return res.status(400).json({ error: 'Başlangıç ve bitiş tarihi zorunludur.' })
     }
 
     if (
-      isShipmentReport &&
+      reportDefinition.requiresCustomer &&
       !SHIPMENT_CUSTOMER_CODES.has(String(customerCode || '').trim())
     ) {
       return res.status(400).json({ error: 'Geçerli bir müşteri seçilmelidir.' })
     }
 
-    const pdfUrl = await getReportPdfUrl(reportCode, {
-      barcode: mustHaveBarcode ? barcode : '',
+    const pdfUrl = await getReportPdfUrl(cleanReportCode, {
+      barcode: reportDefinition.requiresBarcode ? barcode : '',
       startDate,
       endDate,
       customerCode,
@@ -329,7 +337,7 @@ export default async function handler(req, res) {
 
     const reportToken = createReportAccessToken({
       userId: authResult.userId,
-      reportCode,
+      reportCode: cleanReportCode,
       pdfUrl,
     })
 

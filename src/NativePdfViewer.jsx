@@ -22,7 +22,9 @@ const MIN_ZOOM = 1
 const ZOOM_STEP = 0.25
 const PAGE_GAP = 14
 const PAGE_RENDER_SCALE = 3
-const PAGE_RENDER_RADIUS = 2
+// Görünen sayfa ile iki komşusu hazır tutulur, uzak canvas'lar kaldırılır.
+const PAGE_RENDER_RADIUS = 1
+const PAGE_METADATA_CONCURRENCY = 4
 const DETAIL_RENDER_DELAY_MS = 220
 const DETAIL_RENDER_RETRY_MS = 140
 // Mobil WebView belleğini korumak için detay katmanı ekran boyutunda tutulur.
@@ -152,6 +154,47 @@ function getFittedPageSize(pageSize, viewportSize, zoom) {
     width: Math.max(1, Math.floor(pageSize.width * fitScale * zoom)),
     height: Math.max(1, Math.floor(pageSize.height * fitScale * zoom)),
   }
+}
+
+function releaseCanvas(canvas) {
+  if (!canvas) {
+    return
+  }
+
+  canvas.style.visibility = 'hidden'
+  canvas.width = 0
+  canvas.height = 0
+}
+
+async function loadPageSizes(pdf) {
+  const sizes = new Array(pdf.numPages)
+  let nextPageIndex = 0
+  const workerCount = Math.min(
+    PAGE_METADATA_CONCURRENCY,
+    pdf.numPages
+  )
+
+  const loadNextPage = async () => {
+    while (nextPageIndex < pdf.numPages) {
+      const pageIndex = nextPageIndex
+      nextPageIndex += 1
+
+      const page = await pdf.getPage(pageIndex + 1)
+      const viewport = page.getViewport({ scale: 1 })
+
+      sizes[pageIndex] = {
+        page,
+        width: viewport.width,
+        height: viewport.height,
+      }
+    }
+  }
+
+  await Promise.all(
+    Array.from({ length: workerCount }, loadNextPage)
+  )
+
+  return sizes
 }
 
 function findClosestPageElement(pages, clientY, preferredPage) {
@@ -346,6 +389,7 @@ const PdfPage = memo(function PdfPage({
   viewportSize,
   zoom,
 }) {
+  const baseCanvasRef = useRef(null)
   const fittedSize = getFittedPageSize(pageSize, viewportSize, zoom)
 
   // Ana canvas sabit kalır; netlik ayrı detay katmanında yenilenir.
@@ -354,6 +398,23 @@ const PdfPage = memo(function PdfPage({
     viewportSize,
     PAGE_RENDER_SCALE
   )
+
+  const handleCanvasRef = useCallback((canvas) => {
+    const previousCanvas = baseCanvasRef.current
+
+    if (previousCanvas && previousCanvas !== canvas) {
+      releaseCanvas(previousCanvas)
+    }
+
+    baseCanvasRef.current = canvas
+  }, [])
+
+  useLayoutEffect(() => {
+    return () => {
+      releaseCanvas(baseCanvasRef.current)
+      baseCanvasRef.current = null
+    }
+  }, [])
 
   return (
     <section
@@ -367,6 +428,7 @@ const PdfPage = memo(function PdfPage({
     >
       {shouldRender ? (
         <Page
+          canvasRef={handleCanvasRef}
           pageNumber={pageNumber}
           width={renderSize.width}
           devicePixelRatio={devicePixelRatio}
@@ -542,6 +604,7 @@ function NativePdfViewer({
 
     abortControllerRef.current?.abort()
     abortControllerRef.current = abortController
+    pdfDocumentRef.current = null
     pdfBlobRef.current = null
     pendingZoomRef.current = null
     detailGenerationRef.current += 1
@@ -617,24 +680,22 @@ function NativePdfViewer({
   ])
 
   const handleDocumentLoad = useCallback(async (pdf) => {
+    pdfDocumentRef.current = pdf
+
     try {
-      const sizes = await Promise.all(
-        Array.from({ length: pdf.numPages }, async (_, index) => {
-          const page = await pdf.getPage(index + 1)
-          const viewport = page.getViewport({ scale: 1 })
+      const sizes = await loadPageSizes(pdf)
 
-          return {
-            page,
-            width: viewport.width,
-            height: viewport.height,
-          }
-        })
-      )
+      if (pdfDocumentRef.current !== pdf) {
+        return
+      }
 
-      pdfDocumentRef.current = pdf
       pageSizesRef.current = sizes
       setPageSizes(sizes)
     } catch (documentError) {
+      if (pdfDocumentRef.current !== pdf) {
+        return
+      }
+
       setError(documentError.message || t.loadError)
     }
   }, [t.loadError])

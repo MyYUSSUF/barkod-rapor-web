@@ -10,6 +10,7 @@
     "android:open": "cap open android",
     "android:bundle": "npm run android:sync && cd android && gradlew.bat bundleRelease",
     "lint": "eslint .",
+    "test": "node --test",
     "preview": "vite preview"
   },
   "dependencies": {

@@ -109,16 +109,12 @@ Not: Play Store'a yuklenecek release AAB icin Android Studio uzerinden veya
 Gradle signing ayarlariyla bir upload/release keystore kullanilmalidir.
 `android/keystore.properties` ve keystore dosyalari GitHub'a gonderilmez.
 
-## Cihaz Onayi
+## Cihaz Erisimi
 
 Uygulama her tarayici icin guclu ve rastgele bir cihaz anahtari olusturur.
-Her kullanicinin ilk cihazi otomatik onaylanir. Ayni hesabin ikinci ve sonraki
-cihazlari admin panelinde onaylanmadan rapor API'lerine erisemez. Bir kullanici
-icin yeni cihaz onaylandiginda onceki onayli cihaz iptal edilir.
-
-Ilk cihaz otomatik onaylandiginda veya sonraki bir cihaz onay bekleyen duruma
-dustugunde, bildirim izni ve push aboneligi bulunan admin cihazlarina otomatik
-bildirim gonderilir. Ayni cihaz tekrar giris denediginde yeni bildirim uretilmez.
+Aktif kullanicilar yeni cihazlarda yonetici onayi beklemeden giris yapabilir ve
+ayni hesabi birden fazla cihazda kullanabilir. Yonetici tarafindan erisimi
+kaldirilmis belirli bir cihaz yeniden giris yapamaz.
 
 Veritabani tablosu ve Supabase fonksiyonlari su migration dosyasindadir:
 
@@ -126,6 +122,7 @@ Veritabani tablosu ve Supabase fonksiyonlari su migration dosyasindadir:
 supabase/migrations/20260620_approved_devices.sql
 supabase/migrations/20260621_first_device_auto_approval.sql
 supabase/migrations/20260621_readable_user_device_views.sql
+supabase/migrations/20260725_allow_unlimited_user_devices.sql
 ```
 
 Bu SQL dosyalari tarih sirasiyla Supabase SQL Editor uzerinden bir kez

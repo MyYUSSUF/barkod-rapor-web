@@ -1,11 +1,6 @@
 import crypto from 'crypto'
 import { createClient } from '@supabase/supabase-js'
-import {
-  approveAdminDevice,
-  approveFirstPendingDevice,
-  hasRegisteredDevice,
-  notifyAdminsAboutDeviceAccess,
-} from './_admin-device-notification.js'
+import { approvePendingDevice } from './_device-registry.js'
 
 function isNotBlank(value) {
   return value !== null && value !== undefined && String(value).trim() !== ''
@@ -120,6 +115,33 @@ function normalizeDeviceResult(data) {
   }
 }
 
+export function resolveDeviceAccessStatus(status) {
+  return String(status || '').trim() === 'revoked' ? 'revoked' : 'approved'
+}
+
+async function allowDeviceWithoutApproval({
+  userId,
+  deviceHash,
+  deviceName,
+  status,
+}) {
+  const accessStatus = resolveDeviceAccessStatus(status)
+
+  if (accessStatus === 'revoked') {
+    return accessStatus
+  }
+
+  if (status !== 'approved') {
+    try {
+      await approvePendingDevice(userId, deviceHash, deviceName)
+    } catch (approvalError) {
+      console.error('Cihaz kaydı otomatik onaylanamadı:', approvalError)
+    }
+  }
+
+  return accessStatus
+}
+
 async function verifyUserRequest(req) {
   const accessToken = getBearerToken(req)
 
@@ -191,13 +213,6 @@ export async function requestDeviceAccess(req, deviceName = '') {
   }
 
   const deviceHash = hashDeviceToken(deviceToken)
-  let deviceWasRegistered = true
-
-  try {
-    deviceWasRegistered = await hasRegisteredDevice(authResult.userId, deviceHash)
-  } catch (deviceHistoryError) {
-    console.error('Cihaz geçmişi kontrol edilemedi:', deviceHistoryError)
-  }
 
   const { data, error } = await authResult.supabase.rpc('request_device_access', {
     p_device_hash: deviceHash,
@@ -210,57 +225,12 @@ export async function requestDeviceAccess(req, deviceName = '') {
 
   const result = normalizeDeviceResult(data)
   let status = result.status || 'pending'
-
-  if (authResult.profile.role === 'admin' && status !== 'approved') {
-    try {
-      const adminDeviceApproved = await approveAdminDevice(
-        authResult.userId,
-        deviceHash,
-        deviceName
-      )
-
-      if (adminDeviceApproved) {
-        status = 'approved'
-      }
-    } catch (approvalError) {
-      console.error('Admin cihazı otomatik onaylanamadı:', approvalError)
-    }
-  }
-
-  if (status === 'pending') {
-    try {
-      const firstDeviceApproved = await approveFirstPendingDevice(
-        authResult.userId,
-        deviceHash
-      )
-
-      if (firstDeviceApproved) {
-        status = 'approved'
-      }
-    } catch (approvalError) {
-      console.error('İlk cihaz otomatik onaylanamadı:', approvalError)
-    }
-  }
-
-  if (
-    authResult.profile.role !== 'admin' &&
-    ['approved', 'pending'].includes(status) &&
-    !deviceWasRegistered
-  ) {
-    try {
-      await notifyAdminsAboutDeviceAccess({
-        userId: authResult.userId,
-        userName:
-          authResult.profile.full_name ||
-          authResult.profile.email ||
-          authResult.userId,
-        deviceName,
-        status,
-      })
-    } catch (notificationError) {
-      console.error('Admin cihaz bildirimi gönderilemedi:', notificationError)
-    }
-  }
+  status = await allowDeviceWithoutApproval({
+    userId: authResult.userId,
+    deviceHash,
+    deviceName,
+    status,
+  })
 
   return {
     ...authResult,
@@ -305,18 +275,12 @@ export async function verifyApprovedDeviceRequest(req, options = {}) {
 
   const result = normalizeDeviceResult(data)
   let status = result.status || (typeof data === 'string' ? data : 'missing')
-
-  if (authResult.profile.role === 'admin' && status !== 'approved') {
-    const adminDeviceApproved = await approveAdminDevice(
-      authResult.userId,
-      hashDeviceToken(deviceToken),
-      getHeader(req, 'user-agent')
-    )
-
-    if (adminDeviceApproved) {
-      status = 'approved'
-    }
-  }
+  status = await allowDeviceWithoutApproval({
+    userId: authResult.userId,
+    deviceHash: hashDeviceToken(deviceToken),
+    deviceName: getHeader(req, 'user-agent'),
+    status,
+  })
 
   if (status !== 'approved') {
     return {
