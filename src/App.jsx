@@ -5170,9 +5170,6 @@ function App() {
                       </div>
 
                       <div className="shipmentOpenField">
-                        <span className="shipmentOpenLabel" aria-hidden="true">
-                          &nbsp;
-                        </span>
                         <button
                           type="button"
                           className="shipmentOpenButton"

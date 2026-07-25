@@ -415,6 +415,23 @@ form button:hover:not(:disabled) {
   background: #ffffff;
 }
 
+.reportButton {
+  animation-name: buttonEnter;
+  animation-duration: 320ms;
+  animation-timing-function: ease-out;
+  animation-fill-mode: both;
+}
+
+.reportButton6 {
+  animation-delay: 0.84s;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reportButton {
+    animation: none;
+  }
+}
+
 [dir="rtl"] .reportButton5,
 [dir="rtl"] .reportButton6 {
   border-right-color: var(--teal);
@@ -483,10 +500,20 @@ form button:hover:not(:disabled) {
 }
 
 .shipmentOpenButton {
+  min-width: 96px;
+  min-height: 40px;
+  margin-left: 4px;
+  padding: 7px 10px;
   border-color: #7f1823;
   border-radius: 2px;
   background: var(--teal);
   color: #ffffff;
+  font-size: 12px;
+}
+
+[dir="rtl"] .shipmentOpenButton {
+  margin-right: 4px;
+  margin-left: 0;
 }
 
 .shipmentOpenButton:hover:not(:disabled) {

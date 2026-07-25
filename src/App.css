@@ -1049,13 +1049,9 @@ form button {
 
 .shipmentOpenField {
   display: flex;
-  flex-direction: column;
-}
-
-.shipmentOpenLabel {
-  display: block;
-  font-size: 12px;
-  line-height: normal;
+  align-items: flex-end;
+  justify-content: flex-end;
+  padding-top: 22px;
 }
 
 [dir="rtl"] .mainButton {
