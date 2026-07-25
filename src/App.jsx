@@ -1111,6 +1111,7 @@ function App() {
   const scannerTorchTrackRef = useRef(null)
   const scannerTorchChangingRef = useRef(null)
   const appUpdateCheckedRef = useRef(false)
+  const messageTimeoutRef = useRef(null)
 
   const [language, setLanguage] = useState(() => {
     return localStorage.getItem(LANGUAGE_KEY) || 'tr'
@@ -1185,8 +1186,12 @@ function App() {
   })
 
   const showUserMessage = (value, kind = 'error') => {
+    window.clearTimeout(messageTimeoutRef.current)
     setMessageKind(kind)
     setMessage(value)
+    messageTimeoutRef.current = window.setTimeout(() => {
+      setMessage('')
+    }, 3000)
   }
 
   const hideStartupSplash = useCallback(() => {
@@ -1194,6 +1199,7 @@ function App() {
   }, [])
 
   const clearUserMessage = () => {
+    window.clearTimeout(messageTimeoutRef.current)
     setMessage('')
     setMessageKind('info')
   }
@@ -2048,6 +2054,7 @@ function App() {
 
   useEffect(() => {
     return () => {
+      window.clearTimeout(messageTimeoutRef.current)
       stopScanner()
     }
   }, [])
@@ -3618,13 +3625,6 @@ function App() {
   )
 
   const dateRangeDayCount = getDateRangeDayCount(startDate, endDate)
-  const canOpenShipmentReport =
-    SHIPMENT_CUSTOMERS.some(
-      (customer) => customer.code === shipmentCustomerCode
-    ) &&
-    Boolean(startDate.trim()) &&
-    Boolean(endDate.trim()) &&
-    !isInvalidDateRange(startDate.trim(), endDate.trim())
 
   if (startupSplashVisible) {
     return <StartupSplash onComplete={hideStartupSplash} />
@@ -5094,7 +5094,17 @@ function App() {
                       ? ' reportButtonLoading'
                       : ''
                   }`}
-                  onClick={() => openReport(report)}
+                  onClick={() => {
+                    if (report.requiresDateRange) {
+                      clearUserMessage()
+                      setDateRangeReportCode((currentCode) =>
+                        currentCode === report.code ? '' : report.code
+                      )
+                      return
+                    }
+
+                    openReport(report)
+                  }}
                   disabled={loading}
                 >
                   <span className="reportButtonMark">
@@ -5136,7 +5146,7 @@ function App() {
                     </div>
 
                     <div className="dateInputGrid">
-                      <div>
+                      <div className="shipmentStartField">
                         <label htmlFor="shipmentStartDate">{t.startDate}</label>
                         <input
                           id="shipmentStartDate"
@@ -5148,7 +5158,7 @@ function App() {
                         />
                       </div>
 
-                      <div>
+                      <div className="shipmentEndField">
                         <label htmlFor="shipmentEndDate">{t.endDate}</label>
                         <input
                           id="shipmentEndDate"
@@ -5157,6 +5167,20 @@ function App() {
                           onChange={(e) => setEndDate(e.target.value)}
                           disabled={loading}
                         />
+                      </div>
+
+                      <div className="shipmentOpenField">
+                        <span className="shipmentOpenLabel" aria-hidden="true">
+                          &nbsp;
+                        </span>
+                        <button
+                          type="button"
+                          className="shipmentOpenButton"
+                          onClick={() => openReport(report)}
+                          disabled={loading}
+                        >
+                          {t.openReport}
+                        </button>
                       </div>
                     </div>
 
@@ -5187,16 +5211,6 @@ function App() {
                           )}
                         </div>
 
-                        {canOpenShipmentReport && (
-                          <button
-                            type="button"
-                            className="shipmentOpenButton"
-                            onClick={() => openReport(report)}
-                            disabled={loading}
-                          >
-                            {t.openReport}
-                          </button>
-                        )}
                       </div>
                     )}
                   </div>
