@@ -1,5 +1,5 @@
 :root {
-  --page-bg: #eceeef;
+  --page-bg: #ffffff;
   --surface: #ffffff;
   --surface-soft: #f5f6f6;
   --surface-strong: #e7e9ea;
@@ -9,25 +9,26 @@
   --muted: #687178;
   --primary: #252a2e;
   --primary-soft: #363c41;
-  --teal: #c91f2c;
-  --teal-soft: #f9e9eb;
-  --gold: #c91f2c;
-  --gold-soft: #f9e9eb;
-  --danger: #ad1824;
+  --teal: #a51f2d;
+  --teal-soft: #f7edef;
+  --gold: #a51f2d;
+  --gold-soft: #f7edef;
+  --danger: #8f1824;
   --danger-soft: #fbe9eb;
   --slate: #4e565c;
-  --accent: #c91f2c;
-  --focus: rgba(201, 31, 44, 0.16);
+  --accent: #a51f2d;
+  --focus: rgba(165, 31, 45, 0.16);
   --shadow-small: 0 5px 14px rgba(25, 29, 32, 0.07);
   --shadow-medium: 0 12px 30px rgba(25, 29, 32, 0.1);
 }
 
-html {
-  background: var(--page-bg);
+html,
+body,
+#root {
+  background: #ffffff;
 }
 
 body {
-  background: var(--page-bg);
   color: var(--text);
   font-family:
     "Segoe UI",
@@ -39,7 +40,7 @@ body {
 }
 
 .startupSplash {
-  background: #f1f2f2;
+  background: #ffffff;
 }
 
 .appUpdateNotice {
@@ -304,7 +305,7 @@ form button:hover:not(:disabled) {
 }
 
 .scanButton {
-  border-color: #a91722;
+  border-color: #7f1823;
   background: var(--teal);
   box-shadow: none;
 }
@@ -317,8 +318,8 @@ form button:hover:not(:disabled) {
 }
 
 .scanButton:hover:not(:disabled) {
-  border-color: #95131e;
-  background: #ae1823;
+  border-color: #6f141f;
+  background: #8d1a26;
 }
 
 .reportButtons {
@@ -550,7 +551,7 @@ form button:hover:not(:disabled) {
 }
 
 .corner {
-  border-color: #ef3340;
+  border-color: #b7283a;
 }
 
 .cornerTopLeft,
@@ -563,7 +564,7 @@ form button:hover:not(:disabled) {
 .scanLine {
   height: 2px;
   border-radius: 0;
-  background: #ef3340;
+  background: #b7283a;
   box-shadow: none;
 }
 
@@ -682,8 +683,8 @@ form button:hover:not(:disabled) {
 .desktopAdminLoginPage {
   --admin-navy: #24292d;
   --admin-sidebar: #202428;
-  --admin-teal: #c91f2c;
-  --admin-teal-dark: #a91722;
+  --admin-teal: #a51f2d;
+  --admin-teal-dark: #821822;
   --admin-lavender: #555d63;
   --admin-amber: #a46b13;
   --admin-canvas: #eceeef;
@@ -903,12 +904,12 @@ form button:hover:not(:disabled) {
 .desktopAdminLoginCard input:focus,
 .desktopAdminLoginCard .languageSelect:focus {
   border-color: var(--admin-teal);
-  outline: 2px solid rgba(201, 31, 44, 0.14);
+  outline: 2px solid rgba(165, 31, 45, 0.14);
   box-shadow: none;
 }
 
 .desktopAdminRefresh {
-  border: 1px solid #a91722;
+  border: 1px solid #7f1823;
   border-radius: 2px;
   background: var(--admin-teal);
   box-shadow: none;
@@ -916,7 +917,7 @@ form button:hover:not(:disabled) {
 
 .desktopAdminRefresh:hover:not(:disabled) {
   border-color: #84111a;
-  background: #a91722;
+  background: #821822;
   transform: none;
   box-shadow: none;
 }
