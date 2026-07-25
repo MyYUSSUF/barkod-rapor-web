@@ -153,6 +153,8 @@ const LANGUAGES = {
     selectCustomer: 'Müşteri seçin',
     customerRequired: 'Sevkiyat raporu için müşteri seçilmelidir.',
     selectedCustomer: 'Seçilen müşteri',
+    openReport: 'Raporu Aç',
+    languageSelection: 'Dil seçimi',
     reportPreparing: 'hazırlanıyor...',
     reportRequestTimeout: 'Rapor hazırlanması çok uzun sürdü. Lütfen tekrar deneyin.',
     sessionMissing: 'Oturum bulunamadı. Tekrar giriş yap.',
@@ -252,6 +254,8 @@ const LANGUAGES = {
     selectCustomer: 'Select customer',
     customerRequired: 'A customer must be selected for the shipment report.',
     selectedCustomer: 'Selected customer',
+    openReport: 'Open Report',
+    languageSelection: 'Language selection',
     reportPreparing: 'is preparing...',
     reportRequestTimeout: 'Report preparation took too long. Please try again.',
     sessionMissing: 'Session not found. Please login again.',
@@ -264,7 +268,7 @@ const LANGUAGES = {
     inspection: 'Inspection Report',
     workOrder: 'Work Order Report',
     surfaceControl: 'Surface Control Report',
-    fixingWaiting: 'Fixing Waiting List',
+    fixingWaiting: 'Heat Setting',
     shipmentTracking: 'Shipment Tracking',
     yarnStock: 'Yarn Stock Report',
     startDate: 'Start Date',
@@ -351,6 +355,8 @@ const LANGUAGES = {
     selectCustomer: 'اختر العميل',
     customerRequired: 'يجب اختيار العميل لتقرير الشحن.',
     selectedCustomer: 'العميل المحدد',
+    openReport: 'فتح التقرير',
+    languageSelection: 'اختيار اللغة',
     reportPreparing: 'قيد التحضير...',
     reportRequestTimeout: 'استغرق تجهيز التقرير وقتًا طويلاً. يرجى المحاولة مرة أخرى.',
     sessionMissing: 'لم يتم العثور على الجلسة. سجّل الدخول مرة أخرى.',
@@ -2037,6 +2043,10 @@ function App() {
   }
 
   useEffect(() => {
+    document.documentElement.lang = language
+  }, [language])
+
+  useEffect(() => {
     return () => {
       stopScanner()
     }
@@ -3608,6 +3618,13 @@ function App() {
   )
 
   const dateRangeDayCount = getDateRangeDayCount(startDate, endDate)
+  const canOpenShipmentReport =
+    SHIPMENT_CUSTOMERS.some(
+      (customer) => customer.code === shipmentCustomerCode
+    ) &&
+    Boolean(startDate.trim()) &&
+    Boolean(endDate.trim()) &&
+    !isInvalidDateRange(startDate.trim(), endDate.trim())
 
   if (startupSplashVisible) {
     return <StartupSplash onComplete={hideStartupSplash} />
@@ -4884,15 +4901,15 @@ function App() {
 
   if (userProfile) {
     return (
-      <div className="page" dir={isArabic ? 'rtl' : 'ltr'}>
+      <div className="page mainPage" dir={isArabic ? 'rtl' : 'ltr'}>
         {renderAppUpdateNotice()}
-        <div className="card">
+        <div className="card mainCard">
           <div className="topBar">
             <img src="/elvan-logo.png" alt="Elvan Dyeing" className="appLogo" />
 
             <select
               className="languageSelect"
-              aria-label="Dil seçimi"
+              aria-label={t.languageSelection}
               value={language}
               onChange={(e) => changeLanguage(e.target.value)}
             >
@@ -5144,28 +5161,41 @@ function App() {
                     </div>
 
                     {startDate && endDate && (
-                      <div className="dateRangeSummary">
-                        <strong>{t.selectedDateRange}</strong>
-                        <span>
-                          {formatDisplayDate(startDate)} - {formatDisplayDate(endDate)}
-                          {dateRangeDayCount && (
-                            <> · {dateRangeDayCount} {t.selectedDayCount}</>
+                      <div className="dateRangeFooter">
+                        <div className="dateRangeSummary">
+                          <strong>{t.selectedDateRange}</strong>
+                          <span>
+                            {formatDisplayDate(startDate)} - {formatDisplayDate(endDate)}
+                            {dateRangeDayCount && (
+                              <> · {dateRangeDayCount} {t.selectedDayCount}</>
+                            )}
+                          </span>
+                          {shipmentCustomerCode && (
+                            <>
+                              <strong className="shipmentCustomerSummaryLabel">
+                                {t.selectedCustomer}
+                              </strong>
+                              <span>
+                                {
+                                  SHIPMENT_CUSTOMERS.find(
+                                    (customer) =>
+                                      customer.code === shipmentCustomerCode
+                                  )?.name
+                                }
+                              </span>
+                            </>
                           )}
-                        </span>
-                        {shipmentCustomerCode && (
-                          <>
-                            <strong className="shipmentCustomerSummaryLabel">
-                              {t.selectedCustomer}
-                            </strong>
-                            <span>
-                              {
-                                SHIPMENT_CUSTOMERS.find(
-                                  (customer) =>
-                                    customer.code === shipmentCustomerCode
-                                )?.name
-                              }
-                            </span>
-                          </>
+                        </div>
+
+                        {canOpenShipmentReport && (
+                          <button
+                            type="button"
+                            className="shipmentOpenButton"
+                            onClick={() => openReport(report)}
+                            disabled={loading}
+                          >
+                            {t.openReport}
+                          </button>
                         )}
                       </div>
                     )}
@@ -5266,7 +5296,7 @@ function App() {
 
           <select
             className="languageSelect"
-            aria-label="Dil seçimi"
+            aria-label={t.languageSelection}
             value={language}
             onChange={(e) => changeLanguage(e.target.value)}
           >

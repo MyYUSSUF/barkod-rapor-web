@@ -400,6 +400,11 @@ const PdfPage = memo(function PdfPage({
   )
 
   const handleCanvasRef = useCallback((canvas) => {
+    // React-PDF normal yeniden çizimlerde ref'i kısa süreli null gönderebilir.
+    if (!canvas) {
+      return
+    }
+
     const previousCanvas = baseCanvasRef.current
 
     if (previousCanvas && previousCanvas !== canvas) {
@@ -985,10 +990,8 @@ function NativePdfViewer({
         const targetClientY =
           containerRect.top + pendingZoom.centerY
 
-        container.scrollLeft = Math.max(
-          0,
+        container.scrollLeft =
           container.scrollLeft + anchorClientX - targetClientX
-        )
         container.scrollTop = Math.max(
           0,
           container.scrollTop + anchorClientY - targetClientY
