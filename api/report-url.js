@@ -5,6 +5,7 @@ import {
   getReportDefinition,
 } from './_report-access.js'
 import { handleCors } from './_cors.js'
+import { enforceRequestLimit } from './_rate-limit.js'
 
 const BASE_URL = 'http://repx.elvandyeing.com'
 const ENDPOINT = `${BASE_URL}/RepxService/vxC_RepxWebService.asmx`
@@ -307,6 +308,20 @@ export default async function handler(req, res) {
       return res.status(403).json({
         error: 'Bu rapor için kullanıcı yetkiniz bulunmuyor.',
       })
+    }
+
+    if (
+      !enforceRequestLimit(res, {
+        scope: 'report-url',
+        key: `${authResult.userId}:${cleanReportCode}`,
+        maxRequests: 15,
+        windowMs: 60_000,
+        minIntervalMs: 1000,
+        errorMessage:
+          'Rapor isteği çok hızlı tekrarlandı. Lütfen kısa bir süre bekleyin.',
+      })
+    ) {
+      return
     }
 
     if (reportDefinition.requiresBarcode && !isNotBlank(barcode)) {

@@ -1,4 +1,4 @@
-import { Fragment, lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { Capacitor } from '@capacitor/core'
 import {
   AppUpdate,
@@ -16,6 +16,7 @@ import {
   supportsCameraTorch,
 } from './lib/cameraTorch'
 import { isSupabaseConfigured, supabase } from './lib/supabaseClient'
+import { ReportList } from './components/ReportList'
 import './App.css'
 import './IndustrialTheme.css'
 
@@ -129,7 +130,6 @@ const LANGUAGES = {
     flashlight: 'Fener',
     turnFlashlightOn: 'Feneri aç',
     turnFlashlightOff: 'Feneri kapat',
-    barcodeRead: 'Barkod okundu',
     recentBarcodes: 'Son Barkodlar',
     clear: 'Temizle',
     selectedBarcode: 'Barkod seçildi',
@@ -230,7 +230,6 @@ const LANGUAGES = {
     flashlight: 'Light',
     turnFlashlightOn: 'Turn light on',
     turnFlashlightOff: 'Turn light off',
-    barcodeRead: 'Barcode read',
     recentBarcodes: 'Recent Barcodes',
     clear: 'Clear',
     selectedBarcode: 'Barcode selected',
@@ -331,7 +330,6 @@ const LANGUAGES = {
     flashlight: 'المصباح',
     turnFlashlightOn: 'تشغيل المصباح',
     turnFlashlightOff: 'إطفاء المصباح',
-    barcodeRead: 'تمت قراءة الباركود',
     recentBarcodes: 'آخر الباركودات',
     clear: 'مسح',
     selectedBarcode: 'تم اختيار الباركود',
@@ -594,79 +592,6 @@ const statBoxStyle = {
   borderRadius: '16px',
   padding: '14px',
   background: '#ffffff',
-}
-
-const REPORT_ICON_PATHS = {
-  inspect: (
-    <>
-      <path d="M8 4h8l3 3v13H5V4h3z" />
-      <path d="M15 4v4h4" />
-      <path d="M8 12h8" />
-      <path d="M8 16h5" />
-    </>
-  ),
-  work: (
-    <>
-      <path d="M9 7V5h6v2" />
-      <path d="M4 8h16v11H4V8z" />
-      <path d="M4 13h16" />
-      <path d="M10 13v2h4v-2" />
-    </>
-  ),
-  surface: (
-    <>
-      <path d="M4 16l5-8 4 5 3-4 4 7" />
-      <path d="M4 19h16" />
-      <path d="M7 12h2" />
-      <path d="M14 12h2" />
-    </>
-  ),
-  fixing: (
-    <>
-      <path d="M6 7h12" />
-      <path d="M8 7v10" />
-      <path d="M16 7v10" />
-      <path d="M7 17h10" />
-      <path d="M10 10h4" />
-    </>
-  ),
-  shipment: (
-    <>
-      <path d="M3 8h11v8H3V8z" />
-      <path d="M14 11h4l3 3v2h-7v-5z" />
-      <path d="M7 18a2 2 0 1 0 0-4 2 2 0 0 0 0 4z" />
-      <path d="M17 18a2 2 0 1 0 0-4 2 2 0 0 0 0 4z" />
-    </>
-  ),
-  stock: (
-    <>
-      <path d="M5 8c0-1.7 3.1-3 7-3s7 1.3 7 3-3.1 3-7 3-7-1.3-7-3z" />
-      <path d="M5 8v8c0 1.7 3.1 3 7 3s7-1.3 7-3V8" />
-      <path d="M5 12c0 1.7 3.1 3 7 3s7-1.3 7-3" />
-      <path d="M9 8h6" />
-    </>
-  ),
-}
-
-function ReportIcon({ type }) {
-  return (
-    <svg
-      className="reportButtonIcon"
-      viewBox="0 0 24 24"
-      aria-hidden="true"
-      focusable="false"
-    >
-      <g
-        fill="none"
-        stroke="currentColor"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth="1.9"
-      >
-        {REPORT_ICON_PATHS[type] || REPORT_ICON_PATHS.inspect}
-      </g>
-    </svg>
-  )
 }
 
 function AppFooter({ text, privacyLabel }) {
@@ -2782,10 +2707,9 @@ function App() {
 
         setBarcode(scannedText)
         saveBarcodeToHistory(scannedText)
-        showUserMessage(`${t.barcodeRead}: ${scannedText}`, 'success')
 
         if (navigator.vibrate) {
-          navigator.vibrate([120, 50, 120])
+          navigator.vibrate(180)
         }
 
         try {
@@ -3156,6 +3080,18 @@ function App() {
 
     setLoading(false)
     setSelectedReportCode('')
+  }
+
+  const handleReportClick = (report) => {
+    if (!report.requiresDateRange) {
+      openReport(report)
+      return
+    }
+
+    clearUserMessage()
+    setDateRangeReportCode((currentCode) =>
+      currentCode === report.code ? '' : report.code
+    )
   }
 
   const activeReport = selectedReportCode
@@ -5084,137 +5020,31 @@ function App() {
             </div>
           )}
 
-          <div className="reportButtons">
-            {visibleReports.map((report, index) => (
-              <Fragment key={report.code}>
-                <button
-                  type="button"
-                  className={`mainButton reportButton reportButton${index + 1}${
-                    loading && selectedReportCode === report.code
-                      ? ' reportButtonLoading'
-                      : ''
-                  }`}
-                  onClick={() => {
-                    if (report.requiresDateRange) {
-                      clearUserMessage()
-                      setDateRangeReportCode((currentCode) =>
-                        currentCode === report.code ? '' : report.code
-                      )
-                      return
-                    }
-
-                    openReport(report)
-                  }}
-                  disabled={loading}
-                >
-                  <span className="reportButtonMark">
-                    <ReportIcon type={report.icon} />
-                  </span>
-
-                  <span className="reportButtonBody">
-                    <strong>
-                      {loading && selectedReportCode === report.code
-                        ? `${getReportName(report)} ${t.reportPreparing}`
-                        : getReportName(report)}
-                    </strong>
-                    <small>{getReportMeta(report)}</small>
-                  </span>
-
-                  {loading && selectedReportCode === report.code && (
-                    <span className="reportButtonProgressBar"></span>
-                  )}
-                </button>
-
-                {report.requiresDateRange && dateRangeReportCode === report.code && (
-                  <div className="dateRangeBox" ref={shipmentDateBoxRef}>
-                    <div className="shipmentCustomerField">
-                      <label htmlFor="shipmentCustomer">{t.customer}</label>
-                      <select
-                        id="shipmentCustomer"
-                        ref={shipmentCustomerSelectRef}
-                        value={shipmentCustomerCode}
-                        onChange={(e) => setShipmentCustomerCode(e.target.value)}
-                        disabled={loading}
-                      >
-                        <option value="">{t.selectCustomer}</option>
-                        {SHIPMENT_CUSTOMERS.map((customer) => (
-                          <option key={customer.code} value={customer.code}>
-                            {customer.name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div className="dateInputGrid">
-                      <div className="shipmentStartField">
-                        <label htmlFor="shipmentStartDate">{t.startDate}</label>
-                        <input
-                          id="shipmentStartDate"
-                          ref={shipmentStartInputRef}
-                          type="date"
-                          value={startDate}
-                          onChange={(e) => setStartDate(e.target.value)}
-                          disabled={loading}
-                        />
-                      </div>
-
-                      <div className="shipmentEndField">
-                        <label htmlFor="shipmentEndDate">{t.endDate}</label>
-                        <input
-                          id="shipmentEndDate"
-                          type="date"
-                          value={endDate}
-                          onChange={(e) => setEndDate(e.target.value)}
-                          disabled={loading}
-                        />
-                      </div>
-
-                      <div className="shipmentOpenField">
-                        <button
-                          type="button"
-                          className="shipmentOpenButton"
-                          onClick={() => openReport(report)}
-                          disabled={loading}
-                        >
-                          {t.openReport}
-                        </button>
-                      </div>
-                    </div>
-
-                    {startDate && endDate && (
-                      <div className="dateRangeFooter">
-                        <div className="dateRangeSummary">
-                          <strong>{t.selectedDateRange}</strong>
-                          <span>
-                            {formatDisplayDate(startDate)} - {formatDisplayDate(endDate)}
-                            {dateRangeDayCount && (
-                              <> · {dateRangeDayCount} {t.selectedDayCount}</>
-                            )}
-                          </span>
-                          {shipmentCustomerCode && (
-                            <>
-                              <strong className="shipmentCustomerSummaryLabel">
-                                {t.selectedCustomer}
-                              </strong>
-                              <span>
-                                {
-                                  SHIPMENT_CUSTOMERS.find(
-                                    (customer) =>
-                                      customer.code === shipmentCustomerCode
-                                  )?.name
-                                }
-                              </span>
-                            </>
-                          )}
-                        </div>
-
-                      </div>
-                    )}
-                  </div>
-                )}
-              </Fragment>
-            ))}
-          </div>
+          <ReportList
+            reports={visibleReports}
+            loading={loading}
+            selectedReportCode={selectedReportCode}
+            dateRangeReportCode={dateRangeReportCode}
+            getReportName={getReportName}
+            getReportMeta={getReportMeta}
+            onReportClick={handleReportClick}
+            onOpenReport={openReport}
+            shipment={{
+              customers: SHIPMENT_CUSTOMERS,
+              customerCode: shipmentCustomerCode,
+              dateBoxRef: shipmentDateBoxRef,
+              customerSelectRef: shipmentCustomerSelectRef,
+              startInputRef: shipmentStartInputRef,
+              startDate,
+              endDate,
+              dayCount: dateRangeDayCount,
+              formatDate: formatDisplayDate,
+              texts: t,
+              onCustomerChange: setShipmentCustomerCode,
+              onStartDateChange: setStartDate,
+              onEndDateChange: setEndDate,
+            }}
+          />
 
           {barcodeHistory.length > 0 && (
             <div className="historyBox">

@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { verifyApprovedDeviceRequest } from './_device-auth.js'
 import { handleCors } from './_cors.js'
+import { enforceRequestLimit } from './_rate-limit.js'
 
 function isNotBlank(value) {
   return value !== null && value !== undefined && String(value).trim() !== ''
@@ -584,6 +585,25 @@ export default async function handler(req, res) {
       return res.status(authResult.statusCode || 401).json({
         error: authResult.error || 'Yetkisiz istek.',
       })
+    }
+
+    const requestBody = parseBody(req)
+    const isReadRequest = req.method === 'GET'
+
+    if (
+      !enforceRequestLimit(res, {
+        scope: isReadRequest ? 'admin-read' : 'admin-change',
+        key: isReadRequest
+          ? authResult.userId
+          : `${authResult.userId}:${req.method}:${requestBody.action || 'user'}`,
+        maxRequests: isReadRequest ? 120 : 30,
+        windowMs: 60_000,
+        minIntervalMs: isReadRequest ? 0 : 250,
+        errorMessage:
+          'Yönetim işlemi çok hızlı tekrarlandı. Lütfen kısa bir süre bekleyin.',
+      })
+    ) {
+      return
     }
 
     if (req.method === 'POST') {

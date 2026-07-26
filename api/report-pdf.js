@@ -4,6 +4,7 @@ import {
   verifyReportAccessToken,
 } from './_report-access.js'
 import { handleCors } from './_cors.js'
+import { enforceRequestLimit } from './_rate-limit.js'
 
 const BASE_URL = 'http://repx.elvandyeing.com'
 
@@ -118,6 +119,19 @@ export default async function handler(req, res) {
       })
     ) {
       return res.status(403).send('Bu PDF için erişim yetkiniz bulunmuyor.')
+    }
+
+    if (
+      !enforceRequestLimit(res, {
+        scope: 'report-pdf',
+        key: authResult.userId,
+        maxRequests: 30,
+        windowMs: 60_000,
+        errorMessage:
+          'PDF isteği sınırı aşıldı. Lütfen kısa bir süre bekleyin.',
+      })
+    ) {
+      return
     }
 
     let fileName = sanitizeFileName(rawFileName || 'report.pdf')

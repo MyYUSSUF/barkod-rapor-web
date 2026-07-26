@@ -2,6 +2,7 @@ import webPush from 'web-push'
 import { createClient } from '@supabase/supabase-js'
 import { verifyApprovedDeviceRequest } from './_device-auth.js'
 import { handleCors } from './_cors.js'
+import { enforceRequestLimit } from './_rate-limit.js'
 
 function isNotBlank(value) {
   return value !== null && value !== undefined && String(value).trim() !== ''
@@ -142,6 +143,20 @@ export default async function handler(req, res) {
       return res.status(401).json({
         error: authResult.error || 'Yetkisiz istek.',
       })
+    }
+
+    if (
+      !enforceRequestLimit(res, {
+        scope: 'send-notification',
+        key: authResult.userId || 'admin-secret',
+        maxRequests: 3,
+        windowMs: 5 * 60_000,
+        minIntervalMs: 10_000,
+        errorMessage:
+          'Bildirim gönderimi çok hızlı tekrarlandı. Lütfen biraz bekleyin.',
+      })
+    ) {
+      return
     }
 
     webPush.setVapidDetails(
