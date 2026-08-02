@@ -2,12 +2,6 @@
   "appId": "com.elvandying.barkodrapor",
   "appName": "ELVAN",
   "webDir": "dist",
-  "plugins": {
-    "StatusBar": {
-      "overlaysWebView": true,
-      "style": "DARK"
-    }
-  },
   "server": {
     "androidScheme": "https"
   }
