@@ -6,7 +6,6 @@ import {
   AppUpdateResultCode,
   FlexibleUpdateInstallStatus,
 } from '@capawesome/capacitor-app-update'
-import { Animation, StatusBar } from '@capacitor/status-bar'
 import {
   confirmBarcodeCandidate,
   isBarcodeCenteredInFrame,
@@ -17,6 +16,9 @@ import {
 } from './lib/cameraTorch'
 import { isSupabaseConfigured, supabase } from './lib/supabaseClient'
 import { ReportList } from './components/ReportList'
+import { ConfirmationDialog } from './components/ConfirmationDialog'
+import { SelectionDialog } from './components/SelectionDialog'
+import { isMandatoryAppUpdate } from './lib/appUpdatePolicy'
 import './App.css'
 import './IndustrialTheme.css'
 
@@ -39,6 +41,11 @@ const DESKTOP_ADMIN_PATH = '/yonetim'
 const APP_VERSION = 'v1.32'
 const APP_LOG_VERSION = 'web-v1.32'
 const APP_UPDATE_PACKAGE_NAME = 'com.elvandying.barkodrapor'
+const LANGUAGE_OPTIONS = [
+  { value: 'tr', label: 'Türkçe' },
+  { value: 'en', label: 'English' },
+  { value: 'ar', label: 'العربية' },
+]
 const PROFILE_SELECT_FIELDS =
   'id, email, full_name, role, is_active, can_view_fixing_report, can_view_shipment_report, can_view_yarn_stock_report'
 const PROFILE_SELECT_FALLBACK_FIELDS =
@@ -137,7 +144,9 @@ const LANGUAGES = {
     selectedDayCount: 'gün',
     scannerReady: 'Okutmaya hazır',
     logout: 'Çıkış Yap',
+    logoutTitle: 'Çıkış yapılsın mı?',
     logoutConfirm: 'Çıkış yapmak istediğinize emin misiniz?',
+    cancel: 'Vazgeç',
     privacyPolicy: 'Gizlilik Politikası',
     usernamePasswordRequired: 'Kullanıcı adı ve şifre zorunludur.',
     loginFailed: 'Giriş başarısız',
@@ -175,6 +184,10 @@ const LANGUAGES = {
     reportPagePreparing: 'Rapor hazırlanıyor...',
     pleaseWait: 'Lütfen bekleyin.',
     close: 'Kapat',
+    selectDate: 'Tarih seçin',
+    previousMonth: 'Önceki ay',
+    nextMonth: 'Sonraki ay',
+    today: 'Bugün',
     reportCouldNotLoad: 'Rapor yüklenemedi.',
     versionText: 'Barkod Rapor Web',
     notificationUnsupported: 'Bu cihaz veya tarayıcı bildirimleri desteklemiyor.',
@@ -202,6 +215,9 @@ const LANGUAGES = {
     appUpdateCanceled:
       'Güncelleme iptal edildi. Daha sonra tekrar deneyebilirsiniz.',
     appUpdateVersion: 'Sürüm',
+    appUpdateRequiredTitle: 'Güncelleme gerekli',
+    appUpdateRequiredBody:
+      'Uygulamaya devam etmek için en son sürümü yükleyin.',
   },
   en: {
     appTitle: 'Barcode Report Web',
@@ -237,7 +253,9 @@ const LANGUAGES = {
     selectedDayCount: 'days',
     scannerReady: 'Ready to scan',
     logout: 'Logout',
+    logoutTitle: 'Log out?',
     logoutConfirm: 'Are you sure you want to logout?',
+    cancel: 'Cancel',
     privacyPolicy: 'Privacy Policy',
     usernamePasswordRequired: 'Username and password are required.',
     loginFailed: 'Login failed',
@@ -275,6 +293,10 @@ const LANGUAGES = {
     reportPagePreparing: 'Report is preparing...',
     pleaseWait: 'Please wait.',
     close: 'Close',
+    selectDate: 'Select date',
+    previousMonth: 'Previous month',
+    nextMonth: 'Next month',
+    today: 'Today',
     reportCouldNotLoad: 'Report could not be loaded.',
     versionText: 'Barcode Report Web',
     notificationUnsupported: 'This device or browser does not support notifications.',
@@ -302,6 +324,9 @@ const LANGUAGES = {
     appUpdateCanceled:
       'The update was cancelled. You can try again later.',
     appUpdateVersion: 'Version',
+    appUpdateRequiredTitle: 'Update required',
+    appUpdateRequiredBody:
+      'Install the latest version to continue using the application.',
   },
   ar: {
     appTitle: 'نظام تقارير الباركود',
@@ -337,7 +362,9 @@ const LANGUAGES = {
     selectedDayCount: 'أيام',
     scannerReady: 'جاهز للمسح',
     logout: 'تسجيل الخروج',
+    logoutTitle: 'تسجيل الخروج؟',
     logoutConfirm: 'هل أنت متأكد أنك تريد تسجيل الخروج؟',
+    cancel: 'إلغاء',
     privacyPolicy: 'سياسة الخصوصية',
     usernamePasswordRequired: 'اسم المستخدم وكلمة المرور مطلوبان.',
     loginFailed: 'فشل تسجيل الدخول',
@@ -375,6 +402,10 @@ const LANGUAGES = {
     reportPagePreparing: 'جارٍ تجهيز التقرير...',
     pleaseWait: 'يرجى الانتظار.',
     close: 'إغلاق',
+    selectDate: 'اختر التاريخ',
+    previousMonth: 'الشهر السابق',
+    nextMonth: 'الشهر التالي',
+    today: 'اليوم',
     reportCouldNotLoad: 'تعذر تحميل التقرير.',
     versionText: 'نظام تقارير الباركود',
     notificationUnsupported: 'هذا الجهاز أو المتصفح لا يدعم الإشعارات.',
@@ -402,6 +433,9 @@ const LANGUAGES = {
     appUpdateCanceled:
       'تم إلغاء التحديث. يمكنك المحاولة لاحقًا.',
     appUpdateVersion: 'الإصدار',
+    appUpdateRequiredTitle: 'التحديث مطلوب',
+    appUpdateRequiredBody:
+      'ثبّت أحدث إصدار للمتابعة في استخدام التطبيق.',
   },
 }
 
@@ -631,7 +665,9 @@ function AppUpdateNotice({
         ? `${texts.appUpdateVersion} ${availableVersion}`
         : ''
 
-  let bodyText = texts.appUpdateBody
+  let bodyText = notice.mandatory
+    ? texts.appUpdateRequiredBody
+    : texts.appUpdateBody
 
   if (notice.status === 'starting') {
     bodyText = texts.appUpdateOpening
@@ -647,29 +683,40 @@ function AppUpdateNotice({
     bodyText = texts.appUpdateCanceled
   }
 
-  return (
-    <aside className="appUpdateNotice" role="status" aria-live="polite">
+  const noticeContent = (
+    <aside
+      className={`appUpdateNotice${notice.mandatory ? ' isMandatory' : ''}`}
+      role={notice.mandatory ? 'alertdialog' : 'status'}
+      aria-live="assertive"
+      aria-modal={notice.mandatory ? 'true' : undefined}
+    >
       <div className="appUpdateNoticeIcon" aria-hidden="true">
         ↑
       </div>
 
       <div className="appUpdateNoticeBody">
         <strong>
-          {isDownloaded ? texts.appUpdateDownloaded : texts.appUpdateTitle}
+          {isDownloaded
+            ? texts.appUpdateDownloaded
+            : notice.mandatory
+              ? texts.appUpdateRequiredTitle
+              : texts.appUpdateTitle}
         </strong>
         <span>{bodyText}</span>
         {versionText ? <small>{versionText}</small> : null}
       </div>
 
       <div className="appUpdateNoticeActions">
-        <button
-          type="button"
-          className="appUpdateLaterButton"
-          onClick={onDismiss}
-          disabled={notice.status === 'starting'}
-        >
-          {texts.appUpdateLater}
-        </button>
+        {!notice.mandatory ? (
+          <button
+            type="button"
+            className="appUpdateLaterButton"
+            onClick={onDismiss}
+            disabled={notice.status === 'starting'}
+          >
+            {texts.appUpdateLater}
+          </button>
+        ) : null}
 
         {isDownloaded ? (
           <button type="button" onClick={onComplete}>
@@ -686,6 +733,12 @@ function AppUpdateNotice({
         )}
       </div>
     </aside>
+  )
+
+  return notice.mandatory ? (
+    <div className="appUpdateBlocker">{noticeContent}</div>
+  ) : (
+    noticeContent
   )
 }
 
@@ -1074,7 +1127,9 @@ function App() {
     info: null,
     status: 'idle',
     progress: 0,
+    mandatory: false,
   })
+  const [logoutConfirmationOpen, setLogoutConfirmationOpen] = useState(false)
 
   const [adminNotificationTitle, setAdminNotificationTitle] = useState('Elvan Barkod Rapor')
   const [adminNotificationBody, setAdminNotificationBody] = useState('')
@@ -1143,7 +1198,7 @@ function App() {
       })
       setAppUpdateNotice((current) => ({
         ...current,
-        visible: false,
+        visible: current.mandatory,
         status: 'idle',
       }))
     } catch (err) {
@@ -1227,6 +1282,44 @@ function App() {
     }
   }
 
+  const startMandatoryAppUpdate = async () => {
+    setAppUpdateNotice((current) => ({
+      ...current,
+      visible: true,
+      status: 'starting',
+    }))
+
+    try {
+      const info = await AppUpdate.getAppUpdateInfo()
+
+      setAppUpdateNotice((current) => ({ ...current, info }))
+
+      if (!info.immediateUpdateAllowed) {
+        await openAppUpdateStore()
+        return
+      }
+
+      const result = await AppUpdate.performImmediateUpdate()
+      if (result.code !== AppUpdateResultCode.OK) {
+        setAppUpdateNotice((current) => ({
+          ...current,
+          visible: true,
+          status:
+            result.code === AppUpdateResultCode.CANCELED
+              ? 'canceled'
+              : 'failed',
+        }))
+      }
+    } catch (err) {
+      console.log('Zorunlu güncelleme başlatma hatası:', err)
+      setAppUpdateNotice((current) => ({
+        ...current,
+        visible: true,
+        status: 'failed',
+      }))
+    }
+  }
+
   const completeOptionalAppUpdate = async () => {
     try {
       await AppUpdate.completeFlexibleUpdate()
@@ -1247,9 +1340,17 @@ function App() {
       onComplete={completeOptionalAppUpdate}
       onDismiss={dismissAppUpdateNotice}
       onOpenStore={openAppUpdateStore}
-      onStart={startOptionalAppUpdate}
+      onStart={
+        appUpdateNotice.mandatory
+          ? startMandatoryAppUpdate
+          : startOptionalAppUpdate
+      }
     />
   )
+
+  const closeLogoutConfirmation = useCallback(() => {
+    setLogoutConfirmationOpen(false)
+  }, [])
 
   const changeLanguage = (value) => {
     setLanguage(value)
@@ -2054,19 +2155,6 @@ function App() {
 
   useEffect(() => {
     if (!Capacitor.isNativePlatform() || Capacitor.getPlatform() !== 'android') {
-      return
-    }
-
-    StatusBar.setOverlaysWebView({ overlay: true }).catch((err) => {
-      console.log('Status bar overlay ayarlanamadı:', err)
-    })
-    StatusBar.hide({ animation: Animation.None }).catch((err) => {
-      console.log('Status bar gizlenemedi:', err)
-    })
-  }, [])
-
-  useEffect(() => {
-    if (!Capacitor.isNativePlatform() || Capacitor.getPlatform() !== 'android') {
       return undefined
     }
 
@@ -2153,8 +2241,36 @@ function App() {
     const checkTimer = window.setTimeout(async () => {
       try {
         const info = await AppUpdate.getAppUpdateInfo()
+        let updatePolicy = null
+
+        try {
+          const controller = new AbortController()
+          const timeoutId = window.setTimeout(() => controller.abort(), 6000)
+          const response = await fetch(`${API_BASE_URL}/api/app-version`, {
+            cache: 'no-store',
+            signal: controller.signal,
+          })
+          window.clearTimeout(timeoutId)
+
+          if (response.ok) {
+            updatePolicy = await response.json()
+          }
+        } catch (policyError) {
+          console.log('Sürüm politikası alınamadı:', policyError)
+        }
 
         if (!active) {
+          return
+        }
+
+        if (isMandatoryAppUpdate(updatePolicy, info.currentVersionCode)) {
+          setAppUpdateNotice({
+            visible: true,
+            info,
+            status: 'available',
+            progress: 0,
+            mandatory: true,
+          })
           return
         }
 
@@ -2178,6 +2294,7 @@ function App() {
             info.installStatus === FlexibleUpdateInstallStatus.DOWNLOADED
               ? 100
               : 0,
+          mandatory: false,
         })
       } catch (err) {
         console.log('Güncelleme kontrol hatası:', err)
@@ -2859,13 +2976,8 @@ function App() {
     setLoading(false)
   }
 
-  const handleLogout = async () => {
-    const confirmed = window.confirm(t.logoutConfirm)
-
-    if (!confirmed) {
-      return
-    }
-
+  const performLogout = async () => {
+    setLogoutConfirmationOpen(false)
     stopScanner()
 
     try {
@@ -2888,6 +3000,25 @@ function App() {
     resetUserState()
     showUserMessage(t.logoutSuccess, 'success')
   }
+
+  const handleLogout = () => {
+    setLogoutConfirmationOpen(true)
+  }
+
+  const renderGlobalDialogs = () => (
+    <>
+      {renderAppUpdateNotice()}
+      <ConfirmationDialog
+        open={logoutConfirmationOpen}
+        title={t.logoutTitle}
+        message={t.logoutConfirm}
+        cancelLabel={t.cancel}
+        confirmLabel={t.logout}
+        onCancel={closeLogoutConfirmation}
+        onConfirm={performLogout}
+      />
+    </>
+  )
 
   const openReport = async (report) => {
     const cleanBarcode = barcode.trim()
@@ -3593,7 +3724,7 @@ function App() {
   if (restoringSession) {
     return (
       <div className="page" dir={isArabic ? 'rtl' : 'ltr'}>
-        {renderAppUpdateNotice()}
+        {renderGlobalDialogs()}
         <div className="card">
           <div className="topBar">
             <img src="/elvan-logo.png" alt="Elvan Dyeing" className="appLogo" />
@@ -3609,7 +3740,7 @@ function App() {
   if (!isSupabaseConfigured) {
     return (
       <div className="page" dir="ltr">
-        {renderAppUpdateNotice()}
+        {renderGlobalDialogs()}
         <div className="card">
           <div className="topBar">
             <img src="/elvan-logo.png" alt="Elvan Dyeing" className="appLogo" />
@@ -3628,7 +3759,7 @@ function App() {
     if (userProfile.role !== 'admin') {
       return (
         <div className="desktopAdminPage" dir="ltr">
-          {renderAppUpdateNotice()}
+          {renderGlobalDialogs()}
           <main className="desktopAdminAccessCard">
             <img src="/elvan-logo.png" alt="Elvan Dyeing" className="appLogo" />
             <h1>Yönetim erişimi yok</h1>
@@ -3643,7 +3774,7 @@ function App() {
 
     return (
       <div className="desktopAdminPage" dir="ltr">
-        {renderAppUpdateNotice()}
+        {renderGlobalDialogs()}
         <aside className="desktopAdminSidebar">
           <div className="desktopAdminBrand">
             <img src="/elvan-logo.png" alt="Elvan Dyeing" className="appLogo" />
@@ -4838,21 +4969,21 @@ function App() {
   if (userProfile) {
     return (
       <div className="page mainPage" dir={isArabic ? 'rtl' : 'ltr'}>
-        {renderAppUpdateNotice()}
+        {renderGlobalDialogs()}
         <div className="card mainCard">
           <div className="topBar">
             <img src="/elvan-logo.png" alt="Elvan Dyeing" className="appLogo" />
 
-            <select
+            <SelectionDialog
               className="languageSelect"
               aria-label={t.languageSelection}
+              title={t.languageSelection}
+              closeLabel={t.close}
+              placeholder={t.languageSelection}
               value={language}
-              onChange={(e) => changeLanguage(e.target.value)}
-            >
-              <option value="tr">Türkçe</option>
-              <option value="en">English</option>
-              <option value="ar">العربية</option>
-            </select>
+              onChange={changeLanguage}
+              options={LANGUAGE_OPTIONS}
+            />
           </div>
 
           <div className="welcomeBox">
@@ -5039,6 +5170,7 @@ function App() {
               endDate,
               dayCount: dateRangeDayCount,
               formatDate: formatDisplayDate,
+              language,
               texts: t,
               onCustomerChange: setShipmentCustomerCode,
               onStartDateChange: setStartDate,
@@ -5104,7 +5236,7 @@ function App() {
       className={screen === 'desktop-admin' ? 'desktopAdminLoginPage' : 'page'}
       dir={isArabic ? 'rtl' : 'ltr'}
     >
-      {renderAppUpdateNotice()}
+      {renderGlobalDialogs()}
       {screen === 'desktop-admin' && (
         <aside className="desktopAdminLoginIntro" dir="ltr">
           <div className="desktopAdminLoginBrand">
@@ -5135,16 +5267,16 @@ function App() {
         <div className="topBar">
           <img src="/elvan-logo.png" alt="Elvan Dyeing" className="appLogo" />
 
-          <select
+          <SelectionDialog
             className="languageSelect"
             aria-label={t.languageSelection}
+            title={t.languageSelection}
+            closeLabel={t.close}
+            placeholder={t.languageSelection}
             value={language}
-            onChange={(e) => changeLanguage(e.target.value)}
-          >
-            <option value="tr">Türkçe</option>
-            <option value="en">English</option>
-            <option value="ar">العربية</option>
-          </select>
+            onChange={changeLanguage}
+            options={LANGUAGE_OPTIONS}
+          />
         </div>
 
         <div className="loginHero">

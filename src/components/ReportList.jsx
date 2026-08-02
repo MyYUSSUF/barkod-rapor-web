@@ -1,4 +1,6 @@
 import { Fragment } from 'react'
+import { DateSelectionDialog } from './DateSelectionDialog'
+import { SelectionDialog } from './SelectionDialog'
 
 const REPORT_ICON_PATHS = {
   inspect: (
@@ -89,6 +91,7 @@ function ShipmentFields({
     endDate,
     dayCount,
     formatDate,
+    language,
     texts,
     onCustomerChange,
     onStartDateChange,
@@ -101,43 +104,58 @@ function ShipmentFields({
   return (
     <div className="dateRangeBox" ref={dateBoxRef}>
       <div className="shipmentCustomerField">
-        <label htmlFor="shipmentCustomer">{texts.customer}</label>
-        <select
+        <SelectionDialog
           id="shipmentCustomer"
           ref={customerSelectRef}
+          label={texts.customer}
+          ariaLabel={texts.customer}
+          title={texts.selectCustomer}
+          closeLabel={texts.close}
+          placeholder={texts.selectCustomer}
           value={customerCode}
-          onChange={(event) => onCustomerChange(event.target.value)}
+          onChange={onCustomerChange}
+          options={customers.map((customer) => ({
+            value: customer.code,
+            label: customer.name,
+          }))}
           disabled={loading}
-        >
-          <option value="">{texts.selectCustomer}</option>
-          {customers.map((customer) => (
-            <option key={customer.code} value={customer.code}>
-              {customer.name}
-            </option>
-          ))}
-        </select>
+        />
       </div>
 
       <div className="dateInputGrid">
         <div className="shipmentStartField">
-          <label htmlFor="shipmentStartDate">{texts.startDate}</label>
-          <input
+          <DateSelectionDialog
             id="shipmentStartDate"
             ref={startInputRef}
-            type="date"
+            label={texts.startDate}
+            title={texts.startDate}
+            closeLabel={texts.close}
+            previousMonthLabel={texts.previousMonth}
+            nextMonthLabel={texts.nextMonth}
+            todayLabel={texts.today}
+            placeholder={texts.selectDate}
+            language={language}
             value={startDate}
-            onChange={(event) => onStartDateChange(event.target.value)}
+            max={endDate || undefined}
+            onChange={onStartDateChange}
             disabled={loading}
           />
         </div>
 
         <div className="shipmentEndField">
-          <label htmlFor="shipmentEndDate">{texts.endDate}</label>
-          <input
+          <DateSelectionDialog
             id="shipmentEndDate"
-            type="date"
+            label={texts.endDate}
+            title={texts.endDate}
+            closeLabel={texts.close}
+            previousMonthLabel={texts.previousMonth}
+            nextMonthLabel={texts.nextMonth}
+            todayLabel={texts.today}
+            placeholder={texts.selectDate}
+            language={language}
             value={endDate}
-            onChange={(event) => onEndDateChange(event.target.value)}
+            min={startDate || undefined}
+            onChange={onEndDateChange}
             disabled={loading}
           />
         </div>

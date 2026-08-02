@@ -176,7 +176,7 @@ textarea:focus,
 select:focus,
 .adminTextarea:focus,
 .adminFormGrid select:focus,
-.shipmentCustomerField select:focus {
+.shipmentCustomerField .selectionDialogTrigger:focus-visible {
   border-color: var(--teal);
   outline: 2px solid var(--focus);
   outline-offset: 1px;
@@ -474,14 +474,14 @@ form button:hover:not(:disabled) {
   border-left: 1px solid var(--border);
 }
 
-.shipmentCustomerField select {
+.shipmentCustomerField .selectionDialogTrigger {
   border-color: var(--border-strong);
   border-radius: 2px;
   background-color: #ffffff;
   color: var(--primary);
 }
 
-.dateInputGrid input {
+.dateInputGrid .datePickerTrigger {
   border-radius: 2px;
 }
 

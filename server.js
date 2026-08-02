@@ -7,6 +7,7 @@ import deviceAccessHandler from './api/device-access.js'
 import reportPdfHandler from './api/report-pdf.js'
 import reportUrlHandler from './api/report-url.js'
 import sendNotificationHandler from './api/send-notification.js'
+import appVersionHandler from './api/app-version.js'
 
 try {
   process.loadEnvFile?.('.env.local')
@@ -22,6 +23,7 @@ const currentDirectory = path.dirname(currentFilePath)
 app.use(cors())
 app.use(express.json())
 
+app.all('/api/app-version', appVersionHandler)
 app.all('/api/device-access', deviceAccessHandler)
 app.all('/api/admin-panel', adminPanelHandler)
 app.all('/api/report-pdf', reportPdfHandler)

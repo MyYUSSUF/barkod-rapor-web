@@ -168,6 +168,261 @@ body {
   cursor: not-allowed;
 }
 
+.appUpdateBlocker {
+  position: fixed;
+  z-index: 100000;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding:
+    max(20px, env(safe-area-inset-top, 0px))
+    max(16px, env(safe-area-inset-right, 0px))
+    max(20px, env(safe-area-inset-bottom, 0px))
+    max(16px, env(safe-area-inset-left, 0px));
+  background: rgba(15, 23, 42, 0.72);
+}
+
+.appUpdateBlocker .appUpdateNotice {
+  position: static;
+  width: min(480px, 100%);
+  max-width: 100%;
+  transform: none;
+}
+
+.selectionDialogBackdrop {
+  position: fixed;
+  z-index: 100001;
+  inset: 0;
+  display: grid;
+  align-items: end;
+  padding:
+    max(20px, env(safe-area-inset-top, 0px))
+    max(12px, env(safe-area-inset-right, 0px))
+    max(20px, env(safe-area-inset-bottom, 0px))
+    max(12px, env(safe-area-inset-left, 0px));
+  background: rgba(15, 23, 42, 0.62);
+}
+
+.selectionDialogPanel {
+  width: min(520px, 100%);
+  max-height: min(72vh, 620px);
+  margin: 0 auto;
+  overflow: hidden;
+  border: 1px solid var(--border-strong);
+  border-radius: 14px;
+  background: #ffffff;
+  box-shadow: 0 24px 64px rgba(15, 23, 42, 0.28);
+}
+
+.selectionDialogHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--border);
+  color: var(--primary);
+}
+
+.selectionDialogClose {
+  width: 38px;
+  height: 38px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #ffffff;
+  color: var(--primary);
+  font: inherit;
+  font-size: 24px;
+  line-height: 1;
+}
+
+.selectionDialogOptions {
+  display: grid;
+  gap: 8px;
+  max-height: calc(min(72vh, 620px) - 72px);
+  padding: 12px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.selectionDialogOption {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 50px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #ffffff;
+  color: var(--primary);
+  font: inherit;
+  font-weight: 800;
+  text-align: start;
+}
+
+.selectionDialogOption.isSelected {
+  border-color: var(--teal);
+  background: var(--teal-soft);
+  color: var(--teal);
+}
+
+.selectionDialogTrigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  text-align: start;
+}
+
+.selectionDialogChevron {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.datePickerPanel {
+  width: min(430px, 100%);
+  padding-bottom: 12px;
+}
+
+.datePickerMonthHeader {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) 44px;
+  align-items: center;
+  gap: 8px;
+  padding: 12px;
+  color: var(--primary);
+  text-align: center;
+}
+
+.datePickerMonthHeader button {
+  width: 44px;
+  height: 44px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #ffffff;
+  color: var(--primary);
+  font: inherit;
+  font-size: 26px;
+}
+
+.datePickerWeekdays,
+.datePickerDays {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 4px;
+  padding-inline: 12px;
+}
+
+.datePickerWeekdays span {
+  padding: 5px 0 8px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 850;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.datePickerDays button {
+  aspect-ratio: 1;
+  min-width: 0;
+  min-height: 38px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  padding: 0;
+  background: transparent;
+  color: var(--primary);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.datePickerDays button.isOutsideMonth {
+  color: #98a2b3;
+}
+
+.datePickerDays button.isToday {
+  border-color: var(--teal);
+}
+
+.datePickerDays button.isSelected {
+  border-color: var(--teal);
+  background: var(--teal);
+  color: #ffffff;
+}
+
+.datePickerDays button:disabled {
+  opacity: 0.28;
+}
+
+.datePickerTodayButton {
+  display: block;
+  min-height: 42px;
+  margin: 12px 12px 0 auto;
+  border: 0;
+  border-radius: 8px;
+  padding: 9px 18px;
+  background: var(--primary);
+  color: #ffffff;
+  font: inherit;
+  font-weight: 850;
+}
+
+[dir="rtl"] .datePickerTodayButton {
+  margin-right: auto;
+  margin-left: 12px;
+}
+
+.confirmationDialogBackdrop {
+  align-items: center;
+}
+
+.confirmationDialogPanel {
+  width: min(420px, 100%);
+  padding: 22px;
+  color: var(--primary);
+}
+
+.confirmationDialogPanel > strong {
+  display: block;
+  font-size: 19px;
+}
+
+.confirmationDialogPanel p {
+  margin: 10px 0 22px;
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.confirmationDialogActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.confirmationDialogActions button {
+  min-height: 44px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 16px;
+  background: #ffffff;
+  color: var(--primary);
+  font: inherit;
+  font-weight: 850;
+}
+
+.confirmationDialogActions button:last-child {
+  border-color: var(--danger);
+  background: var(--danger);
+  color: #ffffff;
+}
+
 .page {
   min-height: 100vh;
   display: flex;
@@ -1013,7 +1268,7 @@ form button {
   font-size: 12px;
 }
 
-.shipmentCustomerField select {
+.shipmentCustomerField .selectionDialogTrigger {
   width: 100%;
   min-height: 46px;
   padding: 11px 38px 11px 12px;
@@ -1025,7 +1280,7 @@ form button {
   font-weight: 800;
 }
 
-.shipmentCustomerField select:focus {
+.shipmentCustomerField .selectionDialogTrigger:focus-visible {
   border-color: var(--accent);
   outline: 3px solid rgba(15, 118, 110, 0.12);
 }
@@ -1041,13 +1296,23 @@ form button {
   font-size: 12px;
 }
 
-.dateInputGrid input {
+.dateInputGrid .datePickerTrigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
   width: 100%;
   min-width: 0;
   max-width: 100%;
   min-height: 44px;
   padding: 11px 12px;
+  border: 1px solid rgba(23, 50, 77, 0.18);
   border-radius: 8px;
+  background: #ffffff;
+  color: var(--primary);
+  font: inherit;
+  font-weight: 800;
+  text-align: start;
 }
 
 .shipmentStartField,
