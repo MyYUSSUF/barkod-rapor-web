@@ -11,7 +11,11 @@ android/*.jks
 android/*.keystore
 android/keystore.properties
 android/local.properties
+android/.idea/
 android/.kotlin/
 android/**/*.aab
 android/**/*.apk
 android/**/build/
+
+# Local test worktrees and artifacts
+/work/

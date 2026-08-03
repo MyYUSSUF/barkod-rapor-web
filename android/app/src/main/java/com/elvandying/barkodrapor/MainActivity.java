@@ -1,51 +1,60 @@
 package com.elvandying.barkodrapor;
 
 import android.os.Bundle;
+import android.os.Build;
 import android.webkit.WebView;
+import android.graphics.Color;
 
-import androidx.core.graphics.Insets;
-import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowCompat;
 import androidx.core.view.WindowInsetsCompat;
 import androidx.core.view.WindowInsetsControllerCompat;
+import androidx.core.view.ViewCompat;
 
 import com.getcapacitor.BridgeActivity;
 
 public class MainActivity extends BridgeActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+        registerPlugin(AndroidSystemInsetsPlugin.class);
+        registerPlugin(AndroidUpdateRecoveryPlugin.class);
         super.onCreate(savedInstanceState);
 
         WindowCompat.enableEdgeToEdge(getWindow());
+        configureSystemBars();
+
+        WebView webView = getBridge().getWebView();
+        webView.setBackgroundColor(android.graphics.Color.WHITE);
+        webView.setPadding(0, 0, 0, 0);
+    }
+
+    @Override
+    public void onWindowFocusChanged(boolean hasFocus) {
+        super.onWindowFocusChanged(hasFocus);
+
+        if (hasFocus) {
+            configureSystemBars();
+        }
+    }
+
+    private void configureSystemBars() {
+        getWindow().getDecorView().setBackgroundColor(Color.WHITE);
+        getWindow().setStatusBarColor(Color.TRANSPARENT);
+        boolean lightNavigationIconsSupported =
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.O;
+        getWindow().setNavigationBarColor(
+            lightNavigationIconsSupported ? Color.TRANSPARENT : Color.BLACK
+        );
 
         WindowInsetsControllerCompat insetsController =
             WindowCompat.getInsetsController(getWindow(), getWindow().getDecorView());
-        insetsController.hide(WindowInsetsCompat.Type.statusBars());
-        insetsController.setSystemBarsBehavior(
-            WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        insetsController.show(WindowInsetsCompat.Type.systemBars());
+        insetsController.setAppearanceLightStatusBars(true);
+        insetsController.setAppearanceLightNavigationBars(
+            lightNavigationIconsSupported
         );
-
-        WebView webView = bridge.getWebView();
-        webView.setBackgroundColor(android.graphics.Color.WHITE);
-        ViewCompat.setOnApplyWindowInsetsListener(webView, (view, windowInsets) -> {
-            Insets navigationInsets = windowInsets.getInsets(
-                WindowInsetsCompat.Type.navigationBars()
-            );
-            Insets statusBarInsets = windowInsets.getInsets(
-                WindowInsetsCompat.Type.statusBars()
-            );
-            Insets cutoutInsets = windowInsets.getInsets(
-                WindowInsetsCompat.Type.displayCutout()
-            );
-
-            view.setPadding(
-                Math.max(navigationInsets.left, cutoutInsets.left),
-                Math.max(statusBarInsets.top, cutoutInsets.top),
-                Math.max(navigationInsets.right, cutoutInsets.right),
-                Math.max(navigationInsets.bottom, cutoutInsets.bottom)
-            );
-            return windowInsets;
-        });
-        ViewCompat.requestApplyInsets(webView);
+        insetsController.setSystemBarsBehavior(
+            WindowInsetsControllerCompat.BEHAVIOR_DEFAULT
+        );
+        ViewCompat.requestApplyInsets(getWindow().getDecorView());
     }
 }

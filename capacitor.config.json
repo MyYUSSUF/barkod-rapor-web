@@ -4,5 +4,15 @@
   "webDir": "dist",
   "server": {
     "androidScheme": "https"
+  },
+  "plugins": {
+    "SystemBars": {
+      "insetsHandling": "disable",
+      "style": "LIGHT",
+      "hidden": false
+    },
+    "PushNotifications": {
+      "presentationOptions": ["sound", "alert", "banner", "list"]
+    }
   }
 }

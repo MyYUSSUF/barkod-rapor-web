@@ -4,4 +4,5 @@
     <string name="title_activity_main">ELVAN</string>
     <string name="package_name">com.elvandying.barkodrapor</string>
     <string name="custom_url_scheme">com.elvandying.barkodrapor</string>
+    <string name="default_notification_channel_id">elvan_notifications</string>
 </resources>
