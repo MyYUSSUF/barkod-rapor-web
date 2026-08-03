@@ -24,12 +24,12 @@
   position: relative;
   z-index: 5;
   flex: 0 0 auto;
-  min-height: calc(58px + env(safe-area-inset-top, 0px));
+  min-height: calc(58px + var(--app-inset-top));
   padding:
-    calc(7px + env(safe-area-inset-top, 0px))
-    max(10px, env(safe-area-inset-right, 0px))
+    calc(7px + var(--app-inset-top))
+    calc(10px + var(--app-inset-right))
     7px
-    max(10px, env(safe-area-inset-left, 0px));
+    calc(10px + var(--app-inset-left));
   display: grid;
   grid-template-columns: 88px minmax(0, 1fr) 88px;
   align-items: center;
@@ -144,9 +144,9 @@
   overflow: auto;
   padding:
     12px
-    max(12px, env(safe-area-inset-right, 0px))
-    calc(88px + env(safe-area-inset-bottom, 0px))
-    max(12px, env(safe-area-inset-left, 0px));
+    calc(12px + var(--app-inset-right))
+    calc(88px + var(--app-inset-bottom))
+    calc(12px + var(--app-inset-left));
   background: var(--pdf-canvas);
   overscroll-behavior: contain;
   overflow-anchor: none;
@@ -237,26 +237,28 @@
 .nativePdfZoomControls {
   position: fixed;
   z-index: 6;
-  left: 50%;
-  bottom: max(12px, env(safe-area-inset-bottom, 0px));
+  right: var(--app-inset-right);
+  left: var(--app-inset-left);
+  bottom: calc(12px + var(--app-inset-bottom));
   width: min(
     326px,
     calc(
       100vw -
-      env(safe-area-inset-left, 0px) -
-      env(safe-area-inset-right, 0px) -
+      var(--app-inset-left) -
+      var(--app-inset-right) -
       24px
     )
   );
   max-width: calc(
     100vw -
-    env(safe-area-inset-left, 0px) -
-    env(safe-area-inset-right, 0px) -
+    var(--app-inset-left) -
+    var(--app-inset-right) -
     24px
   );
   min-height: 48px;
   box-sizing: border-box;
-  transform: translateX(-50%);
+  margin-inline: auto;
+  transform: none;
   display: grid;
   grid-template-columns: 44px minmax(56px, 1fr) 44px minmax(62px, auto);
   align-items: center;
@@ -318,11 +320,21 @@
 .nativePdfActionMessage {
   position: fixed;
   z-index: 7;
-  top: calc(72px + env(safe-area-inset-top, 0px));
-  left: 50%;
-  width: min(92%, 520px);
+  top: calc(72px + var(--app-inset-top));
+  right: var(--app-inset-right);
+  left: var(--app-inset-left);
+  width: min(
+    520px,
+    calc(
+      100vw -
+      var(--app-inset-left) -
+      var(--app-inset-right) -
+      28px
+    )
+  );
   min-height: 44px;
-  transform: translateX(-50%);
+  margin-inline: auto;
+  transform: none;
   padding: 10px 12px;
   padding-inline-end: 52px;
   display: flex;
@@ -426,15 +438,15 @@
       306px,
       calc(
         100vw -
-        env(safe-area-inset-left, 0px) -
-        env(safe-area-inset-right, 0px) -
+        var(--app-inset-left) -
+        var(--app-inset-right) -
         18px
       )
     );
     max-width: calc(
       100vw -
-      env(safe-area-inset-left, 0px) -
-      env(safe-area-inset-right, 0px) -
+      var(--app-inset-left) -
+      var(--app-inset-right) -
       18px
     );
     min-height: 52px;

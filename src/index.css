@@ -1,4 +1,12 @@
 :root {
+  --android-inset-top: 0px;
+  --android-inset-right: 0px;
+  --android-inset-bottom: 0px;
+  --android-inset-left: 0px;
+  --app-inset-top: max(env(safe-area-inset-top, 0px), var(--android-inset-top));
+  --app-inset-right: max(env(safe-area-inset-right, 0px), var(--android-inset-right));
+  --app-inset-bottom: max(env(safe-area-inset-bottom, 0px), var(--android-inset-bottom));
+  --app-inset-left: max(env(safe-area-inset-left, 0px), var(--android-inset-left));
   color-scheme: light;
   font-family:
     Inter,
@@ -13,6 +21,39 @@
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+.androidSystemBarGuards {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483647;
+  pointer-events: none;
+}
+
+.androidSystemBarGuards span {
+  position: absolute;
+  display: block;
+  background: #ffffff;
+}
+
+.androidSystemBarGuardTop {
+  inset: 0 0 auto;
+  height: var(--android-inset-top);
+}
+
+.androidSystemBarGuardRight {
+  inset: 0 0 0 auto;
+  width: var(--android-inset-right);
+}
+
+.androidSystemBarGuardBottom {
+  inset: auto 0 0;
+  height: var(--android-inset-bottom);
+}
+
+.androidSystemBarGuardLeft {
+  inset: 0 auto 0 0;
+  width: var(--android-inset-left);
 }
 
 html,

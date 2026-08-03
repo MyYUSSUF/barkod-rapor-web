@@ -1,15 +1,27 @@
+import { handleCors } from './_cors.js'
+
 function readBoolean(value) {
   return String(value || '').trim().toLowerCase() === 'true'
 }
 
 function readVersionCode(value) {
-  const versionCode = Number.parseInt(value, 10)
+  const cleanValue = String(value || '').trim()
+
+  if (!/^\d+$/.test(cleanValue)) {
+    return 0
+  }
+
+  const versionCode = Number(cleanValue)
   return Number.isSafeInteger(versionCode) && versionCode > 0 ? versionCode : 0
 }
 
 export default function handler(req, res) {
+  if (handleCors(req, res)) {
+    return
+  }
+
   if (req.method !== 'GET') {
-    res.setHeader('Allow', 'GET')
+    res.setHeader('Allow', 'GET, OPTIONS')
     return res.status(405).json({ error: 'Method not allowed' })
   }
 

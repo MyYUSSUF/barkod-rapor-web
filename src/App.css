@@ -89,7 +89,7 @@ body {
   position: fixed;
   z-index: 99999;
   left: 50%;
-  bottom: max(14px, env(safe-area-inset-bottom, 0px));
+  bottom: calc(14px + var(--app-inset-bottom));
   width: min(560px, calc(100vw - 24px));
   max-width: calc(100vw - 24px);
   transform: translateX(-50%);
@@ -114,6 +114,16 @@ body {
   color: #ffffff;
   font-size: 20px;
   font-weight: 900;
+}
+
+.appUpdateCheckSpinner {
+  animation: appUpdateCheckPulse 1s ease-in-out infinite alternate;
+}
+
+@keyframes appUpdateCheckPulse {
+  to {
+    transform: translateY(-3px);
+  }
 }
 
 .appUpdateNoticeBody {
@@ -170,15 +180,15 @@ body {
 
 .appUpdateBlocker {
   position: fixed;
-  z-index: 100000;
+  z-index: 200000;
   inset: 0;
   display: grid;
   place-items: center;
   padding:
-    max(20px, env(safe-area-inset-top, 0px))
-    max(16px, env(safe-area-inset-right, 0px))
-    max(20px, env(safe-area-inset-bottom, 0px))
-    max(16px, env(safe-area-inset-left, 0px));
+    calc(20px + var(--app-inset-top))
+    calc(16px + var(--app-inset-right))
+    calc(20px + var(--app-inset-bottom))
+    calc(16px + var(--app-inset-left));
   background: rgba(15, 23, 42, 0.72);
 }
 
@@ -196,10 +206,10 @@ body {
   display: grid;
   align-items: end;
   padding:
-    max(20px, env(safe-area-inset-top, 0px))
-    max(12px, env(safe-area-inset-right, 0px))
-    max(20px, env(safe-area-inset-bottom, 0px))
-    max(12px, env(safe-area-inset-left, 0px));
+    calc(20px + var(--app-inset-top))
+    calc(12px + var(--app-inset-right))
+    calc(20px + var(--app-inset-bottom))
+    calc(12px + var(--app-inset-left));
   background: rgba(15, 23, 42, 0.62);
 }
 
@@ -428,7 +438,11 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 28px;
+  padding:
+    calc(28px + var(--app-inset-top))
+    calc(28px + var(--app-inset-right))
+    calc(28px + var(--app-inset-bottom))
+    calc(28px + var(--app-inset-left));
   overflow-x: hidden;
 }
 
@@ -866,28 +880,36 @@ form button {
 .messageToast {
   position: fixed;
   z-index: 10000;
-  top: calc(18px + env(safe-area-inset-top, 0px));
-  left: 50%;
-  width: min(calc(100% - 28px), 520px);
-  margin: 0;
-  transform: translateX(-50%);
+  top: calc(18px + var(--app-inset-top));
+  right: var(--app-inset-right);
+  left: var(--app-inset-left);
+  width: min(
+    520px,
+    calc(
+      100vw -
+      var(--app-inset-left) -
+      var(--app-inset-right) -
+      28px
+    )
+  );
+  margin: 0 auto;
+  transform: none;
   animation: messageToastEnter 0.42s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
 [dir="rtl"] .messageToast {
-  left: 50%;
-  transform: translateX(-50%);
+  transform: none;
 }
 
 @keyframes messageToastEnter {
   from {
     opacity: 0;
-    transform: translate(-50%, -10px);
+    transform: translateY(-10px);
   }
 
   to {
     opacity: 1;
-    transform: translate(-50%, 0);
+    transform: translateY(0);
   }
 }
 
@@ -1344,7 +1366,11 @@ form button {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 16px;
+  padding:
+    calc(16px + var(--app-inset-top))
+    calc(16px + var(--app-inset-right))
+    calc(16px + var(--app-inset-bottom))
+    calc(16px + var(--app-inset-left));
   background: rgba(10, 20, 32, 0.88);
 }
 
@@ -2976,11 +3002,11 @@ form button {
   }
 
   .scannerTop {
-    padding-top: calc(env(safe-area-inset-top) + 12px);
+    padding-top: calc(var(--app-inset-top) + 12px);
   }
 
   .scannerBottom {
-    padding-bottom: calc(env(safe-area-inset-bottom) + 14px);
+    padding-bottom: calc(var(--app-inset-bottom) + 14px);
   }
 }
 
@@ -3121,7 +3147,11 @@ form button {
 @media (max-width: 480px) {
   .page {
     align-items: flex-start;
-    padding: 14px;
+    padding:
+      calc(14px + var(--app-inset-top))
+      calc(14px + var(--app-inset-right))
+      calc(14px + var(--app-inset-bottom))
+      calc(14px + var(--app-inset-left));
   }
 
   .card {

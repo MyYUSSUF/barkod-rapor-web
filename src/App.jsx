@@ -1,5 +1,7 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
-import { Capacitor } from '@capacitor/core'
+import { Capacitor, registerPlugin } from '@capacitor/core'
+import { App as CapacitorApp } from '@capacitor/app'
+import { PushNotifications } from '@capacitor/push-notifications'
 import {
   AppUpdate,
   AppUpdateAvailability,
@@ -14,15 +16,20 @@ import {
   applyCameraTorch,
   supportsCameraTorch,
 } from './lib/cameraTorch'
+import { shouldRequestNativeNotificationPermission } from './lib/nativeNotificationPermission'
 import { isSupabaseConfigured, supabase } from './lib/supabaseClient'
 import { ReportList } from './components/ReportList'
 import { ConfirmationDialog } from './components/ConfirmationDialog'
 import { SelectionDialog } from './components/SelectionDialog'
-import { isMandatoryAppUpdate } from './lib/appUpdatePolicy'
+import {
+  decideAndroidUpdateState,
+  normalizeAppUpdatePolicy,
+} from './lib/appUpdatePolicy'
 import './App.css'
 import './IndustrialTheme.css'
 
 const NativePdfViewer = lazy(() => import('./NativePdfViewer'))
+const AndroidUpdateRecovery = registerPlugin('AndroidUpdateRecovery')
 
 const configuredApiBaseUrl = import.meta.env.VITE_API_BASE_URL?.trim().replace(/\/$/, '')
 const API_BASE_URL =
@@ -35,12 +42,17 @@ const HISTORY_KEY = 'barkod_rapor_history'
 const LANGUAGE_KEY = 'barkod_rapor_language'
 const DEVICE_TOKEN_KEY = 'barkod_rapor_device_token_v1'
 const NOTIFICATION_PERMISSION_ASKED_KEY = 'barkod_rapor_notification_permission_asked_v2'
+const NATIVE_NOTIFICATION_PERMISSION_ASKED_KEY =
+  'barkod_rapor_native_notification_permission_asked_v1'
+const NATIVE_NOTIFICATION_CHANNEL_ID = 'elvan_notifications'
+const APP_UPDATE_POLICY_CACHE_KEY = 'barkod_rapor_android_update_policy_v1'
 const REPORT_TIMEOUT_MS = 45000
 const DEVICE_ACCESS_CHECK_MS = 10000
 const DESKTOP_ADMIN_PATH = '/yonetim'
 const APP_VERSION = 'v1.32'
 const APP_LOG_VERSION = 'web-v1.32'
 const APP_UPDATE_PACKAGE_NAME = 'com.elvandying.barkodrapor'
+const ALL_ANDROID_UPDATES_MANDATORY = true
 const LANGUAGE_OPTIONS = [
   { value: 'tr', label: 'Türkçe' },
   { value: 'en', label: 'English' },
@@ -218,6 +230,11 @@ const LANGUAGES = {
     appUpdateRequiredTitle: 'Güncelleme gerekli',
     appUpdateRequiredBody:
       'Uygulamaya devam etmek için en son sürümü yükleyin.',
+    appUpdateCheckingTitle: 'Sürüm kontrol ediliyor',
+    appUpdateCheckingBody: 'Google Play ve güncelleme politikası kontrol ediliyor.',
+    appUpdateCheckFailed:
+      'Google Play sürüm kontrolü tamamlanamadı. İnternet bağlantınızı kontrol edip yeniden deneyin.',
+    appUpdateRetry: 'Tekrar dene',
   },
   en: {
     appTitle: 'Barcode Report Web',
@@ -327,6 +344,11 @@ const LANGUAGES = {
     appUpdateRequiredTitle: 'Update required',
     appUpdateRequiredBody:
       'Install the latest version to continue using the application.',
+    appUpdateCheckingTitle: 'Checking app version',
+    appUpdateCheckingBody: 'Checking Google Play and the update policy.',
+    appUpdateCheckFailed:
+      'The Google Play version check could not be completed. Check your connection and try again.',
+    appUpdateRetry: 'Try again',
   },
   ar: {
     appTitle: 'نظام تقارير الباركود',
@@ -436,6 +458,11 @@ const LANGUAGES = {
     appUpdateRequiredTitle: 'التحديث مطلوب',
     appUpdateRequiredBody:
       'ثبّت أحدث إصدار للمتابعة في استخدام التطبيق.',
+    appUpdateCheckingTitle: 'جارٍ التحقق من الإصدار',
+    appUpdateCheckingBody: 'جارٍ التحقق من Google Play وسياسة التحديث.',
+    appUpdateCheckFailed:
+      'تعذر إكمال التحقق من إصدار Google Play. تحقق من اتصال الإنترنت ثم أعد المحاولة.',
+    appUpdateRetry: 'أعد المحاولة',
   },
 }
 
@@ -495,6 +522,120 @@ const cleanVapidPublicKey = (value) => {
 
 const getVapidPublicKey = () => {
   return cleanVapidPublicKey(import.meta.env.VITE_VAPID_PUBLIC_KEY)
+}
+
+const isNativeAndroidApp = () => {
+  return Capacitor.isNativePlatform() && Capacitor.getPlatform() === 'android'
+}
+
+const readCachedAppUpdatePolicy = () => {
+  try {
+    return normalizeAppUpdatePolicy(
+      JSON.parse(localStorage.getItem(APP_UPDATE_POLICY_CACHE_KEY) || '{}'),
+    )
+  } catch {
+    return normalizeAppUpdatePolicy()
+  }
+}
+
+const fetchAppUpdatePolicy = async () => {
+  const controller = new AbortController()
+  const timeoutId = window.setTimeout(() => controller.abort(), 6000)
+
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/app-version`, {
+      cache: 'no-store',
+      signal: controller.signal,
+    })
+
+    if (!response.ok) {
+      throw new Error(`Sürüm politikası HTTP ${response.status}`)
+    }
+
+    const policy = normalizeAppUpdatePolicy(await response.json())
+
+    try {
+      localStorage.setItem(APP_UPDATE_POLICY_CACHE_KEY, JSON.stringify(policy))
+    } catch (storageError) {
+      console.log('Sürüm politikası önbelleğe alınamadı:', storageError)
+    }
+
+    return policy
+  } catch (error) {
+    console.log('Sürüm politikası alınamadı:', error)
+    return readCachedAppUpdatePolicy()
+  } finally {
+    window.clearTimeout(timeoutId)
+  }
+}
+
+const hasPlayAppUpdate = (info) => {
+  return Boolean(
+    info &&
+      (info.updateAvailability === AppUpdateAvailability.UPDATE_AVAILABLE ||
+        info.updateAvailability === AppUpdateAvailability.UPDATE_IN_PROGRESS ||
+        info.installStatus === FlexibleUpdateInstallStatus.DOWNLOADED),
+  )
+}
+
+const withTimeout = (promise, timeoutMs, message) => {
+  let timeoutId
+  const timeoutPromise = new Promise((_, reject) => {
+    timeoutId = window.setTimeout(() => reject(new Error(message)), timeoutMs)
+  })
+
+  return Promise.race([promise, timeoutPromise]).finally(() => {
+    window.clearTimeout(timeoutId)
+  })
+}
+
+const waitForNativePushToken = async () => {
+  let resolveToken
+  let rejectToken
+  let timeoutId
+
+  const tokenPromise = new Promise((resolve, reject) => {
+    resolveToken = resolve
+    rejectToken = reject
+  })
+
+  const handles = await Promise.all([
+    PushNotifications.addListener('registration', ({ value }) => {
+      if (value) {
+        resolveToken(value)
+      } else {
+        rejectToken(new Error('Android bildirim anahtarı boş geldi.'))
+      }
+    }),
+    PushNotifications.addListener('registrationError', ({ error }) => {
+      rejectToken(new Error(error || 'Android bildirim kaydı başarısız oldu.'))
+    }),
+  ])
+
+  try {
+    try {
+      await PushNotifications.createChannel({
+        id: NATIVE_NOTIFICATION_CHANNEL_ID,
+        name: 'ELVAN Bildirimleri',
+        description: 'Rapor ve uygulama bildirimleri',
+        importance: 4,
+        visibility: 1,
+        vibration: true,
+      })
+    } catch (channelError) {
+      console.log('Android bildirim kanalı oluşturulamadı:', channelError)
+    }
+
+    timeoutId = window.setTimeout(() => {
+      rejectToken(new Error('Android bildirim kaydı zaman aşımına uğradı.'))
+    }, 15000)
+
+    await PushNotifications.register()
+    return await tokenPromise
+  } finally {
+    window.clearTimeout(timeoutId)
+    await Promise.all(handles.map((handle) => handle.remove()))
+  }
 }
 
 const urlBase64ToUint8Array = (base64String) => {
@@ -653,7 +794,10 @@ function AppUpdateNotice({
 
   const isBusy = notice.status === 'starting' || notice.status === 'downloading'
   const isDownloaded = notice.status === 'downloaded'
-  const isFailed = notice.status === 'failed' || notice.status === 'canceled'
+  const isFailed =
+    notice.status === 'failed' ||
+    notice.status === 'canceled' ||
+    notice.status === 'check-failed'
   const availableVersion =
     notice.info?.availableVersionName || notice.info?.availableVersionCode || ''
   const currentVersion =
@@ -681,6 +825,8 @@ function AppUpdateNotice({
     bodyText = texts.appUpdateFailed
   } else if (notice.status === 'canceled') {
     bodyText = texts.appUpdateCanceled
+  } else if (notice.status === 'check-failed') {
+    bodyText = texts.appUpdateCheckFailed
   }
 
   const noticeContent = (
@@ -723,9 +869,16 @@ function AppUpdateNotice({
             {texts.appUpdateRestart}
           </button>
         ) : isFailed ? (
-          <button type="button" onClick={onOpenStore}>
-            {texts.appUpdateStore}
-          </button>
+          <>
+            {notice.mandatory ? (
+              <button type="button" onClick={onStart}>
+                {texts.appUpdateRetry}
+              </button>
+            ) : null}
+            <button type="button" onClick={onOpenStore}>
+              {texts.appUpdateStore}
+            </button>
+          </>
         ) : (
           <button type="button" onClick={onStart} disabled={isBusy}>
             {isBusy ? texts.appUpdateOpening : texts.appUpdateNow}
@@ -739,6 +892,22 @@ function AppUpdateNotice({
     <div className="appUpdateBlocker">{noticeContent}</div>
   ) : (
     noticeContent
+  )
+}
+
+function AppUpdateCheckGate({ texts }) {
+  return (
+    <div className="appUpdateBlocker">
+      <aside className="appUpdateNotice isMandatory" role="status" aria-live="polite">
+        <div className="appUpdateNoticeIcon appUpdateCheckSpinner" aria-hidden="true">
+          ↑
+        </div>
+        <div className="appUpdateNoticeBody">
+          <strong>{texts.appUpdateCheckingTitle}</strong>
+          <span>{texts.appUpdateCheckingBody}</span>
+        </div>
+      </aside>
+    </div>
   )
 }
 
@@ -1088,7 +1257,12 @@ function App() {
   const scannerStartTokenRef = useRef(0)
   const scannerTorchTrackRef = useRef(null)
   const scannerTorchChangingRef = useRef(null)
-  const appUpdateCheckedRef = useRef(false)
+  const appUpdateInitialCheckRef = useRef(false)
+  const appUpdateCheckRunningRef = useRef(false)
+  const appUpdateCheckQueuedRef = useRef(false)
+  const appUpdateCheckQueuedGateRef = useRef(false)
+  const appUpdateVerifiedRef = useRef(false)
+  const nativePushRegistrationRef = useRef(null)
   const messageTimeoutRef = useRef(null)
 
   const [language, setLanguage] = useState(() => {
@@ -1129,6 +1303,9 @@ function App() {
     progress: 0,
     mandatory: false,
   })
+  const [appUpdateCheckPending, setAppUpdateCheckPending] = useState(() =>
+    isNativeAndroidApp(),
+  )
   const [logoutConfirmationOpen, setLogoutConfirmationOpen] = useState(false)
 
   const [adminNotificationTitle, setAdminNotificationTitle] = useState('Elvan Barkod Rapor')
@@ -1294,12 +1471,31 @@ function App() {
 
       setAppUpdateNotice((current) => ({ ...current, info }))
 
-      if (!info.immediateUpdateAllowed) {
+      if (info.installStatus === FlexibleUpdateInstallStatus.DOWNLOADED) {
+        await AppUpdate.completeFlexibleUpdate()
+        return
+      }
+
+      const canResumeImmediateUpdate =
+        info.updateAvailability === AppUpdateAvailability.UPDATE_IN_PROGRESS ||
+        (info.updateAvailability === AppUpdateAvailability.UPDATE_AVAILABLE &&
+          info.immediateUpdateAllowed)
+
+      if (!canResumeImmediateUpdate) {
         await openAppUpdateStore()
         return
       }
 
-      const result = await AppUpdate.performImmediateUpdate()
+      const result = await AndroidUpdateRecovery.resumeImmediateUpdate()
+
+      if (
+        result.code === AppUpdateResultCode.NOT_AVAILABLE ||
+        result.code === AppUpdateResultCode.NOT_ALLOWED
+      ) {
+        await openAppUpdateStore()
+        return
+      }
+
       if (result.code !== AppUpdateResultCode.OK) {
         setAppUpdateNotice((current) => ({
           ...current,
@@ -1321,6 +1517,12 @@ function App() {
   }
 
   const completeOptionalAppUpdate = async () => {
+    setAppUpdateNotice((current) => ({
+      ...current,
+      visible: true,
+      status: 'starting',
+    }))
+
     try {
       await AppUpdate.completeFlexibleUpdate()
     } catch (err) {
@@ -1341,7 +1543,9 @@ function App() {
       onDismiss={dismissAppUpdateNotice}
       onOpenStore={openAppUpdateStore}
       onStart={
-        appUpdateNotice.mandatory
+        appUpdateNotice.status === 'check-failed'
+          ? () => checkAndroidAppUpdate({ showGate: true })
+          : appUpdateNotice.mandatory
           ? startMandatoryAppUpdate
           : startOptionalAppUpdate
       }
@@ -1688,8 +1892,94 @@ function App() {
     }
   }
 
+  const registerNativePushSubscription = async (userId, options = {}) => {
+    if (nativePushRegistrationRef.current) {
+      return nativePushRegistrationRef.current
+    }
+
+    const { requestPermission = false } = options
+    const registrationTask = (async () => {
+      try {
+        let permission = await PushNotifications.checkPermissions()
+        const alreadyAsked =
+          localStorage.getItem(NATIVE_NOTIFICATION_PERMISSION_ASKED_KEY) ===
+          'true'
+
+        if (
+          requestPermission &&
+          shouldRequestNativeNotificationPermission({
+            permission: permission.receive,
+            alreadyAsked,
+          })
+        ) {
+          permission = await PushNotifications.requestPermissions()
+
+          try {
+            localStorage.setItem(
+              NATIVE_NOTIFICATION_PERMISSION_ASKED_KEY,
+              'true',
+            )
+          } catch (storageError) {
+            console.log(
+              'Android bildirim izin tercihi kaydedilemedi:',
+              storageError,
+            )
+          }
+        }
+
+        if (permission.receive !== 'granted') {
+          return false
+        }
+
+        const token = await waitForNativePushToken()
+        const accessToken = await getAccessToken()
+
+        if (!accessToken) {
+          return false
+        }
+
+        const response = await fetch(`${API_BASE_URL}/api/push-registration`, {
+          method: 'POST',
+          headers: makeAuthorizedHeaders(accessToken, {
+            'Content-Type': 'application/json',
+          }),
+          body: JSON.stringify({
+            token,
+            platform: 'android',
+            deviceName: getDeviceName(),
+            appVersion: APP_LOG_VERSION,
+          }),
+        })
+        const result = await response.json().catch(() => ({}))
+
+        if (!response.ok) {
+          throw new Error(result.error || 'Android bildirim kaydı yapılamadı.')
+        }
+
+        return true
+      } catch (err) {
+        console.log('Android bildirim kaydı hatası:', err)
+        return false
+      }
+    })()
+
+    nativePushRegistrationRef.current = registrationTask
+
+    try {
+      return await registrationTask
+    } finally {
+      if (nativePushRegistrationRef.current === registrationTask) {
+        nativePushRegistrationRef.current = null
+      }
+    }
+  }
+
   const requestNotificationPermissionOnce = async () => {
     try {
+      if (isNativeAndroidApp()) {
+        return 'native'
+      }
+
       if (!canUseNotifications()) {
         return 'unsupported'
       }
@@ -2179,6 +2469,7 @@ function App() {
           visible: true,
           status: 'downloading',
           progress,
+          mandatory: ALL_ANDROID_UPDATES_MANDATORY,
         }))
         return
       }
@@ -2192,6 +2483,7 @@ function App() {
           visible: true,
           status: 'downloaded',
           progress: 100,
+          mandatory: ALL_ANDROID_UPDATES_MANDATORY,
         }))
         return
       }
@@ -2201,6 +2493,7 @@ function App() {
           ...current,
           visible: true,
           status: 'failed',
+          mandatory: ALL_ANDROID_UPDATES_MANDATORY,
         }))
         return
       }
@@ -2210,6 +2503,7 @@ function App() {
           ...current,
           visible: true,
           status: 'canceled',
+          mandatory: ALL_ANDROID_UPDATES_MANDATORY,
         }))
       }
     })
@@ -2226,86 +2520,206 @@ function App() {
     }
   }, [])
 
-  useEffect(() => {
-    if (startupSplashVisible || appUpdateCheckedRef.current) {
-      return undefined
+  const checkAndroidAppUpdate = useCallback(async (options = {}) => {
+    const { showGate = false } = options
+
+    if (!isNativeAndroidApp()) {
+      return
     }
 
-    if (!Capacitor.isNativePlatform() || Capacitor.getPlatform() !== 'android') {
-      return undefined
+    if (appUpdateCheckRunningRef.current) {
+      appUpdateCheckQueuedRef.current = true
+      appUpdateCheckQueuedGateRef.current =
+        appUpdateCheckQueuedGateRef.current || showGate
+      return
     }
 
-    appUpdateCheckedRef.current = true
-    let active = true
+    let gateRequested = showGate
 
-    const checkTimer = window.setTimeout(async () => {
+    do {
+      appUpdateCheckRunningRef.current = true
+      appUpdateCheckQueuedRef.current = false
+      appUpdateCheckQueuedGateRef.current = false
+
+      if (gateRequested) {
+        setAppUpdateCheckPending(true)
+      }
+
       try {
-        const info = await AppUpdate.getAppUpdateInfo()
-        let updatePolicy = null
+        const [appInfoResult, playInfoResult, policyResult, buildInfoResult] =
+          await Promise.allSettled([
+            withTimeout(
+              CapacitorApp.getInfo(),
+              8000,
+              'Uygulama sürümü okunamadı.',
+            ),
+            withTimeout(
+              AppUpdate.getAppUpdateInfo(),
+              10000,
+              'Google Play güncelleme kontrolü zaman aşımına uğradı.',
+            ),
+            fetchAppUpdatePolicy(),
+            withTimeout(
+              AndroidUpdateRecovery.getBuildInfo(),
+              4000,
+              'Android derleme türü okunamadı.',
+            ),
+          ])
 
-        try {
-          const controller = new AbortController()
-          const timeoutId = window.setTimeout(() => controller.abort(), 6000)
-          const response = await fetch(`${API_BASE_URL}/api/app-version`, {
-            cache: 'no-store',
-            signal: controller.signal,
-          })
-          window.clearTimeout(timeoutId)
+        const appInfo =
+          appInfoResult.status === 'fulfilled' ? appInfoResult.value : null
+        const playInfo =
+          playInfoResult.status === 'fulfilled' ? playInfoResult.value : null
+        const updatePolicy =
+          policyResult.status === 'fulfilled'
+            ? policyResult.value
+            : readCachedAppUpdatePolicy()
+        const currentVersionCode = Number.parseInt(
+          appInfo?.build || playInfo?.currentVersionCode,
+          10,
+        )
+        const info = playInfo || {
+          currentVersionCode: Number.isSafeInteger(currentVersionCode)
+            ? currentVersionCode
+            : null,
+          currentVersionName: appInfo?.version || '',
+        }
+        const isDebugBuild =
+          buildInfoResult.status === 'fulfilled' &&
+          buildInfoResult.value?.debug === true
+        const playCheckSucceeded =
+          playInfoResult.status === 'fulfilled' || isDebugBuild
+        const decision = decideAndroidUpdateState({
+          policy: updatePolicy,
+          currentVersionCode,
+          playCheckSucceeded,
+          playUpdateAvailable: hasPlayAppUpdate(playInfo),
+          previousCheckSucceeded: appUpdateVerifiedRef.current,
+          allPlayUpdatesMandatory: ALL_ANDROID_UPDATES_MANDATORY,
+        })
 
-          if (response.ok) {
-            updatePolicy = await response.json()
-          }
-        } catch (policyError) {
-          console.log('Sürüm politikası alınamadı:', policyError)
+        if (playCheckSucceeded && decision.action !== 'retry') {
+          appUpdateVerifiedRef.current = true
         }
 
-        if (!active) {
-          return
-        }
-
-        if (isMandatoryAppUpdate(updatePolicy, info.currentVersionCode)) {
+        if (decision.action === 'require') {
           setAppUpdateNotice({
             visible: true,
             info,
-            status: 'available',
+            status:
+              playInfo?.installStatus ===
+              FlexibleUpdateInstallStatus.DOWNLOADED
+                ? 'downloaded'
+                : 'available',
+            progress:
+              playInfo?.installStatus ===
+              FlexibleUpdateInstallStatus.DOWNLOADED
+                ? 100
+                : 0,
+            mandatory: true,
+          })
+
+          if (
+            playInfo?.updateAvailability ===
+            AppUpdateAvailability.UPDATE_IN_PROGRESS
+          ) {
+            setAppUpdateNotice((current) => ({
+              ...current,
+              status: 'starting',
+            }))
+
+            let resumeResult
+
+            try {
+              resumeResult =
+                await AndroidUpdateRecovery.resumeImmediateUpdate()
+            } catch (resumeError) {
+              console.log('Yarım kalan güncelleme sürdürülemedi:', resumeError)
+            }
+
+            if (resumeResult?.code !== AppUpdateResultCode.OK) {
+              setAppUpdateNotice((current) => ({
+                ...current,
+                visible: true,
+                status:
+                  resumeResult?.code === AppUpdateResultCode.CANCELED
+                    ? 'canceled'
+                    : 'failed',
+                mandatory: true,
+              }))
+            }
+          }
+        } else if (decision.action === 'allow') {
+          setAppUpdateNotice({
+            visible: false,
+            info,
+            status: 'idle',
+            progress: 0,
+            mandatory: false,
+          })
+        } else if (decision.action === 'retry') {
+          setAppUpdateNotice({
+            visible: true,
+            info,
+            status: 'check-failed',
             progress: 0,
             mandatory: true,
           })
-          return
         }
-
-        const hasUpdate =
-          info.updateAvailability === AppUpdateAvailability.UPDATE_AVAILABLE ||
-          info.updateAvailability === AppUpdateAvailability.UPDATE_IN_PROGRESS ||
-          info.installStatus === FlexibleUpdateInstallStatus.DOWNLOADED
-
-        if (!hasUpdate) {
-          return
-        }
-
-        setAppUpdateNotice({
-          visible: true,
-          info,
-          status:
-            info.installStatus === FlexibleUpdateInstallStatus.DOWNLOADED
-              ? 'downloaded'
-              : 'available',
-          progress:
-            info.installStatus === FlexibleUpdateInstallStatus.DOWNLOADED
-              ? 100
-              : 0,
-          mandatory: false,
-        })
       } catch (err) {
         console.log('Güncelleme kontrol hatası:', err)
-      }
-    }, 1200)
 
-    return () => {
-      active = false
-      window.clearTimeout(checkTimer)
+        if (!appUpdateVerifiedRef.current) {
+          setAppUpdateNotice((current) => ({
+            ...current,
+            visible: true,
+            status: 'check-failed',
+            mandatory: true,
+          }))
+        }
+      } finally {
+        appUpdateCheckRunningRef.current = false
+
+        if (gateRequested) {
+          setAppUpdateCheckPending(false)
+        }
+      }
+
+      gateRequested = appUpdateCheckQueuedGateRef.current
+    } while (appUpdateCheckQueuedRef.current)
+  }, [])
+
+  useEffect(() => {
+    if (startupSplashVisible || appUpdateInitialCheckRef.current) {
+      return
     }
-  }, [startupSplashVisible])
+
+    if (!isNativeAndroidApp()) {
+      setAppUpdateCheckPending(false)
+      return
+    }
+
+    appUpdateInitialCheckRef.current = true
+    checkAndroidAppUpdate({ showGate: true })
+  }, [checkAndroidAppUpdate, startupSplashVisible])
+
+  useEffect(() => {
+    if (!isNativeAndroidApp()) {
+      return undefined
+    }
+
+    let listenerHandle = null
+
+    CapacitorApp.addListener('appStateChange', ({ isActive }) => {
+      if (isActive && appUpdateInitialCheckRef.current) {
+        checkAndroidAppUpdate()
+      }
+    }).then((handle) => {
+      listenerHandle = handle
+    })
+
+    return () => listenerHandle?.remove()
+  }, [checkAndroidAppUpdate])
 
   useEffect(() => {
     const restoreSession = async () => {
@@ -2446,6 +2860,22 @@ function App() {
       return
     }
 
+    if (isNativeAndroidApp()) {
+      if (appUpdateCheckPending || appUpdateNotice.mandatory) {
+        return
+      }
+
+      const subscriptionTimer = window.setTimeout(() => {
+        registerNativePushSubscription(userProfile.id, {
+          requestPermission:
+            localStorage.getItem(NATIVE_NOTIFICATION_PERMISSION_ASKED_KEY) !==
+            'true',
+        })
+      }, 0)
+
+      return () => window.clearTimeout(subscriptionTimer)
+    }
+
     if (!canUseNotifications()) {
       return
     }
@@ -2462,7 +2892,42 @@ function App() {
     }
     // Abonelik yenileme yalnızca oturum kullanıcısı değiştiğinde çalışmalıdır.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userProfile?.id])
+  }, [
+    appUpdateCheckPending,
+    appUpdateNotice.mandatory,
+    userProfile?.id,
+  ])
+
+  useEffect(() => {
+    if (
+      !isNativeAndroidApp() ||
+      !userProfile?.id ||
+      appUpdateCheckPending ||
+      appUpdateNotice.mandatory
+    ) {
+      return undefined
+    }
+
+    let listenerHandle = null
+
+    CapacitorApp.addListener('appStateChange', ({ isActive }) => {
+      if (isActive) {
+        registerNativePushSubscription(userProfile.id, {
+          requestPermission: false,
+        })
+      }
+    }).then((handle) => {
+      listenerHandle = handle
+    })
+
+    return () => listenerHandle?.remove()
+    // Foreground token refresh must follow the active signed-in Android user.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    appUpdateCheckPending,
+    appUpdateNotice.mandatory,
+    userProfile?.id,
+  ])
 
   const stopMediaStream = (stream) => {
     if (!stream) {
@@ -3007,7 +3472,11 @@ function App() {
 
   const renderGlobalDialogs = () => (
     <>
-      {renderAppUpdateNotice()}
+      {appUpdateCheckPending ? (
+        <AppUpdateCheckGate texts={t} />
+      ) : (
+        renderAppUpdateNotice()
+      )}
       <ConfirmationDialog
         open={logoutConfirmationOpen}
         title={t.logoutTitle}
@@ -3697,27 +4166,38 @@ function App() {
     return <StartupSplash onComplete={hideStartupSplash} />
   }
 
+  if (appUpdateCheckPending) {
+    return <AppUpdateCheckGate texts={t} />
+  }
+
+  if (appUpdateNotice.visible && appUpdateNotice.mandatory) {
+    return renderAppUpdateNotice()
+  }
+
   if (pdfViewerData) {
     return (
-      <Suspense
-        fallback={
-          <div className="pdfBundleLoading" role="status">
-            <span className="reportProgressRing"></span>
-            <strong>{t.reportPagePreparing}</strong>
-          </div>
-        }
-      >
-        <NativePdfViewer
-          pdfUrl={pdfViewerData.pdfUrl}
-          fileName={pdfViewerData.fileName}
-          reportName={pdfViewerData.reportName}
-          reportMeta={pdfViewerData.reportMeta}
-          accessToken={pdfViewerData.accessToken}
-          deviceToken={pdfViewerData.deviceToken}
-          language={language}
-          onClose={() => setPdfViewerData(null)}
-        />
-      </Suspense>
+      <>
+        <Suspense
+          fallback={
+            <div className="pdfBundleLoading" role="status">
+              <span className="reportProgressRing"></span>
+              <strong>{t.reportPagePreparing}</strong>
+            </div>
+          }
+        >
+          <NativePdfViewer
+            pdfUrl={pdfViewerData.pdfUrl}
+            fileName={pdfViewerData.fileName}
+            reportName={pdfViewerData.reportName}
+            reportMeta={pdfViewerData.reportMeta}
+            accessToken={pdfViewerData.accessToken}
+            deviceToken={pdfViewerData.deviceToken}
+            language={language}
+            onClose={() => setPdfViewerData(null)}
+          />
+        </Suspense>
+        {renderGlobalDialogs()}
+      </>
     )
   }
 

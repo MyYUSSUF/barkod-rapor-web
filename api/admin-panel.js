@@ -277,6 +277,18 @@ async function getAdminData(supabaseAdmin) {
     throw new Error(subscriptionError.message)
   }
 
+  const { count: nativeSubscriptionCount, error: nativeSubscriptionError } =
+    await supabaseAdmin
+      .from('native_push_subscriptions')
+      .select('id', {
+        count: 'exact',
+        head: true,
+      })
+
+  if (nativeSubscriptionError) {
+    throw new Error(nativeSubscriptionError.message)
+  }
+
   const { data: devices, error: devicesError } = await supabaseAdmin
     .from('user_devices')
     .select('id, user_id, device_name, status, created_at, last_seen_at, approved_at')
@@ -295,7 +307,8 @@ async function getAdminData(supabaseAdmin) {
     devices: enrichLogs(visibleDevices, profileMap),
     loginLogs: enrichLogs(loginLogs || [], profileMap),
     reportLogs: enrichLogs(reportLogs || [], profileMap),
-    subscriptionCount: subscriptionCount || 0,
+    subscriptionCount:
+      (subscriptionCount || 0) + (nativeSubscriptionCount || 0),
   }
 }
 
@@ -456,6 +469,11 @@ async function deleteUser(req, supabaseAdmin, authResult) {
         .from('user_devices')
         .update({ approved_by: null })
         .eq('approved_by', userId),
+    async () =>
+      supabaseAdmin
+        .from('native_push_subscriptions')
+        .delete()
+        .eq('user_id', userId),
     async () =>
       supabaseAdmin
         .from('push_subscriptions')

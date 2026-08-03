@@ -2,7 +2,17 @@ import webPush from 'web-push'
 import { createClient } from '@supabase/supabase-js'
 import { verifyApprovedDeviceRequest } from './_device-auth.js'
 import { handleCors } from './_cors.js'
+import { getFcmToken } from './_notification-targets.js'
+import {
+  createFcmMessage,
+  getFirebaseAccessToken,
+  isUnregisteredFcmResponse,
+  mapWithConcurrency,
+  sendFcmHttpRequest,
+} from './_fcm-http-v1.js'
 import { enforceRequestLimit } from './_rate-limit.js'
+
+const FCM_SEND_CONCURRENCY = 10
 
 function isNotBlank(value) {
   return value !== null && value !== undefined && String(value).trim() !== ''
@@ -124,23 +134,11 @@ export default async function handler(req, res) {
     const vapidPrivateKey = getVapidPrivateKey()
     const vapidSubject = getVapidSubject()
 
-    if (!isNotBlank(vapidPublicKey)) {
-      return res.status(500).json({
-        error: 'VAPID_PUBLIC_KEY eksik.',
-      })
-    }
-
-    if (!isNotBlank(vapidPrivateKey)) {
-      return res.status(500).json({
-        error: 'VAPID_PRIVATE_KEY eksik.',
-      })
-    }
-
     const supabaseAdmin = createSupabaseAdminClient()
     const authResult = await verifyAdminRequest(req, secret)
 
     if (!authResult.ok) {
-      return res.status(401).json({
+      return res.status(authResult.statusCode || 401).json({
         error: authResult.error || 'Yetkisiz istek.',
       })
     }
@@ -159,21 +157,28 @@ export default async function handler(req, res) {
       return
     }
 
-    webPush.setVapidDetails(
-      vapidSubject,
-      vapidPublicKey,
-      vapidPrivateKey
-    )
-
-    const { data: subscriptions, error } = await supabaseAdmin
+    const { data: webSubscriptions, error: webSubscriptionsError } =
+      await supabaseAdmin
       .from('push_subscriptions')
       .select('id, endpoint, subscription, user_agent, created_at')
 
-    if (error) {
-      throw new Error(error.message)
+    if (webSubscriptionsError) {
+      throw new Error(webSubscriptionsError.message)
     }
 
-    if (!subscriptions || subscriptions.length === 0) {
+    const { data: nativeSubscriptions, error: nativeSubscriptionsError } =
+      await supabaseAdmin
+        .from('native_push_subscriptions')
+        .select('id, token, device_name, app_version, created_at')
+
+    if (nativeSubscriptionsError) {
+      throw new Error(nativeSubscriptionsError.message)
+    }
+
+    const totalSubscriptions =
+      (webSubscriptions?.length || 0) + (nativeSubscriptions?.length || 0)
+
+    if (totalSubscriptions === 0) {
       return res.status(200).json({
         total: 0,
         sent: 0,
@@ -188,50 +193,182 @@ export default async function handler(req, res) {
       body: isNotBlank(body) ? body : 'Yeni bildiriminiz var.',
       url: isNotBlank(url) ? url : '/',
     })
+    const payloadData = JSON.parse(payload)
 
     let sent = 0
     let failed = 0
-    const deletedIds = []
+    let webSent = 0
+    let nativeSent = 0
+    const deletedWebIds = []
+    const deletedNativeIds = []
     const failedDetails = []
 
-    for (const item of subscriptions) {
-      try {
-        await webPush.sendNotification(item.subscription, payload)
-        sent += 1
-      } catch (sendError) {
-        failed += 1
-
+    if ((webSubscriptions?.length || 0) > 0) {
+      if (!isNotBlank(vapidPublicKey) || !isNotBlank(vapidPrivateKey)) {
+        failed += webSubscriptions.length
         failedDetails.push({
-          id: item.id,
-          endpointStart: item.endpoint ? String(item.endpoint).slice(0, 80) : null,
-          userAgent: item.user_agent || null,
-          createdAt: item.created_at || null,
-          error: makeSafeError(sendError),
+          provider: 'web-push',
+          affected: webSubscriptions.length,
+          error: {
+            message: 'Web Push sunucu ayarları eksik.',
+          },
         })
+      } else {
+        webPush.setVapidDetails(vapidSubject, vapidPublicKey, vapidPrivateKey)
 
-        if (
-          sendError.statusCode === 404 ||
-          sendError.statusCode === 410 ||
-          sendError.statusCode === 400 ||
-          sendError.statusCode === 403
-        ) {
-          deletedIds.push(item.id)
+        for (const item of webSubscriptions) {
+          try {
+            await webPush.sendNotification(item.subscription, payload)
+            sent += 1
+            webSent += 1
+          } catch (sendError) {
+            failed += 1
+
+            failedDetails.push({
+              id: item.id,
+              provider: 'web-push',
+              endpointStart: item.endpoint
+                ? String(item.endpoint).slice(0, 80)
+                : null,
+              userAgent: item.user_agent || null,
+              createdAt: item.created_at || null,
+              error: makeSafeError(sendError),
+            })
+
+            if (
+              sendError.statusCode === 404 ||
+              sendError.statusCode === 410
+            ) {
+              deletedWebIds.push(item.id)
+            }
+          }
         }
       }
     }
 
-    if (deletedIds.length > 0) {
+    if (nativeSubscriptions.length > 0) {
+      try {
+        const { accessToken, projectId } = await getFirebaseAccessToken(
+          process.env.FIREBASE_SERVICE_ACCOUNT_JSON,
+        )
+        const nativeResults = await mapWithConcurrency(
+          nativeSubscriptions,
+          FCM_SEND_CONCURRENCY,
+          async (item) => {
+            const token = getFcmToken(item)
+
+            if (!token) {
+              return {
+                item,
+                ok: false,
+                statusCode: null,
+                errorCode: 'TOKEN_MISSING',
+                message: 'FCM cihaz anahtarı eksik.',
+                shouldDelete: false,
+              }
+            }
+
+            try {
+              const response = await sendFcmHttpRequest({
+                accessToken,
+                projectId,
+                message: createFcmMessage({
+                  token,
+                  title: payloadData.title,
+                  body: payloadData.body,
+                  url: payloadData.url,
+                }),
+              })
+              const fcmErrorDetail = response.payload?.error?.details?.find(
+                (detail) =>
+                  detail?.['@type'] ===
+                  'type.googleapis.com/google.firebase.fcm.v1.FcmError',
+              )
+
+              return {
+                item,
+                ok: response.ok,
+                statusCode: response.statusCode,
+                errorCode:
+                  fcmErrorDetail?.errorCode ||
+                  response.payload?.error?.status ||
+                  null,
+                message: response.message,
+                shouldDelete: isUnregisteredFcmResponse(
+                  response.statusCode,
+                  response.payload,
+                ),
+              }
+            } catch (sendError) {
+              return {
+                item,
+                ok: false,
+                statusCode: null,
+                errorCode: 'NETWORK_ERROR',
+                message: sendError.message || 'FCM ağ hatası',
+                shouldDelete: false,
+              }
+            }
+          },
+        )
+
+        nativeResults.forEach((result) => {
+          if (result.ok) {
+            sent += 1
+            nativeSent += 1
+            return
+          }
+
+          failed += 1
+          failedDetails.push({
+            id: result.item.id,
+            provider: 'fcm',
+            userAgent: result.item.device_name || null,
+            createdAt: result.item.created_at || null,
+            error: {
+              message: result.message || 'FCM gönderim hatası',
+              code: result.errorCode,
+              statusCode: result.statusCode,
+            },
+          })
+
+          if (result.shouldDelete) {
+            deletedNativeIds.push(result.item.id)
+          }
+        })
+      } catch (firebaseError) {
+        failed += nativeSubscriptions.length
+        failedDetails.push({
+          provider: 'fcm',
+          affected: nativeSubscriptions.length,
+          error: {
+            message: firebaseError.message || 'FCM yapılandırma hatası',
+          },
+        })
+      }
+    }
+
+    if (deletedWebIds.length > 0) {
       await supabaseAdmin
         .from('push_subscriptions')
         .delete()
-        .in('id', deletedIds)
+        .in('id', deletedWebIds)
+    }
+
+    if (deletedNativeIds.length > 0) {
+      await supabaseAdmin
+        .from('native_push_subscriptions')
+        .delete()
+        .in('id', deletedNativeIds)
     }
 
     return res.status(200).json({
-      total: subscriptions.length,
+      total: totalSubscriptions,
       sent,
       failed,
-      deleted: deletedIds.length,
+      webSent,
+      nativeSent,
+      deleted: deletedWebIds.length + deletedNativeIds.length,
       authMethod: authResult.method,
       vapidPublicKeyLength: vapidPublicKey.length,
       vapidSubject,

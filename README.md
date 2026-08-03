@@ -36,7 +36,12 @@ VAPID_PUBLIC_KEY=
 VAPID_PRIVATE_KEY=
 VAPID_SUBJECT=
 NOTIFICATION_ADMIN_SECRET=
+FIREBASE_SERVICE_ACCOUNT_JSON=
 ```
+
+Android bildirimleri icin Firebase projesinden indirilen `google-services.json`
+dosyasini `android/app/` altina koyun. Firebase servis hesabi JSON degerini tek
+satir halinde `FIREBASE_SERVICE_ACCOUNT_JSON` Vercel degiskenine kaydedin.
 
 Not: `.env.local` ve diger `.env*` dosyalari GitHub'a gonderilmez. Gizli degerleri sadece yerel dosyada veya Vercel Environment Variables alaninda tutun.
 

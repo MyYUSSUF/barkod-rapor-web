@@ -8,6 +8,7 @@ import reportPdfHandler from './api/report-pdf.js'
 import reportUrlHandler from './api/report-url.js'
 import sendNotificationHandler from './api/send-notification.js'
 import appVersionHandler from './api/app-version.js'
+import pushRegistrationHandler from './api/push-registration.js'
 
 try {
   process.loadEnvFile?.('.env.local')
@@ -29,6 +30,7 @@ app.all('/api/admin-panel', adminPanelHandler)
 app.all('/api/report-pdf', reportPdfHandler)
 app.all('/api/report-url', reportUrlHandler)
 app.all('/api/send-notification', sendNotificationHandler)
+app.all('/api/push-registration', pushRegistrationHandler)
 
 app.use(express.static(path.join(currentDirectory, 'dist')))
 app.use((req, res) => {

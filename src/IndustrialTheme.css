@@ -1442,7 +1442,11 @@ form button:hover:not(:disabled) {
   }
 
   .mainPage {
-    padding: max(2px, env(safe-area-inset-top, 0px)) 10px 12px;
+    padding:
+      calc(2px + var(--app-inset-top))
+      calc(10px + var(--app-inset-right))
+      calc(12px + var(--app-inset-bottom))
+      calc(10px + var(--app-inset-left));
   }
 
   .mainCard {

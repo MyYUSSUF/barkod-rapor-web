@@ -1,5 +1,6 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
+import { initializeAndroidSystemInsets } from './lib/androidSystemInsets'
 import './index.css'
 
 if (typeof Promise.withResolvers !== 'function') {
@@ -26,6 +27,12 @@ if (typeof Promise.withResolvers !== 'function') {
 
 async function startApplication() {
   try {
+    try {
+      await initializeAndroidSystemInsets()
+    } catch (insetsError) {
+      console.log('Android güvenli alan bilgisi alınamadı:', insetsError)
+    }
+
     const { default: App } = await import('./App.jsx')
 
     createRoot(document.getElementById('root')).render(
