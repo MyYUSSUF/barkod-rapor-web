@@ -214,8 +214,27 @@ body {
 }
 
 .selectionDialogPanel {
+  display: flex;
+  flex-direction: column;
   width: min(520px, 100%);
-  max-height: min(72vh, 620px);
+  max-height: min(
+    620px,
+    calc(
+      100vh -
+      var(--app-inset-top) -
+      var(--app-inset-bottom) -
+      40px
+    )
+  );
+  max-height: min(
+    620px,
+    calc(
+      100dvh -
+      var(--app-inset-top) -
+      var(--app-inset-bottom) -
+      40px
+    )
+  );
   margin: 0 auto;
   overflow: hidden;
   border: 1px solid var(--border-strong);
@@ -225,6 +244,7 @@ body {
 }
 
 .selectionDialogHeader {
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -247,9 +267,10 @@ body {
 }
 
 .selectionDialogOptions {
+  flex: 0 1 auto;
   display: grid;
   gap: 8px;
-  max-height: calc(min(72vh, 620px) - 72px);
+  min-height: 0;
   padding: 12px;
   overflow-y: auto;
   overscroll-behavior: contain;
@@ -298,7 +319,13 @@ body {
 
 .datePickerPanel {
   width: min(430px, 100%);
+}
+
+.datePickerBody {
+  min-height: 0;
   padding-bottom: 12px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .datePickerMonthHeader {
@@ -568,6 +595,39 @@ h1 {
 
 [dir="rtl"] .loginHero .subtitle,
 [dir="rtl"] .welcomeBox p {
+  text-align: right;
+}
+
+.notificationPermissionNotice {
+  display: grid;
+  gap: 12px;
+  margin: 0 0 20px;
+  padding: 15px;
+  border: 1px solid #f0c36d;
+  border-radius: 10px;
+  background: #fff8e8;
+  color: var(--text);
+  text-align: left;
+}
+
+.notificationPermissionNotice strong {
+  display: block;
+  color: #76520f;
+  font-size: 14px;
+}
+
+.notificationPermissionNotice p {
+  margin: 5px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.notificationPermissionNotice .scanButton {
+  margin: 0;
+}
+
+[dir="rtl"] .notificationPermissionNotice {
   text-align: right;
 }
 

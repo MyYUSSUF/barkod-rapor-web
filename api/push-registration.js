@@ -1,3 +1,4 @@
+import crypto from 'crypto'
 import { createClient } from '@supabase/supabase-js'
 import { verifyApprovedDeviceRequest } from './_device-auth.js'
 import { handleCors } from './_cors.js'
@@ -5,6 +6,196 @@ import { enforceRequestLimit } from './_rate-limit.js'
 
 function isNotBlank(value) {
   return value !== null && value !== undefined && String(value).trim() !== ''
+}
+
+class PushRegistrationError extends Error {
+  constructor(message, statusCode = 400) {
+    super(message)
+    this.name = 'PushRegistrationError'
+    this.statusCode = statusCode
+  }
+}
+
+function getHeader(req, name) {
+  const headers = req?.headers || {}
+  return headers[name] || headers[name.toLowerCase()] || headers[name.toUpperCase()] || ''
+}
+
+export function hashDeviceToken(deviceToken) {
+  return crypto
+    .createHash('sha256')
+    .update(String(deviceToken || ''))
+    .digest('hex')
+}
+
+export function normalizePushRegistrationRequest(body = {}) {
+  const action = String(body.action || 'register').trim().toLowerCase()
+  const platform = String(
+    body.platform || (action === 'unregister' ? 'android' : ''),
+  ).trim().toLowerCase()
+  const token = String(body.token || '').trim()
+
+  if (!['register', 'unregister'].includes(action)) {
+    throw new PushRegistrationError('Geçersiz bildirim kayıt işlemi.')
+  }
+
+  if (platform !== 'android') {
+    throw new PushRegistrationError('Geçersiz bildirim platformu.')
+  }
+
+  if (
+    (action === 'register' || token) &&
+    (token.length < 20 || token.length > 4096 || /\s/.test(token))
+  ) {
+    throw new PushRegistrationError('Geçersiz bildirim anahtarı.')
+  }
+
+  return { action, platform, token }
+}
+
+export function createNativeSubscriptionRecord({
+  userId,
+  deviceHash,
+  platform,
+  token,
+  deviceName,
+  appVersion,
+  now = new Date(),
+}) {
+  return {
+    user_id: userId,
+    device_hash: deviceHash,
+    platform,
+    token,
+    device_name: String(deviceName || '').slice(0, 500),
+    app_version: String(appVersion || '').slice(0, 80),
+    updated_at: now.toISOString(),
+  }
+}
+
+function isMissingDeviceHashColumn(error) {
+  return String(error?.message || '').includes('device_hash')
+}
+
+export async function replaceNativePushSubscription(
+  supabaseAdmin,
+  subscriptionRecord,
+) {
+  const { error: deviceCleanupError } = await supabaseAdmin
+    .from('native_push_subscriptions')
+    .delete()
+    .eq('device_hash', subscriptionRecord.device_hash)
+    .neq('token', subscriptionRecord.token)
+
+  if (deviceCleanupError && !isMissingDeviceHashColumn(deviceCleanupError)) {
+    throw new Error(deviceCleanupError.message)
+  }
+
+  const legacySchema = Boolean(deviceCleanupError)
+
+  const record = legacySchema
+    ? Object.fromEntries(
+        Object.entries(subscriptionRecord).filter(([key]) => key !== 'device_hash'),
+      )
+    : subscriptionRecord
+  const { error } = await supabaseAdmin
+    .from('native_push_subscriptions')
+    .upsert(record, { onConflict: 'token' })
+
+  if (error) {
+    throw new Error(error.message)
+  }
+
+  return { legacySchema }
+}
+
+async function deleteNativeSubscriptionByUserToken(
+  supabaseAdmin,
+  { userId, token, legacyOnly = false },
+) {
+  let query = supabaseAdmin
+    .from('native_push_subscriptions')
+    .delete({ count: 'exact' })
+    .eq('user_id', userId)
+    .eq('token', token)
+
+  if (legacyOnly) {
+    query = query.is('device_hash', null)
+  }
+
+  const { count, error } = await query
+
+  if (error) {
+    throw new Error(error.message)
+  }
+
+  return Number.isInteger(count) ? count : 0
+}
+
+async function hasLegacyNativeSubscription(supabaseAdmin, userId) {
+  const { count, error } = await supabaseAdmin
+    .from('native_push_subscriptions')
+    .select('id', { count: 'exact', head: true })
+    .eq('user_id', userId)
+    .is('device_hash', null)
+
+  if (error) {
+    throw new Error(error.message)
+  }
+
+  return Number.isInteger(count) && count > 0
+}
+
+export async function unregisterNativePushSubscription(
+  supabaseAdmin,
+  { userId, deviceHash, token },
+) {
+  const { count, error } = await supabaseAdmin
+    .from('native_push_subscriptions')
+    .delete({ count: 'exact' })
+    .eq('user_id', userId)
+    .eq('device_hash', deviceHash)
+
+  if (error && isMissingDeviceHashColumn(error)) {
+    if (!token) {
+      return { deleted: 0, legacyTokenRequired: true }
+    }
+
+    const deleted = await deleteNativeSubscriptionByUserToken(supabaseAdmin, {
+      userId,
+      token,
+    })
+
+    return { deleted, legacyTokenRequired: false }
+  }
+
+  if (error) {
+    throw new Error(error.message)
+  }
+
+  const deletedByDeviceHash = Number.isInteger(count) ? count : 0
+
+  if (deletedByDeviceHash > 0) {
+    return { deleted: deletedByDeviceHash, legacyTokenRequired: false }
+  }
+
+  if (token) {
+    const deleted = await deleteNativeSubscriptionByUserToken(supabaseAdmin, {
+      userId,
+      token,
+      legacyOnly: true,
+    })
+
+    return { deleted, legacyTokenRequired: false }
+  }
+
+  return {
+    deleted: 0,
+    legacyTokenRequired: await hasLegacyNativeSubscription(
+      supabaseAdmin,
+      userId,
+    ),
+  }
 }
 
 function parseBody(req) {
@@ -54,55 +245,56 @@ export default async function handler(req, res) {
       })
     }
 
+    const body = parseBody(req)
+    const { action, platform, token } = normalizePushRegistrationRequest(body)
+    const deviceToken = String(getHeader(req, 'x-device-token') || '').trim()
+    const deviceHash = hashDeviceToken(deviceToken)
+
     if (
       !enforceRequestLimit(res, {
-        scope: 'push-registration',
-        key: authResult.userId,
-        maxRequests: 10,
+        scope: `push-registration-${action}`,
+        key: `${authResult.userId}:${deviceHash}`,
+        maxRequests: action === 'unregister' ? 5 : 10,
         windowMs: 5 * 60_000,
-        minIntervalMs: 1000,
+        minIntervalMs: action === 'unregister' ? 0 : 1000,
         errorMessage: 'Bildirim kaydı çok hızlı tekrarlandı.',
       })
     ) {
       return
     }
 
-    const body = parseBody(req)
-    const token = String(body.token || '').trim()
-    const platform = String(body.platform || '').trim().toLowerCase()
-
-    if (platform !== 'android') {
-      return res.status(400).json({ error: 'Geçersiz bildirim platformu.' })
-    }
-
-    if (token.length < 20 || token.length > 4096 || /\s/.test(token)) {
-      return res.status(400).json({ error: 'Geçersiz bildirim anahtarı.' })
-    }
-
     const supabaseAdmin = createSupabaseAdminClient()
-    const { error } = await supabaseAdmin
-      .from('native_push_subscriptions')
-      .upsert(
-        {
-          user_id: authResult.userId,
-          platform,
-          token,
-          device_name: String(body.deviceName || '').slice(0, 500),
-          app_version: String(body.appVersion || '').slice(0, 80),
-          updated_at: new Date().toISOString(),
-        },
-        {
-          onConflict: 'token',
-        }
-      )
 
-    if (error) {
-      throw new Error(error.message)
+    if (action === 'unregister') {
+      const result = await unregisterNativePushSubscription(supabaseAdmin, {
+        userId: authResult.userId,
+        deviceHash,
+        token,
+      })
+
+      return res.status(200).json({
+        success: true,
+        action,
+        ...result,
+      })
     }
 
-    return res.status(200).json({ success: true })
+    const subscriptionRecord = createNativeSubscriptionRecord({
+      userId: authResult.userId,
+      deviceHash,
+      platform,
+      token,
+      deviceName: body.deviceName,
+      appVersion: body.appVersion,
+    })
+    const result = await replaceNativePushSubscription(
+      supabaseAdmin,
+      subscriptionRecord,
+    )
+
+    return res.status(200).json({ success: true, action, ...result })
   } catch (error) {
-    return res.status(500).json({
+    return res.status(error.statusCode || 500).json({
       error: error.message || 'Bildirim kaydı yapılamadı.',
     })
   }

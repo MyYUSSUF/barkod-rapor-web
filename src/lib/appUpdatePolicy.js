@@ -1,8 +1,57 @@
+export const PLAY_UPDATE_STATUS = Object.freeze({
+  AVAILABLE: 'available',
+  UNAVAILABLE: 'unavailable',
+  UNKNOWN: 'unknown',
+})
+
+export const REMOTE_POLICY_STATUS = Object.freeze({
+  VERIFIED: 'verified',
+  CACHE: 'cache',
+  UNKNOWN: 'unknown',
+})
+
+const parseSafeInteger = (value) => {
+  if (typeof value === 'number') {
+    return Number.isSafeInteger(value) ? value : Number.NaN
+  }
+
+  if (typeof value !== 'string' || !/^\d+$/.test(value.trim())) {
+    return Number.NaN
+  }
+
+  const parsedValue = Number(value.trim())
+  return Number.isSafeInteger(parsedValue) ? parsedValue : Number.NaN
+}
+
+const isInstalledVersionCodeValid = (value) => {
+  const installedVersionCode = parseSafeInteger(value)
+  return (
+    Number.isSafeInteger(installedVersionCode) && installedVersionCode > 0
+  )
+}
+
+const normalizePlayUpdateStatus = (value) => {
+  return Object.values(PLAY_UPDATE_STATUS).includes(value)
+    ? value
+    : PLAY_UPDATE_STATUS.UNKNOWN
+}
+
+const normalizeRemotePolicyStatus = (value) => {
+  return Object.values(REMOTE_POLICY_STATUS).includes(value)
+    ? value
+    : REMOTE_POLICY_STATUS.UNKNOWN
+}
+
+const transientDecision = (previousCheckSucceeded, reason) => ({
+  action: previousCheckSucceeded ? 'preserve' : 'retry',
+  reason,
+})
+
 export function normalizeAppUpdatePolicy(value = {}) {
-  const minimumVersionCode = Number.parseInt(value.minimumVersionCode, 10)
+  const minimumVersionCode = parseSafeInteger(value?.minimumVersionCode)
 
   return {
-    forceUpdate: value.forceUpdate === true,
+    forceUpdate: value?.forceUpdate === true,
     minimumVersionCode:
       Number.isSafeInteger(minimumVersionCode) && minimumVersionCode > 0
         ? minimumVersionCode
@@ -10,14 +59,32 @@ export function normalizeAppUpdatePolicy(value = {}) {
   }
 }
 
+export function isValidAppUpdatePolicy(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return false
+  }
+
+  if (typeof value.forceUpdate !== 'boolean') {
+    return false
+  }
+
+  const minimumVersionCode = parseSafeInteger(value.minimumVersionCode)
+
+  if (!Number.isSafeInteger(minimumVersionCode) || minimumVersionCode < 0) {
+    return false
+  }
+
+  return !value.forceUpdate || minimumVersionCode > 0
+}
+
 export function isMandatoryAppUpdate(policy, currentVersionCode) {
   const normalizedPolicy = normalizeAppUpdatePolicy(policy)
-  const installedVersionCode = Number.parseInt(currentVersionCode, 10)
+  const installedVersionCode = parseSafeInteger(currentVersionCode)
 
   return Boolean(
     normalizedPolicy.forceUpdate &&
       normalizedPolicy.minimumVersionCode > 0 &&
-      Number.isSafeInteger(installedVersionCode) &&
+      isInstalledVersionCodeValid(installedVersionCode) &&
       installedVersionCode < normalizedPolicy.minimumVersionCode
   )
 }
@@ -37,34 +104,58 @@ export function shouldRequireAppUpdate({
 export function decideAndroidUpdateState({
   policy,
   currentVersionCode,
-  playCheckSucceeded = false,
-  playUpdateAvailable = false,
+  playStatus = PLAY_UPDATE_STATUS.UNKNOWN,
+  remotePolicyStatus = REMOTE_POLICY_STATUS.UNKNOWN,
   previousCheckSucceeded = false,
   allPlayUpdatesMandatory = true,
+  debugPlayCheckBypassed = false,
 } = {}) {
+  const normalizedPlayStatus = normalizePlayUpdateStatus(playStatus)
+  const normalizedRemotePolicyStatus =
+    normalizeRemotePolicyStatus(remotePolicyStatus)
+
+  if (
+    allPlayUpdatesMandatory &&
+    normalizedPlayStatus === PLAY_UPDATE_STATUS.AVAILABLE
+  ) {
+    return { action: 'require', reason: 'play' }
+  }
+
   if (isMandatoryAppUpdate(policy, currentVersionCode)) {
     return { action: 'require', reason: 'policy' }
   }
 
-  if (allPlayUpdatesMandatory && playUpdateAvailable) {
-    return { action: 'require', reason: 'play' }
+  if (!isInstalledVersionCodeValid(currentVersionCode)) {
+    return transientDecision(previousCheckSucceeded, 'version-unavailable')
   }
 
-  if (!playCheckSucceeded) {
-    return {
-      action: previousCheckSucceeded ? 'preserve' : 'retry',
-      reason: 'play-check-failed',
-    }
+  if (!isValidAppUpdatePolicy(policy)) {
+    return transientDecision(previousCheckSucceeded, 'policy-invalid')
   }
 
-  const installedVersionCode = Number.parseInt(currentVersionCode, 10)
-
-  if (!Number.isSafeInteger(installedVersionCode)) {
-    return {
-      action: previousCheckSucceeded ? 'preserve' : 'retry',
-      reason: 'version-unavailable',
-    }
+  if (normalizedRemotePolicyStatus !== REMOTE_POLICY_STATUS.VERIFIED) {
+    return transientDecision(
+      previousCheckSucceeded,
+      normalizedRemotePolicyStatus === REMOTE_POLICY_STATUS.CACHE
+        ? 'policy-cache-unverified'
+        : 'policy-status-unknown',
+    )
   }
 
-  return { action: 'allow', reason: 'up-to-date' }
+  if (
+    allPlayUpdatesMandatory &&
+    normalizedPlayStatus === PLAY_UPDATE_STATUS.UNKNOWN &&
+    !debugPlayCheckBypassed
+  ) {
+    return transientDecision(previousCheckSucceeded, 'play-status-unknown')
+  }
+
+  return {
+    action: 'allow',
+    reason:
+      normalizedPlayStatus === PLAY_UPDATE_STATUS.UNKNOWN &&
+      debugPlayCheckBypassed
+        ? 'debug-play-bypass'
+        : 'up-to-date',
+  }
 }

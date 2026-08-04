@@ -8,3 +8,13 @@ export function shouldRequestNativeNotificationPermission({
 
   return canPrompt && !alreadyAsked && !updateBlocked
 }
+
+export function shouldShowNativeNotificationRecovery({
+  permission,
+  alreadyAsked = false,
+} = {}) {
+  return (
+    alreadyAsked &&
+    ['denied', 'prompt', 'prompt-with-rationale'].includes(permission)
+  )
+}

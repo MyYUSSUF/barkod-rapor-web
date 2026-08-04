@@ -16,15 +16,31 @@ import {
   applyCameraTorch,
   supportsCameraTorch,
 } from './lib/cameraTorch'
-import { shouldRequestNativeNotificationPermission } from './lib/nativeNotificationPermission'
+import {
+  shouldRequestNativeNotificationPermission,
+  shouldShowNativeNotificationRecovery,
+} from './lib/nativeNotificationPermission'
+import {
+  ANDROID_BACK_ACTION,
+  resolveAndroidBackAction,
+} from './lib/androidBackNavigation'
 import { isSupabaseConfigured, supabase } from './lib/supabaseClient'
 import { ReportList } from './components/ReportList'
 import { ConfirmationDialog } from './components/ConfirmationDialog'
 import { SelectionDialog } from './components/SelectionDialog'
 import {
   decideAndroidUpdateState,
+  isValidAppUpdatePolicy,
   normalizeAppUpdatePolicy,
+  PLAY_UPDATE_STATUS,
+  REMOTE_POLICY_STATUS,
 } from './lib/appUpdatePolicy'
+import {
+  advanceSessionLifecycle,
+  isAuthSessionUser,
+  isSessionLifecycleCurrent,
+} from './lib/sessionLifecycle'
+import { blurAndroidImeTarget } from './lib/androidSystemInsets'
 import './App.css'
 import './IndustrialTheme.css'
 
@@ -48,6 +64,9 @@ const NATIVE_NOTIFICATION_CHANNEL_ID = 'elvan_notifications'
 const APP_UPDATE_POLICY_CACHE_KEY = 'barkod_rapor_android_update_policy_v1'
 const REPORT_TIMEOUT_MS = 45000
 const DEVICE_ACCESS_CHECK_MS = 10000
+const APP_UPDATE_PERIODIC_CHECK_MS = 12 * 60 * 1000
+const NOTIFICATION_OPERATION_TIMEOUT_MS = 10000
+const NOTIFICATION_SEND_TIMEOUT_MS = 30000
 const DESKTOP_ADMIN_PATH = '/yonetim'
 const APP_VERSION = 'v1.32'
 const APP_LOG_VERSION = 'web-v1.32'
@@ -166,6 +185,8 @@ const LANGUAGES = {
     inactiveBlocked: 'Bu kullanıcı pasif durumda. Giriş engellendi.',
     inactiveAutoLogout: 'Bu kullanıcı pasif yapıldı. Oturum kapatıldı.',
     logoutSuccess: 'Çıkış yapıldı.',
+    logoutNotificationCleanupWarning:
+      'Çıkış yapıldı; bu cihazın bildirim kaydı sunucuda tamamen temizlenemedi.',
     barcodeRequired: 'Önce barkod girilmelidir.',
     dateRangeRequired: 'Başlangıç tarihi ve bitiş tarihi zorunludur.',
     dateRangeInvalid: 'Başlangıç tarihi bitiş tarihinden sonra olamaz.',
@@ -207,6 +228,10 @@ const LANGUAGES = {
     notificationKeyMissing: 'Bildirim anahtarı eksik. Vercel ayarlarını kontrol edin.',
     notificationSaved: 'Bildirimler açıldı. Bu cihaza bildirim gelebilir.',
     notificationError: 'Bildirim açılırken hata oluştu: ',
+    notificationSettingsTitle: 'Bildirimler kapalı',
+    notificationSettingsBody:
+      'Bu cihazda bildirim izni kapalı. İstersen Android ayarlarından açabilirsin.',
+    notificationSettingsButton: 'Bildirim Ayarlarını Aç',
     devicePending: 'Bu cihaz yönetici onayı bekliyor.',
     deviceRevoked: 'Bu cihazın erişim izni kaldırıldı.',
     deviceAccessFailed: 'Cihaz doğrulaması yapılamadı: ',
@@ -280,6 +305,8 @@ const LANGUAGES = {
     inactiveBlocked: 'This user is inactive. Login blocked.',
     inactiveAutoLogout: 'This user was deactivated. Session closed.',
     logoutSuccess: 'Logged out.',
+    logoutNotificationCleanupWarning:
+      'You were logged out, but this device notification record could not be fully removed from the server.',
     barcodeRequired: 'Barcode is required first.',
     dateRangeRequired: 'Start date and end date are required.',
     dateRangeInvalid: 'Start date cannot be after end date.',
@@ -321,6 +348,10 @@ const LANGUAGES = {
     notificationKeyMissing: 'Notification key is missing. Check Vercel settings.',
     notificationSaved: 'Notifications enabled. This device can receive notifications.',
     notificationError: 'Notification setup failed: ',
+    notificationSettingsTitle: 'Notifications are off',
+    notificationSettingsBody:
+      'Notification permission is disabled on this device. You can enable it in Android settings.',
+    notificationSettingsButton: 'Open Notification Settings',
     devicePending: 'This device is waiting for administrator approval.',
     deviceRevoked: 'Access for this device has been revoked.',
     deviceAccessFailed: 'Device verification failed: ',
@@ -394,6 +425,8 @@ const LANGUAGES = {
     inactiveBlocked: 'هذا المستخدم غير نشط. تم منع الدخول.',
     inactiveAutoLogout: 'تم تعطيل هذا المستخدم. تم إغلاق الجلسة.',
     logoutSuccess: 'تم تسجيل الخروج.',
+    logoutNotificationCleanupWarning:
+      'تم تسجيل الخروج، ولكن تعذر حذف سجل إشعارات هذا الجهاز بالكامل من الخادم.',
     barcodeRequired: 'يجب إدخال الباركود أولاً.',
     dateRangeRequired: 'تاريخ البداية وتاريخ النهاية مطلوبان.',
     dateRangeInvalid: 'تاريخ البداية لا يمكن أن يكون بعد تاريخ النهاية.',
@@ -435,6 +468,10 @@ const LANGUAGES = {
     notificationKeyMissing: 'مفتاح الإشعارات غير موجود. تحقق من إعدادات Vercel.',
     notificationSaved: 'تم تفعيل الإشعارات. يمكن لهذا الجهاز استقبال الإشعارات.',
     notificationError: 'حدث خطأ أثناء تفعيل الإشعارات: ',
+    notificationSettingsTitle: 'الإشعارات متوقفة',
+    notificationSettingsBody:
+      'إذن الإشعارات متوقف على هذا الجهاز. يمكنك تفعيله من إعدادات Android.',
+    notificationSettingsButton: 'فتح إعدادات الإشعارات',
     devicePending: 'هذا الجهاز بانتظار موافقة المسؤول.',
     deviceRevoked: 'تم إلغاء صلاحية هذا الجهاز.',
     deviceAccessFailed: 'تعذر التحقق من الجهاز: ',
@@ -530,11 +567,26 @@ const isNativeAndroidApp = () => {
 
 const readCachedAppUpdatePolicy = () => {
   try {
-    return normalizeAppUpdatePolicy(
-      JSON.parse(localStorage.getItem(APP_UPDATE_POLICY_CACHE_KEY) || '{}'),
+    const cachedPolicy = JSON.parse(
+      localStorage.getItem(APP_UPDATE_POLICY_CACHE_KEY) || '{}',
     )
+
+    if (!isValidAppUpdatePolicy(cachedPolicy)) {
+      return {
+        policy: normalizeAppUpdatePolicy(),
+        status: REMOTE_POLICY_STATUS.UNKNOWN,
+      }
+    }
+
+    return {
+      policy: normalizeAppUpdatePolicy(cachedPolicy),
+      status: REMOTE_POLICY_STATUS.CACHE,
+    }
   } catch {
-    return normalizeAppUpdatePolicy()
+    return {
+      policy: normalizeAppUpdatePolicy(),
+      status: REMOTE_POLICY_STATUS.UNKNOWN,
+    }
   }
 }
 
@@ -552,7 +604,13 @@ const fetchAppUpdatePolicy = async () => {
       throw new Error(`Sürüm politikası HTTP ${response.status}`)
     }
 
-    const policy = normalizeAppUpdatePolicy(await response.json())
+    const policyPayload = await response.json()
+
+    if (!isValidAppUpdatePolicy(policyPayload)) {
+      throw new Error('Sürüm politikası geçersiz.')
+    }
+
+    const policy = normalizeAppUpdatePolicy(policyPayload)
 
     try {
       localStorage.setItem(APP_UPDATE_POLICY_CACHE_KEY, JSON.stringify(policy))
@@ -560,7 +618,10 @@ const fetchAppUpdatePolicy = async () => {
       console.log('Sürüm politikası önbelleğe alınamadı:', storageError)
     }
 
-    return policy
+    return {
+      policy,
+      status: REMOTE_POLICY_STATUS.VERIFIED,
+    }
   } catch (error) {
     console.log('Sürüm politikası alınamadı:', error)
     return readCachedAppUpdatePolicy()
@@ -569,13 +630,22 @@ const fetchAppUpdatePolicy = async () => {
   }
 }
 
-const hasPlayAppUpdate = (info) => {
-  return Boolean(
-    info &&
-      (info.updateAvailability === AppUpdateAvailability.UPDATE_AVAILABLE ||
-        info.updateAvailability === AppUpdateAvailability.UPDATE_IN_PROGRESS ||
-        info.installStatus === FlexibleUpdateInstallStatus.DOWNLOADED),
-  )
+const getPlayUpdateStatus = (info) => {
+  if (
+    info?.updateAvailability === AppUpdateAvailability.UPDATE_AVAILABLE ||
+    info?.updateAvailability === AppUpdateAvailability.UPDATE_IN_PROGRESS ||
+    info?.installStatus === FlexibleUpdateInstallStatus.DOWNLOADED
+  ) {
+    return PLAY_UPDATE_STATUS.AVAILABLE
+  }
+
+  if (
+    info?.updateAvailability === AppUpdateAvailability.UPDATE_NOT_AVAILABLE
+  ) {
+    return PLAY_UPDATE_STATUS.UNAVAILABLE
+  }
+
+  return PLAY_UPDATE_STATUS.UNKNOWN
 }
 
 const withTimeout = (promise, timeoutMs, message) => {
@@ -1263,6 +1333,10 @@ function App() {
   const appUpdateCheckQueuedGateRef = useRef(false)
   const appUpdateVerifiedRef = useRef(false)
   const nativePushRegistrationRef = useRef(null)
+  const webPushRegistrationRef = useRef(null)
+  const nativePushTokenRef = useRef('')
+  const notificationSessionRef = useRef({ generation: 0, userId: '' })
+  const logoutInProgressRef = useRef(false)
   const messageTimeoutRef = useRef(null)
 
   const [language, setLanguage] = useState(() => {
@@ -1307,6 +1381,9 @@ function App() {
     isNativeAndroidApp(),
   )
   const [logoutConfirmationOpen, setLogoutConfirmationOpen] = useState(false)
+  const [logoutInProgress, setLogoutInProgress] = useState(false)
+  const [nativeNotificationPermission, setNativeNotificationPermission] =
+    useState('unknown')
 
   const [adminNotificationTitle, setAdminNotificationTitle] = useState('Elvan Barkod Rapor')
   const [adminNotificationBody, setAdminNotificationBody] = useState('')
@@ -1569,6 +1646,48 @@ function App() {
     return getOrCreateDeviceToken()
   }
 
+  const beginNotificationSession = (userId) => {
+    const normalizedUserId = String(userId || '').trim()
+    const currentSession = notificationSessionRef.current
+
+    if (currentSession.userId === normalizedUserId && normalizedUserId) {
+      return currentSession
+    }
+
+    const nextSession = advanceSessionLifecycle(
+      currentSession,
+      normalizedUserId,
+    )
+    notificationSessionRef.current = nextSession
+    return nextSession
+  }
+
+  const invalidateNotificationSession = (expectedUserId = '') => {
+    const normalizedExpectedUserId = String(expectedUserId || '').trim()
+    const currentSession = notificationSessionRef.current
+
+    if (
+      normalizedExpectedUserId &&
+      currentSession.userId &&
+      currentSession.userId !== normalizedExpectedUserId
+    ) {
+      return false
+    }
+
+    notificationSessionRef.current = advanceSessionLifecycle(
+      currentSession,
+      '',
+    )
+    return true
+  }
+
+  const getNotificationSession = (userId) => {
+    const candidate = notificationSessionRef.current
+    return candidate.userId === String(userId || '').trim()
+      ? candidate
+      : null
+  }
+
   const makeAuthorizedHeaders = (accessToken, extraHeaders = {}) => {
     return {
       ...extraHeaders,
@@ -1626,6 +1745,7 @@ function App() {
   }
 
   const resetUserState = () => {
+    invalidateNotificationSession()
     stopScanner()
     setUserProfile(null)
     setUsername('')
@@ -1795,24 +1915,54 @@ function App() {
   }
 
   const registerPushSubscription = async (userId, options = {}) => {
-    const { forceRenew = false, showMessage = false } = options
+    const {
+      forceRenew = false,
+      showMessage = false,
+      notificationSession = getNotificationSession(userId),
+    } = options
 
-    try {
+    if (
+      !notificationSession ||
+      !isSessionLifecycleCurrent(
+        notificationSessionRef.current,
+        notificationSession,
+      )
+    ) {
+      return false
+    }
+
+    const currentRegistration = webPushRegistrationRef.current
+
+    if (
+      currentRegistration?.userId === userId &&
+      currentRegistration?.generation === notificationSession.generation
+    ) {
+      return currentRegistration.promise
+    }
+
+    const isCurrent = () =>
+      isSessionLifecycleCurrent(
+        notificationSessionRef.current,
+        notificationSession,
+      )
+    const registrationTask = (async () => {
+
+      try {
       if (!canUseNotifications()) {
-        if (showMessage) {
+        if (showMessage && isCurrent()) {
           showUserMessage(t.notificationUnsupported, 'warning')
         }
         return false
       }
 
-      if (Notification.permission !== 'granted') {
+      if (Notification.permission !== 'granted' || !isCurrent()) {
         return false
       }
 
       const publicKey = getVapidPublicKey()
 
       if (!publicKey) {
-        if (showMessage) {
+        if (showMessage && isCurrent()) {
           showUserMessage(t.notificationKeyMissing, 'warning')
         }
         return false
@@ -1825,9 +1975,21 @@ function App() {
       }
 
       await navigator.serviceWorker.register('/sw.js')
-      const readyRegistration = await navigator.serviceWorker.ready
+      const readyRegistration = await withTimeout(
+        navigator.serviceWorker.ready,
+        NOTIFICATION_OPERATION_TIMEOUT_MS,
+        'Bildirim servisi zaman aşımına uğradı.',
+      )
+
+      if (!isCurrent()) {
+        return false
+      }
 
       let subscription = await readyRegistration.pushManager.getSubscription()
+
+      if (!isCurrent()) {
+        return false
+      }
 
       if (subscription && forceRenew) {
         const oldEndpoint = subscription.endpoint
@@ -1842,10 +2004,15 @@ function App() {
           await supabase
             .from('push_subscriptions')
             .delete()
+            .eq('user_id', userId)
             .eq('endpoint', oldEndpoint)
         }
 
         subscription = null
+      }
+
+      if (!isCurrent()) {
+        return false
       }
 
       if (!subscription) {
@@ -1853,6 +2020,10 @@ function App() {
           userVisibleOnly: true,
           applicationServerKey,
         })
+      }
+
+      if (!isCurrent()) {
+        return false
       }
 
       const subscriptionJson = subscription.toJSON()
@@ -1876,31 +2047,85 @@ function App() {
         throw new Error(error.message)
       }
 
+      if (!isCurrent()) {
+        await supabase
+          .from('push_subscriptions')
+          .delete()
+          .eq('user_id', userId)
+          .eq('endpoint', subscription.endpoint)
+        return false
+      }
+
       if (showMessage) {
         showUserMessage(t.notificationSaved, 'success')
       }
 
       return true
     } catch (err) {
-      if (showMessage) {
+      if (showMessage && isCurrent()) {
         showUserMessage(t.notificationError + err.message, 'error')
-      } else {
+      } else if (isCurrent()) {
         console.log('Bildirim kaydı hatası:', err)
       }
 
-      return false
+        return false
+      }
+    })()
+    const registrationRecord = {
+      generation: notificationSession.generation,
+      promise: registrationTask,
+      userId,
+    }
+    webPushRegistrationRef.current = registrationRecord
+
+    try {
+      return await registrationTask
+    } finally {
+      if (webPushRegistrationRef.current === registrationRecord) {
+        webPushRegistrationRef.current = null
+      }
     }
   }
 
   const registerNativePushSubscription = async (userId, options = {}) => {
-    if (nativePushRegistrationRef.current) {
-      return nativePushRegistrationRef.current
+    const {
+      requestPermission = false,
+      notificationSession = getNotificationSession(userId),
+    } = options
+
+    if (
+      !notificationSession ||
+      !isSessionLifecycleCurrent(
+        notificationSessionRef.current,
+        notificationSession,
+      )
+    ) {
+      return false
     }
 
-    const { requestPermission = false } = options
+    const currentRegistration = nativePushRegistrationRef.current
+
+    if (
+      currentRegistration?.userId === userId &&
+      currentRegistration?.generation === notificationSession.generation
+    ) {
+      return currentRegistration.promise
+    }
+
+    const isCurrent = () =>
+      isSessionLifecycleCurrent(
+        notificationSessionRef.current,
+        notificationSession,
+      )
     const registrationTask = (async () => {
       try {
         let permission = await PushNotifications.checkPermissions()
+
+        if (!isCurrent()) {
+          return false
+        }
+
+        setNativeNotificationPermission(permission.receive || 'unknown')
         const alreadyAsked =
           localStorage.getItem(NATIVE_NOTIFICATION_PERMISSION_ASKED_KEY) ===
           'true'
@@ -1913,6 +2138,7 @@ function App() {
           })
         ) {
           permission = await PushNotifications.requestPermissions()
+          setNativeNotificationPermission(permission.receive || 'unknown')
 
           try {
             localStorage.setItem(
@@ -1927,30 +2153,69 @@ function App() {
           }
         }
 
+        if (!isCurrent()) {
+          return false
+        }
+
         if (permission.receive !== 'granted') {
           return false
         }
 
         const token = await waitForNativePushToken()
-        const accessToken = await getAccessToken()
 
-        if (!accessToken) {
+        if (!isCurrent()) {
           return false
         }
 
-        const response = await fetch(`${API_BASE_URL}/api/push-registration`, {
-          method: 'POST',
-          headers: makeAuthorizedHeaders(accessToken, {
-            'Content-Type': 'application/json',
-          }),
-          body: JSON.stringify({
-            token,
-            platform: 'android',
-            deviceName: getDeviceName(),
-            appVersion: APP_LOG_VERSION,
-          }),
-        })
+        nativePushTokenRef.current = token
+        const { data: sessionData } = await supabase.auth.getSession()
+        const authSession = sessionData?.session
+        const nativeAppInfo = await CapacitorApp.getInfo().catch(() => null)
+
+        if (!isCurrent() || !isAuthSessionUser(authSession, userId)) {
+          return false
+        }
+
+        const response = await fetchWithTimeout(
+          `${API_BASE_URL}/api/push-registration`,
+          {
+            method: 'POST',
+            headers: makeAuthorizedHeaders(authSession.access_token, {
+              'Content-Type': 'application/json',
+            }),
+            body: JSON.stringify({
+              token,
+              platform: 'android',
+              deviceName: getDeviceName(),
+              appVersion: nativeAppInfo
+                ? `${nativeAppInfo.version || ''} (${nativeAppInfo.build || ''})`
+                : APP_LOG_VERSION,
+            }),
+          },
+          NOTIFICATION_OPERATION_TIMEOUT_MS,
+        )
         const result = await response.json().catch(() => ({}))
+
+        if (!isCurrent()) {
+          if (response.ok) {
+            fetchWithTimeout(
+              `${API_BASE_URL}/api/push-registration`,
+              {
+                method: 'POST',
+                headers: makeAuthorizedHeaders(authSession.access_token, {
+                  'Content-Type': 'application/json',
+                }),
+                body: JSON.stringify({
+                  action: 'unregister',
+                  platform: 'android',
+                  token,
+                }),
+              },
+              NOTIFICATION_OPERATION_TIMEOUT_MS,
+            ).catch(() => {})
+          }
+          return false
+        }
 
         if (!response.ok) {
           throw new Error(result.error || 'Android bildirim kaydı yapılamadı.')
@@ -1963,14 +2228,27 @@ function App() {
       }
     })()
 
-    nativePushRegistrationRef.current = registrationTask
+    const registrationRecord = {
+      generation: notificationSession.generation,
+      promise: registrationTask,
+      userId,
+    }
+    nativePushRegistrationRef.current = registrationRecord
 
     try {
       return await registrationTask
     } finally {
-      if (nativePushRegistrationRef.current === registrationTask) {
+      if (nativePushRegistrationRef.current === registrationRecord) {
         nativePushRegistrationRef.current = null
       }
+    }
+  }
+
+  const openNativeNotificationSettings = async () => {
+    try {
+      await AndroidUpdateRecovery.openNotificationSettings()
+    } catch (err) {
+      showUserMessage(t.notificationError + err.message, 'error')
     }
   }
 
@@ -1999,8 +2277,8 @@ function App() {
         return Notification.permission
       }
 
-      localStorage.setItem(NOTIFICATION_PERMISSION_ASKED_KEY, 'true')
       const permission = await Notification.requestPermission()
+      localStorage.setItem(NOTIFICATION_PERMISSION_ASKED_KEY, 'true')
 
       return permission
     } catch (err) {
@@ -2016,17 +2294,21 @@ function App() {
 
   const checkDeviceAccess = async (accessToken, options = {}) => {
     const { register = false } = options
-    const response = await fetch(`${API_BASE_URL}/api/device-access`, {
-      method: register ? 'POST' : 'GET',
-      headers: makeAuthorizedHeaders(accessToken, {
-        'Content-Type': 'application/json',
-      }),
-      body: register
-        ? JSON.stringify({
-            deviceName: getDeviceName(),
-          })
-        : undefined,
-    })
+    const response = await fetchWithTimeout(
+      `${API_BASE_URL}/api/device-access`,
+      {
+        method: register ? 'POST' : 'GET',
+        headers: makeAuthorizedHeaders(accessToken, {
+          'Content-Type': 'application/json',
+        }),
+        body: register
+          ? JSON.stringify({
+              deviceName: getDeviceName(),
+            })
+          : undefined,
+      },
+      NOTIFICATION_OPERATION_TIMEOUT_MS,
+    )
 
     const result = await response.json().catch(() => ({}))
 
@@ -2327,6 +2609,18 @@ function App() {
         return
       }
 
+      if (Array.from(cleanTitle).length > 120) {
+        setAdminNotificationMessage('Bildirim başlığı en fazla 120 karakter olabilir.')
+        setAdminNotificationSending(false)
+        return
+      }
+
+      if (Array.from(cleanBody).length > 800) {
+        setAdminNotificationMessage('Bildirim mesajı en fazla 800 karakter olabilir.')
+        setAdminNotificationSending(false)
+        return
+      }
+
       const accessToken = await getAccessToken()
 
       if (!accessToken) {
@@ -2335,26 +2629,54 @@ function App() {
         return
       }
 
-      const response = await fetch(`${API_BASE_URL}/api/send-notification`, {
-        method: 'POST',
-        headers: makeAuthorizedHeaders(accessToken, {
-          'Content-Type': 'application/json',
-        }),
-        body: JSON.stringify({
-          title: cleanTitle,
-          body: cleanBody,
-          url: '/',
-        }),
-      })
+      const response = await fetchWithTimeout(
+        `${API_BASE_URL}/api/send-notification`,
+        {
+          method: 'POST',
+          headers: makeAuthorizedHeaders(accessToken, {
+            'Content-Type': 'application/json',
+          }),
+          body: JSON.stringify({
+            title: cleanTitle,
+            body: cleanBody,
+            url: '/',
+          }),
+        },
+        NOTIFICATION_SEND_TIMEOUT_MS,
+      )
 
       const result = await response.json().catch(() => ({}))
 
-      if (!response.ok) {
-        throw new Error(result.error || 'Bildirim gönderilemedi.')
+      if (response.ok && Number(result.total || 0) === 0) {
+        setAdminNotificationMessage(
+          result.message || 'Bildirimin gönderilebileceği uygun cihaz yok.',
+        )
+        setAdminNotificationSending(false)
+        return
       }
 
+      const deliverySummary = [
+        `Başarılı: ${result.sent || 0}`,
+        `Web: ${result.webSent || 0}`,
+        `Android: ${result.nativeSent || 0}`,
+        `Başarısız: ${result.failed || 0}`,
+        `Hedef: ${result.total || 0}`,
+      ].join(', ')
+
+      if (!response.ok) {
+        throw new Error(
+          `${result.error || 'Bildirim gönderilemedi.'} (${deliverySummary})`,
+        )
+      }
+
+      const skippedCount = Object.values(result.skipped || {}).reduce(
+        (total, value) => total + (Number(value) || 0),
+        0,
+      )
       setAdminNotificationMessage(
-        `Bildirim gönderildi. Başarılı: ${result.sent || 0}, Başarısız: ${result.failed || 0}, Toplam: ${result.total || 0}`
+        `${result.failed > 0 ? 'Bildirim kısmen gönderildi.' : 'Bildirim gönderildi.'} ${deliverySummary}${
+          skippedCount > 0 ? `, Atlanan: ${skippedCount}` : ''
+        }`,
       )
       setAdminNotificationBody('')
     } catch (err) {
@@ -2444,6 +2766,117 @@ function App() {
   }, [scannerOpen])
 
   useEffect(() => {
+    if (!scannerOpen || !isNativeAndroidApp()) {
+      return undefined
+    }
+
+    let listenerHandle = null
+    let active = true
+    const stopScannerWhenHidden = () => {
+      if (active && document.visibilityState === 'hidden') {
+        stopScanner()
+      }
+    }
+
+    document.addEventListener('visibilitychange', stopScannerWhenHidden)
+    CapacitorApp.addListener('appStateChange', ({ isActive }) => {
+      if (active && !isActive) {
+        stopScanner()
+      }
+    }).then((handle) => {
+      if (active) {
+        listenerHandle = handle
+      } else {
+        handle.remove()
+      }
+    })
+
+    return () => {
+      active = false
+      document.removeEventListener('visibilitychange', stopScannerWhenHidden)
+      listenerHandle?.remove()
+    }
+  }, [scannerOpen])
+
+  useEffect(() => {
+    if (
+      scannerOpen &&
+      (appUpdateCheckPending || appUpdateNotice.mandatory)
+    ) {
+      stopScanner()
+    }
+  }, [
+    appUpdateCheckPending,
+    appUpdateNotice.mandatory,
+    scannerOpen,
+  ])
+
+  useEffect(() => {
+    if (!isNativeAndroidApp()) {
+      return undefined
+    }
+
+    let active = true
+    let listenerHandle = null
+
+    CapacitorApp.addListener('backButton', () => {
+      if (!active) {
+        return
+      }
+
+      const action = resolveAndroidBackAction({
+        updateBlocked:
+          appUpdateCheckPending || appUpdateNotice.mandatory,
+        pdfOpen: Boolean(pdfViewerData),
+        dialogOpen: Boolean(
+          document.querySelector(
+            '[aria-modal="true"]:is([role="dialog"], [role="alertdialog"])',
+          ),
+        ),
+        screen,
+        signedIn: Boolean(userProfile?.id),
+      })
+
+      if (action === ANDROID_BACK_ACTION.CLOSE_PDF) {
+        setPdfViewerData(null)
+      } else if (action === ANDROID_BACK_ACTION.CLOSE_DIALOG) {
+        document.dispatchEvent(
+          new KeyboardEvent('keydown', {
+            key: 'Escape',
+            bubbles: true,
+            cancelable: true,
+          }),
+        )
+      } else if (action === ANDROID_BACK_ACTION.SHOW_MAIN) {
+        stopScanner()
+        setScreen('main')
+      } else if (action === ANDROID_BACK_ACTION.MINIMIZE) {
+        CapacitorApp.minimizeApp().catch((err) => {
+          console.log('Uygulama küçültülemedi:', err)
+        })
+      }
+
+    }).then((handle) => {
+      if (active) {
+        listenerHandle = handle
+      } else {
+        handle.remove()
+      }
+    })
+
+    return () => {
+      active = false
+      listenerHandle?.remove()
+    }
+  }, [
+    appUpdateCheckPending,
+    appUpdateNotice.mandatory,
+    pdfViewerData,
+    screen,
+    userProfile?.id,
+  ])
+
+  useEffect(() => {
     if (!Capacitor.isNativePlatform() || Capacitor.getPlatform() !== 'android') {
       return undefined
     }
@@ -2508,7 +2941,11 @@ function App() {
       }
     })
       .then((handle) => {
-        listenerHandle = handle
+        if (active) {
+          listenerHandle = handle
+        } else {
+          handle.remove()
+        }
       })
       .catch((err) => {
         console.log('Güncelleme dinleyici hatası:', err)
@@ -2541,7 +2978,10 @@ function App() {
       appUpdateCheckQueuedRef.current = false
       appUpdateCheckQueuedGateRef.current = false
 
-      if (gateRequested) {
+      const gateShownForCheck =
+        gateRequested && !appUpdateVerifiedRef.current
+
+      if (gateShownForCheck) {
         setAppUpdateCheckPending(true)
       }
 
@@ -2570,35 +3010,36 @@ function App() {
           appInfoResult.status === 'fulfilled' ? appInfoResult.value : null
         const playInfo =
           playInfoResult.status === 'fulfilled' ? playInfoResult.value : null
-        const updatePolicy =
+        const policyCheck =
           policyResult.status === 'fulfilled'
             ? policyResult.value
             : readCachedAppUpdatePolicy()
-        const currentVersionCode = Number.parseInt(
-          appInfo?.build || playInfo?.currentVersionCode,
-          10,
-        )
+        const updatePolicy = policyCheck.policy
+        const currentVersionCode =
+          appInfo?.build || playInfo?.currentVersionCode
+        const displayedVersionCode = Number(currentVersionCode)
         const info = playInfo || {
-          currentVersionCode: Number.isSafeInteger(currentVersionCode)
-            ? currentVersionCode
+          currentVersionCode: Number.isSafeInteger(displayedVersionCode)
+            ? displayedVersionCode
             : null,
           currentVersionName: appInfo?.version || '',
         }
         const isDebugBuild =
           buildInfoResult.status === 'fulfilled' &&
           buildInfoResult.value?.debug === true
-        const playCheckSucceeded =
-          playInfoResult.status === 'fulfilled' || isDebugBuild
+        const playStatus = getPlayUpdateStatus(playInfo)
         const decision = decideAndroidUpdateState({
           policy: updatePolicy,
           currentVersionCode,
-          playCheckSucceeded,
-          playUpdateAvailable: hasPlayAppUpdate(playInfo),
+          playStatus,
+          remotePolicyStatus: policyCheck.status,
           previousCheckSucceeded: appUpdateVerifiedRef.current,
           allPlayUpdatesMandatory: ALL_ANDROID_UPDATES_MANDATORY,
+          debugPlayCheckBypassed:
+            isDebugBuild && playStatus === PLAY_UPDATE_STATUS.UNKNOWN,
         })
 
-        if (playCheckSucceeded && decision.action !== 'retry') {
+        if (decision.action === 'allow' || decision.action === 'require') {
           appUpdateVerifiedRef.current = true
         }
 
@@ -2680,7 +3121,7 @@ function App() {
       } finally {
         appUpdateCheckRunningRef.current = false
 
-        if (gateRequested) {
+        if (gateShownForCheck) {
           setAppUpdateCheckPending(false)
         }
       }
@@ -2708,17 +3149,42 @@ function App() {
       return undefined
     }
 
+    let active = true
     let listenerHandle = null
 
     CapacitorApp.addListener('appStateChange', ({ isActive }) => {
-      if (isActive && appUpdateInitialCheckRef.current) {
+      if (active && isActive && appUpdateInitialCheckRef.current) {
         checkAndroidAppUpdate()
       }
     }).then((handle) => {
-      listenerHandle = handle
+      if (active) {
+        listenerHandle = handle
+      } else {
+        handle.remove()
+      }
     })
 
-    return () => listenerHandle?.remove()
+    return () => {
+      active = false
+      listenerHandle?.remove()
+    }
+  }, [checkAndroidAppUpdate])
+
+  useEffect(() => {
+    if (!isNativeAndroidApp()) {
+      return undefined
+    }
+
+    const intervalId = window.setInterval(() => {
+      if (
+        document.visibilityState === 'visible' &&
+        appUpdateInitialCheckRef.current
+      ) {
+        checkAndroidAppUpdate()
+      }
+    }, APP_UPDATE_PERIODIC_CHECK_MS)
+
+    return () => window.clearInterval(intervalId)
   }, [checkAndroidAppUpdate])
 
   useEffect(() => {
@@ -2737,20 +3203,28 @@ function App() {
           return
         }
 
+        beginNotificationSession(session.user.id)
+
         const { data: profileData, error: profileError } = await fetchProfileById(
           session.user.id
         )
 
         if (profileError || !profileData) {
-          await supabase.auth.signOut()
-          showUserMessage(t.profileNotFound, 'error')
+          await cleanupAndSignOutCurrentUser({
+            expectedUserId: session.user.id,
+            accessToken: session.access_token,
+            message: t.profileNotFound,
+          })
           setRestoringSession(false)
           return
         }
 
         if (profileData.is_active === false) {
-          await supabase.auth.signOut()
-          showUserMessage(t.inactiveBlocked, 'error')
+          await cleanupAndSignOutCurrentUser({
+            expectedUserId: session.user.id,
+            accessToken: session.access_token,
+            message: t.inactiveBlocked,
+          })
           setRestoringSession(false)
           return
         }
@@ -2760,8 +3234,12 @@ function App() {
         })
 
         if (!deviceResult.approved && profileData.role !== 'admin') {
-          await supabase.auth.signOut()
-          showUserMessage(getDeviceAccessMessage(deviceResult), 'warning')
+          await cleanupAndSignOutCurrentUser({
+            expectedUserId: session.user.id,
+            accessToken: session.access_token,
+            message: getDeviceAccessMessage(deviceResult),
+            messageKind: 'warning',
+          })
           setRestoringSession(false)
           return
         }
@@ -2807,42 +3285,69 @@ function App() {
       return
     }
 
+    const checkedUserId = userProfile.id
+    const checkedUserRole = userProfile.role
+    let active = true
+    let checkRunning = false
+
     const checkUserActiveStatus = async () => {
+      if (!active || checkRunning || logoutInProgressRef.current) {
+        return
+      }
+
+      checkRunning = true
+
       try {
+        const { data: sessionData } = await supabase.auth.getSession()
+        const checkedSession = sessionData?.session
+
+        if (!active || !isAuthSessionUser(checkedSession, checkedUserId)) {
+          return
+        }
+
+        const accessToken = checkedSession.access_token
         const { data, error } = await supabase
           .from('profiles')
           .select('id, is_active')
-          .eq('id', userProfile.id)
+          .eq('id', checkedUserId)
           .single()
 
-        if (error || !data) {
+        if (!active || error || !data) {
           return
         }
 
         if (data.is_active === false) {
-          stopScanner()
-          await supabase.auth.signOut()
-          resetUserState()
-          showUserMessage(t.inactiveAutoLogout, 'error')
-          return
-        }
-
-        const accessToken = await getAccessToken()
-
-        if (!accessToken) {
+          await cleanupAndSignOutCurrentUser({
+            expectedUserId: checkedUserId,
+            accessToken,
+            message: t.inactiveAutoLogout,
+          })
           return
         }
 
         const deviceResult = await checkDeviceAccess(accessToken)
 
-        if (!deviceResult.approved && userProfile.role !== 'admin') {
-          stopScanner()
-          await supabase.auth.signOut()
-          resetUserState()
-          showUserMessage(getDeviceAccessMessage(deviceResult), 'error')
+        if (
+          !active ||
+          !isAuthSessionUser(
+            (await supabase.auth.getSession()).data?.session,
+            checkedUserId,
+          )
+        ) {
+          return
+        }
+
+        if (!deviceResult.approved && checkedUserRole !== 'admin') {
+          await cleanupAndSignOutCurrentUser({
+            expectedUserId: checkedUserId,
+            accessToken,
+            message: getDeviceAccessMessage(deviceResult),
+          })
         }
       } catch (err) {
         console.log('Aktiflik kontrol hatası:', err)
+      } finally {
+        checkRunning = false
       }
     }
 
@@ -2850,7 +3355,10 @@ function App() {
 
     const intervalId = setInterval(checkUserActiveStatus, DEVICE_ACCESS_CHECK_MS)
 
-    return () => clearInterval(intervalId)
+    return () => {
+      active = false
+      clearInterval(intervalId)
+    }
     // Kontrol döngüsü yalnızca kullanıcı veya dil değiştiğinde yeniden kurulmalıdır.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userProfile?.id, language])
@@ -2908,19 +3416,34 @@ function App() {
       return undefined
     }
 
+    const notificationSession = getNotificationSession(userProfile.id)
+
+    if (!notificationSession) {
+      return undefined
+    }
+
+    let active = true
     let listenerHandle = null
 
     CapacitorApp.addListener('appStateChange', ({ isActive }) => {
-      if (isActive) {
+      if (active && isActive) {
         registerNativePushSubscription(userProfile.id, {
           requestPermission: false,
+          notificationSession,
         })
       }
     }).then((handle) => {
-      listenerHandle = handle
+      if (active) {
+        listenerHandle = handle
+      } else {
+        handle.remove()
+      }
     })
 
-    return () => listenerHandle?.remove()
+    return () => {
+      active = false
+      listenerHandle?.remove()
+    }
     // Foreground token refresh must follow the active signed-in Android user.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
@@ -3349,8 +3872,261 @@ function App() {
     }
   }
 
+  async function unregisterCurrentNotificationSubscription(
+    accessToken,
+    userId,
+  ) {
+    const pendingRegistrations = [
+      nativePushRegistrationRef.current,
+      webPushRegistrationRef.current,
+    ]
+      .filter((record) => record?.promise && (!userId || record.userId === userId))
+      .map((record) => record.promise)
+
+    if (pendingRegistrations.length > 0) {
+      const registrationResults = await Promise.allSettled(
+        pendingRegistrations,
+      )
+
+      registrationResults.forEach((result) => {
+        if (result.status === 'rejected') {
+          console.log('Bildirim kayıt işlemi tamamlanamadı:', result.reason)
+        }
+      })
+    }
+
+    if (isNativeAndroidApp()) {
+      let remoteUnregisterError = null
+      let localUnregisterError = null
+      let nativeToken = nativePushTokenRef.current || ''
+
+      const unregisterRemoteToken = async (token = '') => {
+        const response = await fetchWithTimeout(
+          `${API_BASE_URL}/api/push-registration`,
+          {
+            method: 'POST',
+            headers: makeAuthorizedHeaders(accessToken, {
+              'Content-Type': 'application/json',
+            }),
+            body: JSON.stringify({
+              action: 'unregister',
+              platform: 'android',
+              token: token || undefined,
+            }),
+          },
+          NOTIFICATION_OPERATION_TIMEOUT_MS,
+        )
+        const result = await response.json().catch(() => ({}))
+
+        if (!response.ok) {
+          throw new Error(
+            result.error || 'Android bildirim kaydı kapatılamadı.',
+          )
+        }
+
+        if (!Number.isInteger(result.deleted) || result.deleted < 0) {
+          throw new Error('Android bildirim sunucusu geçersiz yanıt verdi.')
+        }
+
+        return result
+      }
+
+      if (accessToken && userId) {
+        try {
+          let result = await unregisterRemoteToken(nativeToken)
+
+          if (result.legacyTokenRequired === true && !nativeToken) {
+            const permission = await PushNotifications.checkPermissions()
+
+            if (permission.receive === 'granted') {
+              nativeToken = await waitForNativePushToken()
+              nativePushTokenRef.current = nativeToken
+              result = await unregisterRemoteToken(nativeToken)
+            }
+          }
+
+          if (result.legacyTokenRequired === true) {
+            throw new Error(
+              'Eski Android bildirim kaydı cihaz anahtarı olmadan kapatılamadı.',
+            )
+          }
+        } catch (err) {
+          remoteUnregisterError = err
+        }
+      }
+
+      try {
+        await PushNotifications.unregister()
+      } catch (err) {
+        localUnregisterError = err
+      } finally {
+        nativePushTokenRef.current = ''
+      }
+
+      if (remoteUnregisterError || localUnregisterError) {
+        const messages = [remoteUnregisterError, localUnregisterError]
+          .filter(Boolean)
+          .map((error) => error.message || String(error))
+
+        throw new Error(messages.join(' | '))
+      }
+
+      return
+    }
+
+    if (!canUseNotifications()) {
+      return
+    }
+
+    const registration = await navigator.serviceWorker.getRegistration()
+    const subscription = await registration?.pushManager.getSubscription()
+
+    if (!subscription) {
+      return
+    }
+
+    let databaseError = null
+    let unsubscribeError = null
+
+    try {
+      if (userId) {
+        const { error } = await supabase
+          .from('push_subscriptions')
+          .delete()
+          .eq('user_id', userId)
+          .eq('endpoint', subscription.endpoint)
+
+        if (error) {
+          databaseError = error
+        }
+      }
+    } finally {
+      try {
+        await subscription.unsubscribe()
+      } catch (error) {
+        unsubscribeError = error
+      }
+    }
+
+    if (databaseError || unsubscribeError) {
+      const messages = [databaseError, unsubscribeError]
+        .filter(Boolean)
+        .map((error) => error.message || String(error))
+
+      throw new Error(messages.join(' | '))
+    }
+  }
+
+  async function cleanupAndSignOutCurrentUser({
+    expectedUserId,
+    accessToken = '',
+    message = '',
+    messageKind = 'error',
+    writeLogoutLog = false,
+  }) {
+    if (logoutInProgressRef.current) {
+      return false
+    }
+
+    const { data: initialSessionData } = await supabase.auth.getSession()
+    const initialSession = initialSessionData?.session
+
+    if (!isAuthSessionUser(initialSession, expectedUserId)) {
+      return false
+    }
+
+    logoutInProgressRef.current = true
+    setLogoutInProgress(true)
+    setLogoutConfirmationOpen(false)
+    stopScanner()
+    invalidateNotificationSession(expectedUserId)
+
+    let notificationCleanupFailed = false
+
+    try {
+      const preparationTasks = [
+        unregisterCurrentNotificationSubscription(
+          accessToken || initialSession.access_token || '',
+          expectedUserId,
+        ),
+      ]
+
+      if (writeLogoutLog) {
+        preparationTasks.push(
+          (async () => {
+            const { error } = await supabase.from('login_logs').insert({
+              user_id: expectedUserId,
+              event_type: 'logout',
+              device_name: getDeviceName(),
+              app_version: APP_LOG_VERSION,
+            })
+
+            if (error) {
+              throw new Error(error.message)
+            }
+          })(),
+        )
+      }
+
+      const preparationResults = await Promise.allSettled(preparationTasks)
+
+      preparationResults.forEach((result, index) => {
+        if (result.status === 'rejected') {
+          console.log('Çıkış hazırlığı tamamlanamadı:', result.reason)
+
+          if (index === 0) {
+            notificationCleanupFailed = true
+          }
+        }
+      })
+
+      const { data: latestSessionData } = await supabase.auth.getSession()
+
+      if (!isAuthSessionUser(latestSessionData?.session, expectedUserId)) {
+        return false
+      }
+
+      try {
+        const { error } = await supabase.auth.signOut()
+
+        if (error) {
+          throw new Error(error.message)
+        }
+      } catch (signOutError) {
+        console.log('Sunucu oturumu kapatılamadı:', signOutError)
+        await supabase.auth.signOut({ scope: 'local' }).catch(() => {})
+      }
+
+      resetUserState()
+
+      if (message) {
+        showUserMessage(
+          notificationCleanupFailed && messageKind === 'success'
+            ? t.logoutNotificationCleanupWarning
+            : message,
+          notificationCleanupFailed && messageKind === 'success'
+            ? 'warning'
+            : messageKind,
+        )
+      }
+
+      return {
+        notificationCleanupFailed,
+        signedOut: true,
+      }
+    } finally {
+      logoutInProgressRef.current = false
+      setLogoutInProgress(false)
+    }
+  }
+
   const handleLogin = async (e) => {
     e.preventDefault()
+
+    if (logoutInProgressRef.current) {
+      return
+    }
+
     clearUserMessage()
     setLoading(true)
 
@@ -3363,7 +4139,6 @@ function App() {
         return
       }
 
-      const notificationPermission = await requestNotificationPermissionOnce()
       const hiddenEmail = `${cleanUsername}@app.local`
 
       const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
@@ -3423,15 +4198,25 @@ function App() {
         app_version: APP_LOG_VERSION,
       })
 
+      const notificationSession = beginNotificationSession(userId)
       setUserProfile(profileData)
       setDisplayName(makeDisplayName(profileData, cleanUsername))
       setBarcodeHistory(loadBarcodeHistory())
       clearUserMessage()
 
-      if (notificationPermission === 'granted') {
+      const notificationPermission = await requestNotificationPermissionOnce()
+
+      if (
+        notificationPermission === 'granted' &&
+        isSessionLifecycleCurrent(
+          notificationSessionRef.current,
+          notificationSession,
+        )
+      ) {
         await registerPushSubscription(userId, {
           forceRenew: true,
           showMessage: false,
+          notificationSession,
         })
       }
     } catch (err) {
@@ -3442,32 +4227,63 @@ function App() {
   }
 
   const performLogout = async () => {
+    if (logoutInProgressRef.current) {
+      return
+    }
+
     setLogoutConfirmationOpen(false)
-    stopScanner()
 
     try {
       const { data: sessionData } = await supabase.auth.getSession()
       const userId = sessionData?.session?.user?.id || userProfile?.id
+      const accessToken = sessionData?.session?.access_token || ''
 
-      if (userId) {
-        await supabase.from('login_logs').insert({
-          user_id: userId,
-          event_type: 'logout',
-          device_name: getDeviceName(),
-          app_version: APP_LOG_VERSION,
-        })
+      if (!userId) {
+        invalidateNotificationSession()
+        await supabase.auth.signOut({ scope: 'local' }).catch(() => {})
+        resetUserState()
+        showUserMessage(t.logoutSuccess, 'success')
+        return
+      }
+
+      const logoutResult = await cleanupAndSignOutCurrentUser({
+        expectedUserId: userId,
+        accessToken,
+        message: t.logoutSuccess,
+        messageKind: 'success',
+        writeLogoutLog: true,
+      })
+
+      if (!logoutResult) {
+        const { data: latestSessionData } = await supabase.auth.getSession()
+
+        if (!latestSessionData?.session) {
+          invalidateNotificationSession(userId)
+          await unregisterCurrentNotificationSubscription('', userId).catch(
+            (error) => {
+              console.log('Yerel bildirim kaydı kapatılamadı:', error)
+            },
+          )
+          await supabase.auth.signOut({ scope: 'local' }).catch(() => {})
+          resetUserState()
+          showUserMessage(t.logoutSuccess, 'success')
+          return
+        }
+
+        resetUserState()
+        showUserMessage(t.sessionMissing, 'warning')
       }
     } catch (err) {
-      console.log('Çıkış log kaydı hatası:', err)
+      console.log('Çıkış hazırlığı hatası:', err)
+      logoutInProgressRef.current = false
+      setLogoutInProgress(false)
     }
-
-    await supabase.auth.signOut()
-    resetUserState()
-    showUserMessage(t.logoutSuccess, 'success')
   }
 
   const handleLogout = () => {
-    setLogoutConfirmationOpen(true)
+    if (!logoutInProgressRef.current) {
+      setLogoutConfirmationOpen(true)
+    }
   }
 
   const renderGlobalDialogs = () => (
@@ -3483,6 +4299,7 @@ function App() {
         message={t.logoutConfirm}
         cancelLabel={t.cancel}
         confirmLabel={t.logout}
+        disabled={logoutInProgress}
         onCancel={closeLogoutConfirmation}
         onConfirm={performLogout}
       />
@@ -3550,6 +4367,10 @@ function App() {
 
     if (!requiresDateRange) {
       setDateRangeReportCode('')
+    }
+
+    if (isNativeAndroidApp()) {
+      blurAndroidImeTarget(document.activeElement)
     }
 
     if (cleanBarcode) {
@@ -4161,6 +4982,14 @@ function App() {
   )
 
   const dateRangeDayCount = getDateRangeDayCount(startDate, endDate)
+  const showNativeNotificationRecovery =
+    isNativeAndroidApp() &&
+    shouldShowNativeNotificationRecovery({
+      permission: nativeNotificationPermission,
+      alreadyAsked:
+        localStorage.getItem(NATIVE_NOTIFICATION_PERMISSION_ASKED_KEY) ===
+        'true',
+    })
 
   if (startupSplashVisible) {
     return <StartupSplash onComplete={hideStartupSplash} />
@@ -4733,6 +5562,7 @@ function App() {
                   type="text"
                   value={adminNotificationTitle}
                   onChange={(e) => setAdminNotificationTitle(e.target.value)}
+                  maxLength={120}
                   placeholder="Elvan Barkod Rapor"
                   disabled={adminNotificationSending}
                 />
@@ -4743,6 +5573,7 @@ function App() {
                   className="adminTextarea"
                   value={adminNotificationBody}
                   onChange={(e) => setAdminNotificationBody(e.target.value)}
+                  maxLength={800}
                   placeholder="Gönderilecek mesajı yaz"
                   disabled={adminNotificationSending}
                   rows={5}
@@ -4868,6 +5699,7 @@ function App() {
               type="text"
               value={adminNotificationTitle}
               onChange={(e) => setAdminNotificationTitle(e.target.value)}
+              maxLength={120}
               placeholder="Elvan Barkod Rapor"
               disabled={adminNotificationSending}
             />
@@ -4878,6 +5710,7 @@ function App() {
               className="adminTextarea"
               value={adminNotificationBody}
               onChange={(e) => setAdminNotificationBody(e.target.value)}
+              maxLength={800}
               placeholder="Gönderilecek mesajı yaz"
               disabled={adminNotificationSending}
               rows={4}
@@ -5470,6 +6303,22 @@ function App() {
             <span className="eyebrow">{t.appSubtitle}</span>
             <h1>{displayName ? `${t.welcome}, ${displayName}` : t.welcome}</h1>
           </div>
+
+          {showNativeNotificationRecovery && (
+            <aside className="notificationPermissionNotice" role="status">
+              <div>
+                <strong>{t.notificationSettingsTitle}</strong>
+                <p>{t.notificationSettingsBody}</p>
+              </div>
+              <button
+                type="button"
+                className="scanButton"
+                onClick={openNativeNotificationSettings}
+              >
+                {t.notificationSettingsButton}
+              </button>
+            </aside>
+          )}
 
           {userProfile?.role === 'admin' && (
             <button

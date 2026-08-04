@@ -147,7 +147,8 @@ export const DateSelectionDialog = forwardRef(function DateSelectionDialog(
               </button>
             </div>
 
-            <div className="datePickerMonthHeader">
+            <div className="datePickerBody">
+              <div className="datePickerMonthHeader">
               <button
                 type="button"
                 aria-label={previousMonthLabel}
@@ -219,7 +220,8 @@ export const DateSelectionDialog = forwardRef(function DateSelectionDialog(
               onClick={() => selectDate(todayIsoDate)}
             >
               {todayLabel}
-            </button>
+              </button>
+            </div>
           </section>
         </div>
       ) : null}

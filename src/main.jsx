@@ -27,11 +27,7 @@ if (typeof Promise.withResolvers !== 'function') {
 
 async function startApplication() {
   try {
-    try {
-      await initializeAndroidSystemInsets()
-    } catch (insetsError) {
-      console.log('Android güvenli alan bilgisi alınamadı:', insetsError)
-    }
+    await initializeAndroidSystemInsets()
 
     const { default: App } = await import('./App.jsx')
 

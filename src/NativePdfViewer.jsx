@@ -11,6 +11,14 @@ import { Directory, Filesystem } from '@capacitor/filesystem'
 import { Share } from '@capacitor/share'
 import { Document, Page, pdfjs } from 'react-pdf'
 import PdfDetailLayer from './PdfDetailLayer'
+import {
+  MAX_PDF_ZOOM,
+  MIN_PDF_ZOOM,
+  PDF_SHARE_CACHE_PATH,
+  isPdfShareCancellation,
+  normalizePdfZoom,
+  removeStaleCachedPdfFiles,
+} from './lib/pdfViewerUtils'
 import './NativePdfViewer.css'
 
 pdfjs.GlobalWorkerOptions.workerSrc = new URL(
@@ -18,7 +26,6 @@ pdfjs.GlobalWorkerOptions.workerSrc = new URL(
   import.meta.url
 ).toString()
 
-const MIN_ZOOM = 1
 const ZOOM_STEP = 0.25
 const PAGE_GAP = 14
 const PAGE_RENDER_SCALE = 3
@@ -84,19 +91,6 @@ const TEXTS = {
     zoomControls: 'أدوات تكبير PDF',
     pageError: 'تعذر عرض هذه الصفحة.',
   },
-}
-
-function normalizeZoom(value) {
-  const nextZoom = Number(value)
-
-  if (!Number.isFinite(nextZoom)) {
-    return MIN_ZOOM
-  }
-
-  return Math.max(
-    MIN_ZOOM,
-    Math.round(nextZoom * 1000) / 1000
-  )
 }
 
 function sanitizeFileName(value) {
@@ -548,6 +542,16 @@ function NativePdfViewer({
   }, [])
 
   useEffect(() => {
+    if (!Capacitor.isNativePlatform()) {
+      return
+    }
+
+    void removeStaleCachedPdfFiles(Filesystem, {
+      directory: Directory.Cache,
+    })
+  }, [])
+
+  useEffect(() => {
     return () => {
       detailGenerationRef.current += 1
 
@@ -917,7 +921,7 @@ function NativePdfViewer({
     const container = containerRef.current
     const pages = pagesRef.current
     const currentZoom = zoom
-    const targetZoom = normalizeZoom(nextZoom)
+    const targetZoom = normalizePdfZoom(nextZoom)
 
     if (!container || !pages || targetZoom === currentZoom) {
       return false
@@ -1082,7 +1086,7 @@ function NativePdfViewer({
 
       event.preventDefault()
 
-      const nextZoom = normalizeZoom(
+      const nextZoom = normalizePdfZoom(
         pinch.startZoom *
           (getDistance(event.touches) / pinch.startDistance)
       )
@@ -1205,7 +1209,11 @@ function NativePdfViewer({
 
     try {
       if (Capacitor.isNativePlatform()) {
-        const nativePath = `shared-pdfs/${Date.now()}-${finalFileName}`
+        await removeStaleCachedPdfFiles(Filesystem, {
+          directory: Directory.Cache,
+        })
+
+        const nativePath = `${PDF_SHARE_CACHE_PATH}/${Date.now()}-${finalFileName}`
         const data = await blobToBase64(blob)
 
         await Filesystem.writeFile({
@@ -1248,7 +1256,7 @@ function NativePdfViewer({
 
       openBlobFallback(blob, finalFileName)
     } catch (shareFailure) {
-      if (shareFailure?.name !== 'AbortError') {
+      if (!isPdfShareCancellation(shareFailure)) {
         console.error('PDF paylaşım hatası:', shareFailure)
         setShareError(t.shareError)
       }
@@ -1379,7 +1387,7 @@ function NativePdfViewer({
             <button
               type="button"
               onClick={() => applyZoom(zoom - ZOOM_STEP)}
-              disabled={zoom <= MIN_ZOOM}
+              disabled={zoom <= MIN_PDF_ZOOM}
               aria-label="Zoom out"
             >
               −
@@ -1388,6 +1396,7 @@ function NativePdfViewer({
             <button
               type="button"
               onClick={() => applyZoom(zoom + ZOOM_STEP)}
+              disabled={zoom >= MAX_PDF_ZOOM}
               aria-label="Zoom in"
             >
               +

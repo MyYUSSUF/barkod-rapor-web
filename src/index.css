@@ -3,6 +3,13 @@
   --android-inset-right: 0px;
   --android-inset-bottom: 0px;
   --android-inset-left: 0px;
+  --android-ime-inset-top: 0px;
+  --android-ime-inset-right: 0px;
+  --android-ime-inset-bottom: 0px;
+  --android-ime-inset-left: 0px;
+  --android-ime-visible: 0;
+  --android-ime-occludes-bottom: 0;
+  --android-system-bar-guard-bottom: var(--android-inset-bottom);
   --app-inset-top: max(env(safe-area-inset-top, 0px), var(--android-inset-top));
   --app-inset-right: max(env(safe-area-inset-right, 0px), var(--android-inset-right));
   --app-inset-bottom: max(env(safe-area-inset-bottom, 0px), var(--android-inset-bottom));
@@ -48,7 +55,7 @@
 
 .androidSystemBarGuardBottom {
   inset: auto 0 0;
-  height: var(--android-inset-bottom);
+  height: var(--android-system-bar-guard-bottom);
 }
 
 .androidSystemBarGuardLeft {

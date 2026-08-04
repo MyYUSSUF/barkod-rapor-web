@@ -3,6 +3,7 @@ import { useEffect, useRef } from 'react'
 export function ConfirmationDialog({
   cancelLabel,
   confirmLabel,
+  disabled = false,
   message,
   onCancel,
   onConfirm,
@@ -49,10 +50,15 @@ export function ConfirmationDialog({
         <strong id="confirmationDialogTitle">{title}</strong>
         <p id="confirmationDialogMessage">{message}</p>
         <div className="confirmationDialogActions">
-          <button type="button" onClick={onCancel}>
+          <button type="button" onClick={onCancel} disabled={disabled}>
             {cancelLabel}
           </button>
-          <button ref={confirmButtonRef} type="button" onClick={onConfirm}>
+          <button
+            ref={confirmButtonRef}
+            type="button"
+            onClick={onConfirm}
+            disabled={disabled}
+          >
             {confirmLabel}
           </button>
         </div>
