@@ -12,7 +12,18 @@ import com.getcapacitor.annotation.CapacitorPlugin;
 
 @CapacitorPlugin(name = "AndroidSystemInsets")
 public class AndroidSystemInsetsPlugin extends Plugin {
-    private volatile InsetsSnapshot snapshot = new InsetsSnapshot(0, 0, 0, 0);
+    private volatile InsetsSnapshot snapshot = new InsetsSnapshot(
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        false,
+        false
+    );
 
     @Override
     public void load() {
@@ -24,6 +35,12 @@ public class AndroidSystemInsetsPlugin extends Plugin {
                 );
                 Insets displayCutout = windowInsets.getInsetsIgnoringVisibility(
                     WindowInsetsCompat.Type.displayCutout()
+                );
+                Insets ime = windowInsets.getInsets(
+                    WindowInsetsCompat.Type.ime()
+                );
+                boolean imeVisible = windowInsets.isVisible(
+                    WindowInsetsCompat.Type.ime()
                 );
                 float density = getContext().getResources().getDisplayMetrics().density;
 
@@ -43,12 +60,22 @@ public class AndroidSystemInsetsPlugin extends Plugin {
                     Math.max(systemBars.left, displayCutout.left),
                     density
                 );
+                double nextImeTop = toCssPixels(ime.top, density);
+                double nextImeRight = toCssPixels(ime.right, density);
+                double nextImeBottom = toCssPixels(ime.bottom, density);
+                double nextImeLeft = toCssPixels(ime.left, density);
 
                 InsetsSnapshot nextSnapshot = new InsetsSnapshot(
                     nextTop,
                     nextRight,
                     nextBottom,
-                    nextLeft
+                    nextLeft,
+                    nextImeTop,
+                    nextImeRight,
+                    nextImeBottom,
+                    nextImeLeft,
+                    imeVisible,
+                    true
                 );
 
                 if (!nextSnapshot.hasSameValues(snapshot)) {
@@ -68,7 +95,17 @@ public class AndroidSystemInsetsPlugin extends Plugin {
 
     @PluginMethod
     public void getInsets(PluginCall call) {
-        call.resolve(makeInsetsResult(snapshot));
+        getActivity().runOnUiThread(
+            () -> {
+                android.view.View rootView = getActivity()
+                    .getWindow()
+                    .getDecorView();
+                ViewCompat.requestApplyInsets(rootView);
+                rootView.postOnAnimation(
+                    () -> call.resolve(makeInsetsResult(snapshot))
+                );
+            }
+        );
     }
 
     private JSObject makeInsetsResult(InsetsSnapshot values) {
@@ -77,6 +114,12 @@ public class AndroidSystemInsetsPlugin extends Plugin {
         result.put("right", values.right);
         result.put("bottom", values.bottom);
         result.put("left", values.left);
+        result.put("imeTop", values.imeTop);
+        result.put("imeRight", values.imeRight);
+        result.put("imeBottom", values.imeBottom);
+        result.put("imeLeft", values.imeLeft);
+        result.put("imeVisible", values.imeVisible);
+        result.put("ready", values.ready);
         return result;
     }
 
@@ -93,17 +136,35 @@ public class AndroidSystemInsetsPlugin extends Plugin {
         private final double right;
         private final double bottom;
         private final double left;
+        private final double imeTop;
+        private final double imeRight;
+        private final double imeBottom;
+        private final double imeLeft;
+        private final boolean imeVisible;
+        private final boolean ready;
 
         private InsetsSnapshot(
             double top,
             double right,
             double bottom,
-            double left
+            double left,
+            double imeTop,
+            double imeRight,
+            double imeBottom,
+            double imeLeft,
+            boolean imeVisible,
+            boolean ready
         ) {
             this.top = top;
             this.right = right;
             this.bottom = bottom;
             this.left = left;
+            this.imeTop = imeTop;
+            this.imeRight = imeRight;
+            this.imeBottom = imeBottom;
+            this.imeLeft = imeLeft;
+            this.imeVisible = imeVisible;
+            this.ready = ready;
         }
 
         private boolean hasSameValues(InsetsSnapshot other) {
@@ -112,7 +173,13 @@ public class AndroidSystemInsetsPlugin extends Plugin {
                 top == other.top &&
                 right == other.right &&
                 bottom == other.bottom &&
-                left == other.left;
+                left == other.left &&
+                imeTop == other.imeTop &&
+                imeRight == other.imeRight &&
+                imeBottom == other.imeBottom &&
+                imeLeft == other.imeLeft &&
+                imeVisible == other.imeVisible &&
+                ready == other.ready;
         }
     }
 }

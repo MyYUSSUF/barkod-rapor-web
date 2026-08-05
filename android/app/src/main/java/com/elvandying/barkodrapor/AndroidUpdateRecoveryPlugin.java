@@ -5,6 +5,10 @@ import static android.app.Activity.RESULT_OK;
 import static com.google.android.play.core.install.model.ActivityResult.RESULT_IN_APP_UPDATE_FAILED;
 
 import android.content.pm.ApplicationInfo;
+import android.content.Intent;
+import android.net.Uri;
+import android.os.Build;
+import android.provider.Settings;
 
 import androidx.activity.result.ActivityResult;
 import androidx.activity.result.ActivityResultLauncher;
@@ -53,6 +57,32 @@ public class AndroidUpdateRecoveryPlugin extends Plugin {
         JSObject result = new JSObject();
         result.put("debug", debug);
         call.resolve(result);
+    }
+
+    @PluginMethod
+    public void openNotificationSettings(PluginCall call) {
+        try {
+            Intent intent;
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                intent = new Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS);
+                intent.putExtra(
+                    Settings.EXTRA_APP_PACKAGE,
+                    getContext().getPackageName()
+                );
+            } else {
+                intent = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
+                intent.setData(
+                    Uri.parse("package:" + getContext().getPackageName())
+                );
+            }
+
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            getContext().startActivity(intent);
+            call.resolve();
+        } catch (Exception error) {
+            call.reject(error.getMessage());
+        }
     }
 
     @PluginMethod
