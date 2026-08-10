@@ -11,7 +11,7 @@ hangi yapının bulunduğu kontrol edilmeden eski bir SQL tekrar çalıştırıl
 - `login_logs`: giriş ve çıkış hareketleri
 - `report_logs`: açılan rapor hareketleri
 - `push_subscriptions`: bildirim abonelikleri
-- `native_push_subscriptions`: Android FCM bildirim kayıtları
+- `native_push_subscriptions`: Android FCM ve iOS APNs bildirim kayıtları
 
 İplik Stok yetkisi `profiles.can_view_yarn_stock_report` alanında tutulur.
 Sınırsız cihaz girişi için son iş kuralı

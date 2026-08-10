@@ -255,6 +255,18 @@ test('authenticated unregister deletes only the current user installation', asyn
   ])
 })
 
+test('iOS APNs kayitlarini yerel bildirim tablosuna kabul eder', () => {
+  const token = 'a'.repeat(64)
+  assert.deepEqual(
+    normalizePushRegistrationRequest({ platform: 'ios', token }),
+    { action: 'register', platform: 'ios', token },
+  )
+  assert.deepEqual(
+    normalizePushRegistrationRequest({ platform: 'ios-sandbox', token }),
+    { action: 'register', platform: 'ios-sandbox', token },
+  )
+})
+
 test('legacy schema fallback keeps registration compatible until migration runs', async () => {
   const missingColumnError = { message: "Could not find the 'device_hash' column" }
   const fake = createFakeSupabase({

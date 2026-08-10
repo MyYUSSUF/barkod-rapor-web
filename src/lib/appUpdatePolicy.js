@@ -110,12 +110,36 @@ export function decideAndroidUpdateState({
   allPlayUpdatesMandatory = true,
   debugPlayCheckBypassed = false,
 } = {}) {
-  const normalizedPlayStatus = normalizePlayUpdateStatus(playStatus)
+  const decision = decideNativeUpdateState({
+    policy,
+    currentVersionCode,
+    storeStatus: playStatus,
+    remotePolicyStatus,
+    previousCheckSucceeded,
+    allStoreUpdatesMandatory: allPlayUpdatesMandatory,
+    allowUnknownStoreStatus: debugPlayCheckBypassed,
+  })
+
+  return decision.reason === 'store-status-bypass'
+    ? { ...decision, reason: 'debug-play-bypass' }
+    : decision
+}
+
+export function decideNativeUpdateState({
+  policy,
+  currentVersionCode,
+  storeStatus = PLAY_UPDATE_STATUS.UNKNOWN,
+  remotePolicyStatus = REMOTE_POLICY_STATUS.UNKNOWN,
+  previousCheckSucceeded = false,
+  allStoreUpdatesMandatory = true,
+  allowUnknownStoreStatus = false,
+} = {}) {
+  const normalizedPlayStatus = normalizePlayUpdateStatus(storeStatus)
   const normalizedRemotePolicyStatus =
     normalizeRemotePolicyStatus(remotePolicyStatus)
 
   if (
-    allPlayUpdatesMandatory &&
+    allStoreUpdatesMandatory &&
     normalizedPlayStatus === PLAY_UPDATE_STATUS.AVAILABLE
   ) {
     return { action: 'require', reason: 'play' }
@@ -143,9 +167,9 @@ export function decideAndroidUpdateState({
   }
 
   if (
-    allPlayUpdatesMandatory &&
+    allStoreUpdatesMandatory &&
     normalizedPlayStatus === PLAY_UPDATE_STATUS.UNKNOWN &&
-    !debugPlayCheckBypassed
+    !allowUnknownStoreStatus
   ) {
     return transientDecision(previousCheckSucceeded, 'play-status-unknown')
   }
@@ -154,8 +178,8 @@ export function decideAndroidUpdateState({
     action: 'allow',
     reason:
       normalizedPlayStatus === PLAY_UPDATE_STATUS.UNKNOWN &&
-      debugPlayCheckBypassed
-        ? 'debug-play-bypass'
+      allowUnknownStoreStatus
+        ? 'store-status-bypass'
         : 'up-to-date',
   }
 }

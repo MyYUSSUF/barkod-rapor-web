@@ -39,7 +39,7 @@ export function normalizePushRegistrationRequest(body = {}) {
     throw new PushRegistrationError('Geçersiz bildirim kayıt işlemi.')
   }
 
-  if (platform !== 'android') {
+  if (!['android', 'ios', 'ios-sandbox'].includes(platform)) {
     throw new PushRegistrationError('Geçersiz bildirim platformu.')
   }
 

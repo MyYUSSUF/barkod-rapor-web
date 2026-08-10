@@ -4,6 +4,14 @@ import { verifyApprovedDeviceRequest } from './_device-auth.js'
 import { handleCors } from './_cors.js'
 import { getFcmToken } from './_notification-targets.js'
 import {
+  createApnsPayload,
+  getApnsProviderToken,
+  isPermanentApnsTokenFailure,
+  readApnsConfiguration,
+  sendApnsHttpRequest,
+  withApnsClient,
+} from './_apns-http2.js'
+import {
   createFcmMessage,
   getFirebaseAccessToken,
   isUnregisteredFcmResponse,
@@ -13,6 +21,7 @@ import {
 import { enforceRequestLimit } from './_rate-limit.js'
 
 const FCM_SEND_CONCURRENCY = 10
+const APNS_SEND_CONCURRENCY = 10
 const WEB_PUSH_SEND_CONCURRENCY = 10
 export const BROADCAST_PAGE_SIZE = 500
 export const MAX_BROADCAST_SUBSCRIPTIONS = 2000
@@ -373,16 +382,16 @@ async function loadNotificationTargets(supabaseAdmin) {
   try {
     nativeSubscriptions = await fetchTablePages(supabaseAdmin, {
       table: 'native_push_subscriptions',
-      columns: 'id, user_id, device_hash, token, device_name, app_version, created_at',
-      label: 'Android bildirim kayıtları',
+      columns: 'id, user_id, device_hash, platform, token, device_name, app_version, created_at',
+      label: 'Yerel bildirim kayıtları',
     })
   } catch (error) {
     if (!isMissingDeviceHashColumn(error)) throw error
 
     const legacySubscriptions = await fetchTablePages(supabaseAdmin, {
       table: 'native_push_subscriptions',
-      columns: 'id, user_id, token, device_name, app_version, created_at',
-      label: 'Android bildirim kayıtları',
+      columns: 'id, user_id, platform, token, device_name, app_version, created_at',
+      label: 'Yerel bildirim kayıtları',
     })
     nativeSubscriptions = legacySubscriptions.map((item) => ({
       ...item,
@@ -581,6 +590,15 @@ export default async function handler(req, res) {
       skipped,
       storedTotal,
     } = await loadNotificationTargets(supabaseAdmin)
+    const androidSubscriptions = nativeSubscriptions.filter(
+      (item) => !item.platform || item.platform === 'android',
+    )
+    const iosSubscriptions = nativeSubscriptions.filter(
+      (item) => item.platform === 'ios',
+    )
+    const iosSandboxSubscriptions = nativeSubscriptions.filter(
+      (item) => item.platform === 'ios-sandbox',
+    )
     const totalSubscriptions = webSubscriptions.length + nativeSubscriptions.length
 
     if (totalSubscriptions === 0) {
@@ -661,13 +679,13 @@ export default async function handler(req, res) {
       }
     }
 
-    if (nativeSubscriptions.length > 0) {
+    if (androidSubscriptions.length > 0) {
       try {
         const { accessToken, projectId } = await getFirebaseAccessToken(
           process.env.FIREBASE_SERVICE_ACCOUNT_JSON,
         )
         const nativeResults = await mapWithConcurrency(
-          nativeSubscriptions,
+          androidSubscriptions,
           FCM_SEND_CONCURRENCY,
           async (item) => {
             const token = getFcmToken(item)
@@ -752,16 +770,106 @@ export default async function handler(req, res) {
           }
         })
       } catch (firebaseError) {
-        failed += nativeSubscriptions.length
+        failed += androidSubscriptions.length
         failedDetails.push({
           provider: 'fcm',
-          affected: nativeSubscriptions.length,
+          affected: androidSubscriptions.length,
           error: {
             message: firebaseError.message || 'FCM yapılandırma hatası',
           },
         })
       }
     }
+
+    const sendApnsGroup = async (subscriptions, environment) => {
+      if (subscriptions.length === 0) {
+        return
+      }
+
+      const providerName =
+        environment === 'sandbox' ? 'apns-sandbox' : 'apns-production'
+
+      try {
+        const configuration = readApnsConfiguration(process.env, environment)
+        const providerToken = getApnsProviderToken(configuration)
+        const apnsPayload = createApnsPayload(payloadData)
+
+        const apnsResults = await withApnsClient({
+          environment,
+          task: (client) =>
+            mapWithConcurrency(
+              subscriptions,
+              APNS_SEND_CONCURRENCY,
+              async (item) => {
+                try {
+                  const response = await sendApnsHttpRequest({
+                    client,
+                    token: item.token,
+                    providerToken,
+                    bundleId: configuration.bundleId,
+                    payload: apnsPayload,
+                  })
+
+                  return {
+                    item,
+                    ...response,
+                    shouldDelete: isPermanentApnsTokenFailure(
+                      response.statusCode,
+                      response.reason,
+                    ),
+                  }
+                } catch (sendError) {
+                  return {
+                    item,
+                    ok: false,
+                    statusCode: null,
+                    reason: 'NETWORK_ERROR',
+                    message: sendError.message || 'APNs ağ hatası',
+                    shouldDelete: false,
+                  }
+                }
+              },
+            ),
+        })
+
+        apnsResults.forEach((result) => {
+          if (result.ok) {
+            sent += 1
+            nativeSent += 1
+            return
+          }
+
+          failed += 1
+          failedDetails.push({
+            id: result.item.id,
+            provider: providerName,
+            userAgent: result.item.device_name || null,
+            createdAt: result.item.created_at || null,
+            error: {
+              message: result.message || 'APNs gönderim hatası',
+              code: result.reason,
+              statusCode: result.statusCode,
+            },
+          })
+
+          if (result.shouldDelete) {
+            deletedNativeIds.push(result.item.id)
+          }
+        })
+      } catch (apnsError) {
+        failed += subscriptions.length
+        failedDetails.push({
+          provider: providerName,
+          affected: subscriptions.length,
+          error: {
+            message: apnsError.message || 'APNs yapılandırma hatası',
+          },
+        })
+      }
+    }
+
+    await sendApnsGroup(iosSubscriptions, 'production')
+    await sendApnsGroup(iosSandboxSubscriptions, 'sandbox')
 
     const [webCleanup, nativeCleanup] = await Promise.all([
       cleanupInvalidSubscriptionIds(supabaseAdmin, {
@@ -772,7 +880,7 @@ export default async function handler(req, res) {
       cleanupInvalidSubscriptionIds(supabaseAdmin, {
         table: 'native_push_subscriptions',
         ids: deletedNativeIds,
-        provider: 'fcm',
+        provider: 'native-push',
       }),
     ])
     const cleanup = {

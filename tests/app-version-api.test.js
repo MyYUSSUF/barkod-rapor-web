@@ -78,6 +78,49 @@ test('Surum politikasi desteklenmeyen metodu reddeder', () => {
   assert.equal(res.headers.Allow, 'GET, OPTIONS')
 })
 
+test('iOS icin ayri zorunlu guncelleme politikasini dondurur', () => {
+  const previousForceUpdate = process.env.IOS_FORCE_UPDATE
+  const previousMinimumBuild = process.env.IOS_MIN_BUILD_NUMBER
+  process.env.IOS_FORCE_UPDATE = 'true'
+  process.env.IOS_MIN_BUILD_NUMBER = '2'
+
+  try {
+    const req = {
+      method: 'GET',
+      headers: { origin: 'capacitor://localhost' },
+      query: { platform: 'ios' },
+    }
+    const res = createResponse()
+
+    handler(req, res)
+
+    assert.equal(res.statusCode, 200)
+    assert.deepEqual(res.body, {
+      forceUpdate: true,
+      minimumVersionCode: 2,
+    })
+  } finally {
+    if (previousForceUpdate === undefined) delete process.env.IOS_FORCE_UPDATE
+    else process.env.IOS_FORCE_UPDATE = previousForceUpdate
+
+    if (previousMinimumBuild === undefined) delete process.env.IOS_MIN_BUILD_NUMBER
+    else process.env.IOS_MIN_BUILD_NUMBER = previousMinimumBuild
+  }
+})
+
+test('bilinmeyen uygulama platformunu reddeder', () => {
+  const req = {
+    method: 'GET',
+    headers: {},
+    query: { platform: 'windows' },
+  }
+  const res = createResponse()
+
+  handler(req, res)
+
+  assert.equal(res.statusCode, 400)
+})
+
 test('Surum kodu yalnizca tam pozitif sayi olarak kabul edilir', () => {
   const previousMinimumVersionCode = process.env.ANDROID_MIN_VERSION_CODE
   process.env.ANDROID_MIN_VERSION_CODE = '16-invalid'

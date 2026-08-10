@@ -1,0 +1,262 @@
+<!doctype html>
+<html lang="tr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="ELVAN Rapor ve ELVAN Report uygulaması için destek bilgileri."
+    />
+    <title>ELVAN Destek | ELVAN Support</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --background: #f3f6f8;
+        --surface: #ffffff;
+        --text: #101828;
+        --muted: #586474;
+        --primary: #17324d;
+        --teal: #0f766e;
+        --gold: #9a6d16;
+        --border: #d0d9e3;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        background:
+          linear-gradient(180deg, rgba(255, 255, 255, 0.5), transparent 30%),
+          linear-gradient(135deg, #f7f9fb 0%, #edf2f6 55%, #f8f5ed 100%);
+        color: var(--text);
+        font-family:
+          Inter,
+          ui-sans-serif,
+          system-ui,
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          Arial,
+          sans-serif;
+        line-height: 1.65;
+      }
+
+      main {
+        width: min(920px, calc(100% - 32px));
+        margin: 0 auto;
+        padding: 40px 0 56px;
+      }
+
+      .panel {
+        overflow: hidden;
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        background: rgba(255, 255, 255, 0.97);
+        box-shadow: 0 24px 64px rgba(16, 24, 40, 0.12);
+      }
+
+      header {
+        padding: 30px;
+        background: linear-gradient(90deg, var(--primary), var(--teal));
+        color: #ffffff;
+      }
+
+      header p,
+      header h1 {
+        margin: 0;
+      }
+
+      header h1 {
+        margin-top: 8px;
+        font-size: clamp(28px, 5vw, 42px);
+        line-height: 1.15;
+      }
+
+      nav {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-top: 22px;
+      }
+
+      nav a {
+        border: 1px solid rgba(255, 255, 255, 0.7);
+        border-radius: 999px;
+        padding: 7px 14px;
+        color: #ffffff;
+        font-weight: 700;
+        text-decoration: none;
+      }
+
+      nav a:focus-visible,
+      nav a:hover {
+        background: #ffffff;
+        color: var(--primary);
+      }
+
+      .content {
+        padding: 30px;
+      }
+
+      section + section {
+        margin-top: 42px;
+        padding-top: 34px;
+        border-top: 1px solid var(--border);
+      }
+
+      h2,
+      h3 {
+        color: var(--primary);
+        line-height: 1.3;
+      }
+
+      h2 {
+        margin: 0 0 12px;
+        font-size: 26px;
+      }
+
+      h3 {
+        margin: 26px 0 8px;
+        font-size: 19px;
+      }
+
+      ul {
+        padding-left: 22px;
+      }
+
+      li {
+        margin: 7px 0;
+      }
+
+      a {
+        color: var(--teal);
+        font-weight: 750;
+      }
+
+      .contact {
+        margin-top: 20px;
+        border-left: 4px solid var(--gold);
+        border-radius: 6px;
+        padding: 16px 18px;
+        background: #fbfaf5;
+      }
+
+      .muted {
+        color: var(--muted);
+      }
+
+      footer {
+        padding: 20px 30px;
+        border-top: 1px solid var(--border);
+        background: #f8fafc;
+        color: var(--muted);
+        font-size: 14px;
+      }
+
+      @media (max-width: 560px) {
+        main {
+          width: min(100% - 20px, 920px);
+          padding: 18px 0 28px;
+        }
+
+        header,
+        .content {
+          padding: 22px;
+        }
+
+        footer {
+          padding: 18px 22px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <article class="panel">
+        <header>
+          <p>ELVAN</p>
+          <h1>Uygulama Desteği / App Support</h1>
+          <nav aria-label="Dil bağlantıları / Language links">
+            <a href="#turkce">Türkçe</a>
+            <a href="#english" lang="en">English</a>
+          </nav>
+        </header>
+
+        <div class="content">
+          <section id="turkce">
+            <h2>ELVAN Rapor desteği</h2>
+            <p>
+              ELVAN Rapor, kurum tarafından yetkilendirilen kullanıcıların
+              barkod tarama, üretim ve sevkiyat raporlarına erişim işlemleri
+              için kullanılan kurumsal bir uygulamadır.
+            </p>
+
+            <h3>Destek alabileceğiniz konular</h3>
+            <ul>
+              <li>Hesaba giriş ve erişim yetkileri</li>
+              <li>Kamera ile barkod tarama veya elle barkod girişi</li>
+              <li>Rapor, müşteri ve tarih filtreleri</li>
+              <li>PDF görüntüleme, yakınlaştırma ve paylaşma</li>
+              <li>Bildirim izni ve bildirim teslimi</li>
+            </ul>
+
+            <div class="contact">
+              <strong>Destek e-postası:</strong>
+              <a href="mailto:mysfyldz04@gmail.com?subject=ELVAN%20Rapor%20Destek">
+                mysfyldz04@gmail.com
+              </a>
+              <p class="muted">
+                Lütfen e-posta ile parola veya gizli üretim verisi göndermeyin.
+              </p>
+            </div>
+
+            <h3>Gizlilik ve veri silme</h3>
+            <p>
+              <a href="/privacy-policy.html">Gizlilik politikasını</a>
+              inceleyebilir veya
+              <a href="/data-deletion.html">veri silme talebi sayfasını</a>
+              kullanabilirsiniz.
+            </p>
+          </section>
+
+          <section id="english" lang="en">
+            <h2>ELVAN Report support</h2>
+            <p>
+              ELVAN Report is an enterprise app used by authorized users to
+              scan barcodes and access production and shipment reports.
+            </p>
+
+            <h3>Topics we can help with</h3>
+            <ul>
+              <li>Account sign-in and report permissions</li>
+              <li>Camera barcode scanning or manual barcode entry</li>
+              <li>Report, customer, and date filters</li>
+              <li>Viewing, zooming, and sharing PDF reports</li>
+              <li>Notification permission and delivery</li>
+            </ul>
+
+            <div class="contact">
+              <strong>Support email:</strong>
+              <a href="mailto:mysfyldz04@gmail.com?subject=ELVAN%20Report%20Support">
+                mysfyldz04@gmail.com
+              </a>
+              <p class="muted">
+                Do not send passwords or confidential production data by email.
+              </p>
+            </div>
+
+            <h3>Privacy and data deletion</h3>
+            <p>
+              Read our <a href="/privacy-policy.html">privacy policy</a> or use
+              the <a href="/data-deletion.html">data deletion request page</a>.
+            </p>
+          </section>
+        </div>
+
+        <footer>Son güncelleme / Last updated: 10 August 2026</footer>
+      </article>
+    </main>
+  </body>
+</html>

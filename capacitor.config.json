@@ -12,7 +12,7 @@
       "hidden": false
     },
     "PushNotifications": {
-      "presentationOptions": ["sound", "alert", "banner", "list"]
+      "presentationOptions": ["badge", "sound", "alert"]
     }
   }
 }

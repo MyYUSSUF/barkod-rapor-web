@@ -2,6 +2,8 @@ node_modules
 dist
 .env*
 !.env.example
+!.env.ios
+!.env.ios-debug
 .DS_Store
 
 .vercel
@@ -16,6 +18,15 @@ android/.kotlin/
 android/**/*.aab
 android/**/*.apk
 android/**/build/
+
+# iOS / App Store secrets and local Xcode state
+ios/App/App/GoogleService-Info.plist
+ios/App/xcuserdata/
+ios/App/*.xcworkspace/xcuserdata/
+ios/App/*.xcodeproj/xcuserdata/
+ios/**/*.ipa
+ios/**/*.xcarchive
+ios/DerivedData/
 
 # Local test worktrees and artifacts
 /work/

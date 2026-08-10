@@ -3,6 +3,7 @@ import test from 'node:test'
 
 import {
   decideAndroidUpdateState,
+  decideNativeUpdateState,
   isMandatoryAppUpdate,
   isValidAppUpdatePolicy,
   normalizeAppUpdatePolicy,
@@ -265,5 +266,31 @@ test('unrecognized status values fail closed as unknown', () => {
   assert.deepEqual(
     decide({ remotePolicyStatus: 'not-a-real-status' }),
     { action: 'retry', reason: 'policy-status-unknown' },
+  )
+})
+
+test('iOS ilk surumunde magazada kayit yokken dogrulanmis uzak politika girise izin verir', () => {
+  assert.deepEqual(
+    decideNativeUpdateState({
+      policy: disabledPolicy,
+      currentVersionCode: 1,
+      storeStatus: PLAY_UPDATE_STATUS.UNKNOWN,
+      remotePolicyStatus: REMOTE_POLICY_STATUS.VERIFIED,
+      allowUnknownStoreStatus: true,
+    }),
+    { action: 'allow', reason: 'store-status-bypass' },
+  )
+})
+
+test('iOS uzak minimum derleme numarasi magazadan bagimsiz olarak eski surumu engeller', () => {
+  assert.deepEqual(
+    decideNativeUpdateState({
+      policy: { forceUpdate: true, minimumVersionCode: 2 },
+      currentVersionCode: 1,
+      storeStatus: PLAY_UPDATE_STATUS.UNKNOWN,
+      remotePolicyStatus: REMOTE_POLICY_STATUS.VERIFIED,
+      allowUnknownStoreStatus: true,
+    }),
+    { action: 'require', reason: 'policy' },
   )
 })
