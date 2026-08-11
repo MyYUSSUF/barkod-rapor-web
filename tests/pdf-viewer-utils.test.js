@@ -5,11 +5,27 @@ import {
   MAX_PDF_ZOOM,
   MIN_PDF_ZOOM,
   PDF_SHARE_CACHE_PATH,
+  getPdfShareCachePath,
   isPdfShareCancellation,
   normalizePdfZoom,
   removeCachedPdfFile,
   removeStaleCachedPdfFiles,
 } from '../src/lib/pdfViewerUtils.js'
+
+test('native PDF share path preserves the user-facing report filename', () => {
+  const fileName = 'Inspection_Raporu_12345.pdf'
+  const path = getPdfShareCachePath(fileName, 1780000000000)
+
+  assert.equal(
+    path,
+    `${PDF_SHARE_CACHE_PATH}/1780000000000/${fileName}`,
+  )
+  assert.equal(path.split('/').at(-1), fileName)
+  assert.equal(
+    getPdfShareCachePath('../unsafe.pdf', 1780000000000),
+    `${PDF_SHARE_CACHE_PATH}/1780000000000/report.pdf`,
+  )
+})
 
 test('PDF zoom normalization clamps invalid and extreme values', () => {
   assert.equal(normalizePdfZoom(Number.NaN), MIN_PDF_ZOOM)
@@ -57,21 +73,26 @@ test('Android share chooser cancellation is not treated as a failure', () => {
   )
 })
 
-test('only stale PDF share cache files are removed on a later lifecycle', async () => {
+test('only stale PDF share cache entries are removed on a later lifecycle', async () => {
   const deletedPaths = []
+  const deletedDirectories = []
   const filesystem = {
     async readdir() {
       return {
         files: [
           { name: 'old.pdf', type: 'file', mtime: 100 },
           { name: 'recent.pdf', type: 'file', mtime: 900 },
-          { name: 'folder', type: 'directory', mtime: 0 },
+          { name: '1780000000000', type: 'directory', mtime: 100 },
+          { name: '1780000001000', type: 'directory', mtime: 900 },
           { name: '../unsafe.pdf', type: 'file', mtime: 0 },
         ],
       }
     },
     async deleteFile({ path }) {
       deletedPaths.push(path)
+    },
+    async rmdir(options) {
+      deletedDirectories.push(options)
     },
   }
 
@@ -81,8 +102,15 @@ test('only stale PDF share cache files are removed on a later lifecycle', async 
     now: 1000,
   })
 
-  assert.deepEqual(result, { checked: true, failed: 0, removed: 1 })
+  assert.deepEqual(result, { checked: true, failed: 0, removed: 2 })
   assert.deepEqual(deletedPaths, [`${PDF_SHARE_CACHE_PATH}/old.pdf`])
+  assert.deepEqual(deletedDirectories, [
+    {
+      path: `${PDF_SHARE_CACHE_PATH}/1780000000000`,
+      directory: 'CACHE',
+      recursive: true,
+    },
+  ])
 })
 
 test('missing share cache directory is a non-fatal cleanup result', async () => {

@@ -12,7 +12,7 @@ import {
   readPdfBodyWithLimit,
 } from '../api/report-pdf.js'
 
-const allowedUrl = 'http://repx.elvandyeing.com/report.pdf'
+const allowedUrl = 'https://repx.elvandyeing.com/report.pdf'
 
 test('PDF content-length only accepts non-negative safe integers', () => {
   assert.equal(REPORT_PDF_MAX_BYTES, 4 * 1024 * 1024)
@@ -38,6 +38,7 @@ test('PDF MIME and signature checks accept only expected binary data', () => {
 
 test('PDF allowlist rejects credentials, custom ports and foreign hosts', () => {
   assert.equal(isAllowedReportUrl(allowedUrl), true)
+  assert.equal(isAllowedReportUrl('http://repx.elvandyeing.com/report.pdf'), false)
   assert.equal(isAllowedReportUrl('http://10.64.46.5/report.pdf'), true)
   assert.equal(
     isAllowedReportUrl('http://user@repx.elvandyeing.com/report.pdf'),
@@ -143,8 +144,25 @@ test('PDF fetch follows a bounded same-origin redirect manually', async () => {
   assert.equal(calls[0].options.redirect, 'manual')
   assert.equal(
     calls[1].url,
-    'http://repx.elvandyeing.com/final.pdf',
+    'https://repx.elvandyeing.com/final.pdf',
   )
+})
+
+test('PDF fetch upgrades legacy public HTTP URLs before requesting them', async () => {
+  const calls = []
+  const fetchImpl = async (url) => {
+    calls.push(url)
+    return new Response('%PDF-1.7\nvalid', {
+      status: 200,
+      headers: { 'Content-Type': 'application/pdf' },
+    })
+  }
+
+  await fetchPdfWithLimits('http://repx.elvandyeing.com/report.pdf', {
+    fetchImpl,
+  })
+
+  assert.deepEqual(calls, ['https://repx.elvandyeing.com/report.pdf'])
 })
 
 test('PDF fetch rejects redirects outside the report allowlist', async () => {

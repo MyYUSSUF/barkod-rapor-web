@@ -6,7 +6,7 @@ import {
 import { handleCors } from './_cors.js'
 import { enforceRequestLimit } from './_rate-limit.js'
 
-const BASE_URL = 'http://repx.elvandyeing.com'
+const BASE_URL = 'https://repx.elvandyeing.com'
 export const REPORT_PDF_TIMEOUT_MS = 30_000
 // Vercel'in 4,5 MB buffered yanıt sınırının güvenli biçimde altında kalır.
 export const REPORT_PDF_MAX_BYTES = 4 * 1024 * 1024
@@ -296,6 +296,7 @@ function convertInternalUrlToPublicIfNeeded(url) {
   if (!url) return ''
 
   return url
+    .replace('http://repx.elvandyeing.com', BASE_URL)
     .replace('http://10.64.46.5', BASE_URL)
     .replace('https://10.64.46.5', BASE_URL)
 }
@@ -378,11 +379,11 @@ export default async function handler(req, res) {
       // Zaten decode edilmiş olabilir.
     }
 
+    pdfUrl = convertInternalUrlToPublicIfNeeded(pdfUrl)
+
     if (!isAllowedReportUrl(pdfUrl)) {
       return res.status(403).send('Bu PDF adresine izin verilmiyor.')
     }
-
-    pdfUrl = convertInternalUrlToPublicIfNeeded(pdfUrl)
 
     if (
       !canProfileViewReport(authResult.profile, reportCode) ||

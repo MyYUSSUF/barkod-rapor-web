@@ -7,7 +7,7 @@ import {
 import { handleCors } from './_cors.js'
 import { enforceRequestLimit } from './_rate-limit.js'
 
-const BASE_URL = 'http://repx.elvandyeing.com'
+const BASE_URL = 'https://repx.elvandyeing.com'
 const ENDPOINT = `${BASE_URL}/RepxService/vxC_RepxWebService.asmx`
 const WSDL_URL = `${ENDPOINT}?WSDL`
 const SHIPMENT_CUSTOMER_CODES = new Set([
@@ -142,6 +142,7 @@ function convertInternalUrlToPublicIfNeeded(url) {
 
   return String(url)
     .replaceAll('\\', '/')
+    .replace('http://repx.elvandyeing.com', BASE_URL)
     .replace('http://10.64.46.5', BASE_URL)
     .replace('https://10.64.46.5', BASE_URL)
 }

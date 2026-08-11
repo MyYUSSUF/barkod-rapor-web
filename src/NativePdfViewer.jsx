@@ -14,7 +14,7 @@ import PdfDetailLayer from './PdfDetailLayer'
 import {
   MAX_PDF_ZOOM,
   MIN_PDF_ZOOM,
-  PDF_SHARE_CACHE_PATH,
+  getPdfShareCachePath,
   isPdfShareCancellation,
   normalizePdfZoom,
   removeStaleCachedPdfFiles,
@@ -1213,7 +1213,7 @@ function NativePdfViewer({
           directory: Directory.Cache,
         })
 
-        const nativePath = `${PDF_SHARE_CACHE_PATH}/${Date.now()}-${finalFileName}`
+        const nativePath = getPdfShareCachePath(finalFileName)
         const data = await blobToBase64(blob)
 
         await Filesystem.writeFile({
