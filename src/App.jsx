@@ -263,9 +263,10 @@ const LANGUAGES = {
     appUpdateRequiredBody:
       'Uygulamaya devam etmek için en son sürümü yükleyin.',
     appUpdateCheckingTitle: 'Sürüm kontrol ediliyor',
-    appUpdateCheckingBody: 'Google Play ve güncelleme politikası kontrol ediliyor.',
+    appUpdateCheckingBody:
+      'Uygulama mağazası ve güncelleme politikası kontrol ediliyor.',
     appUpdateCheckFailed:
-      'Google Play sürüm kontrolü tamamlanamadı. İnternet bağlantınızı kontrol edip yeniden deneyin.',
+      'Uygulama mağazası sürüm kontrolü tamamlanamadı. İnternet bağlantınızı kontrol edip yeniden deneyin.',
     appUpdateRetry: 'Tekrar dene',
   },
   en: {
@@ -383,9 +384,9 @@ const LANGUAGES = {
     appUpdateRequiredBody:
       'Install the latest version to continue using the application.',
     appUpdateCheckingTitle: 'Checking app version',
-    appUpdateCheckingBody: 'Checking Google Play and the update policy.',
+    appUpdateCheckingBody: 'Checking the app store and the update policy.',
     appUpdateCheckFailed:
-      'The Google Play version check could not be completed. Check your connection and try again.',
+      'The app store version check could not be completed. Check your connection and try again.',
     appUpdateRetry: 'Try again',
   },
   ar: {
@@ -503,9 +504,9 @@ const LANGUAGES = {
     appUpdateRequiredBody:
       'ثبّت أحدث إصدار للمتابعة في استخدام التطبيق.',
     appUpdateCheckingTitle: 'جارٍ التحقق من الإصدار',
-    appUpdateCheckingBody: 'جارٍ التحقق من Google Play وسياسة التحديث.',
+    appUpdateCheckingBody: 'جارٍ التحقق من متجر التطبيقات وسياسة التحديث.',
     appUpdateCheckFailed:
-      'تعذر إكمال التحقق من إصدار Google Play. تحقق من اتصال الإنترنت ثم أعد المحاولة.',
+      'تعذر إكمال التحقق من إصدار متجر التطبيقات. تحقق من اتصال الإنترنت ثم أعد المحاولة.',
     appUpdateRetry: 'أعد المحاولة',
   },
 }

@@ -1,6 +1,7 @@
 node_modules
 dist
 .env*
+_env*.local
 !.env.example
 !.env.ios
 !.env.ios-debug

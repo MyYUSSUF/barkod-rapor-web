@@ -17,6 +17,12 @@ test('iOS release configuration targets iPhone and includes APNs entitlements', 
 
   assert.doesNotMatch(project, /TARGETED_DEVICE_FAMILY = "1,2";/)
   assert.equal((project.match(/TARGETED_DEVICE_FAMILY = 1;/g) || []).length, 2)
+  assert.equal((project.match(/SUPPORTS_MACCATALYST = NO;/g) || []).length, 2)
+  assert.equal(
+    (project.match(/SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;/g) || [])
+      .length,
+    2,
+  )
   assert.equal((project.match(/DEVELOPMENT_TEAM = PWHAK3QZ88;/g) || []).length, 2)
   assert.equal(
     (project.match(/CODE_SIGN_ENTITLEMENTS = App\/App\.entitlements;/g) || [])

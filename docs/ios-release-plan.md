@@ -48,6 +48,7 @@ App Store Connect soruları gönderimden önce mevcut üretim davranışıyla ye
 8. İlk girişte bildirim izninin yalnız bir kez istendiğini doğrula.
 9. Apple geliştirme APNs anahtarıyla sandbox bildirimi gönderip gerçek iPhone'da doğrula.
 10. Üretim paketi için `npm run ios:sync` çalıştır; Archive ve TestFlight yüklemesini Xcode'dan yap.
+11. App Store Connect > Pricing and Availability > iPhone and iPad Apps on Apple Silicon Mac bölümünde `Make this app available` seçeneğini kapalı tut; Mac dağıtımı yapılmayacak.
 
 ## APNs sunucu ayarları
 

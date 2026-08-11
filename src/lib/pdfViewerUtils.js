@@ -3,6 +3,22 @@ export const MAX_PDF_ZOOM = 3
 export const PDF_SHARE_CACHE_PATH = 'shared-pdfs'
 export const PDF_SHARE_CACHE_MAX_AGE_MS = 15 * 60 * 1000
 
+export function getPdfShareCachePath(fileName, uniqueDirectory = Date.now()) {
+  const cleanFileName = String(fileName || 'report.pdf').trim()
+  const cleanDirectory = String(uniqueDirectory).trim()
+  const safeDirectory = /^[a-zA-Z0-9._-]+$/.test(cleanDirectory)
+    ? cleanDirectory
+    : String(Date.now())
+  const safeFileName =
+    cleanFileName &&
+    !cleanFileName.includes('/') &&
+    !cleanFileName.includes('\\')
+      ? cleanFileName
+      : 'report.pdf'
+
+  return `${PDF_SHARE_CACHE_PATH}/${safeDirectory}/${safeFileName}`
+}
+
 export function normalizePdfZoom(value) {
   const nextZoom = Number(value)
 
@@ -74,11 +90,16 @@ export async function removeStaleCachedPdfFiles(
   let removed = 0
 
   for (const file of files) {
-    const modifiedAt = Number(file?.mtime ?? file?.ctime)
     const fileName = String(file?.name || '')
+    const directoryTimestamp = /^\d+$/.test(fileName)
+      ? Number(fileName)
+      : Number.NaN
+    const modifiedAt = Number(
+      file?.mtime ?? file?.ctime ?? directoryTimestamp,
+    )
 
     if (
-      file?.type !== 'file' ||
+      (file?.type !== 'file' && file?.type !== 'directory') ||
       !fileName ||
       fileName.includes('/') ||
       fileName.includes('\\') ||
@@ -88,10 +109,27 @@ export async function removeStaleCachedPdfFiles(
       continue
     }
 
-    const didRemove = await removeCachedPdfFile(filesystem, {
-      path: `${path}/${fileName}`,
-      directory,
-    })
+    let didRemove = false
+
+    if (file.type === 'directory') {
+      if (typeof filesystem?.rmdir === 'function') {
+        try {
+          await filesystem.rmdir({
+            path: `${path}/${fileName}`,
+            directory,
+            recursive: true,
+          })
+          didRemove = true
+        } catch {
+          didRemove = false
+        }
+      }
+    } else {
+      didRemove = await removeCachedPdfFile(filesystem, {
+        path: `${path}/${fileName}`,
+        directory,
+      })
+    }
 
     if (didRemove) {
       removed += 1
