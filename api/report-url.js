@@ -5,6 +5,7 @@ import {
   getReportDefinition,
 } from './_report-access.js'
 import { handleCors } from './_cors.js'
+import { getNotificationLanguageForReportLanguage } from './_notification-language.js'
 import { enforceRequestLimit } from './_rate-limit.js'
 
 const BASE_URL = 'https://repx.elvandyeing.com'
@@ -94,11 +95,7 @@ function getUserCodeForReport(reportCode, customerCode) {
 }
 
 function getReportLocale(reportLanguage) {
-  const cleanLanguage = reportLanguage
-    ? String(reportLanguage).trim().toLowerCase()
-    : 'tr'
-
-  if (['en', 'eng', 'english', 'ar', 'ara', 'arabic'].includes(cleanLanguage)) {
+  if (getNotificationLanguageForReportLanguage(reportLanguage) === 'en') {
     return {
       languageCode: 'ENG',
       currentCultureName: 'EN-us',
@@ -108,6 +105,31 @@ function getReportLocale(reportLanguage) {
   return {
     languageCode: 'TUR',
     currentCultureName: 'TR-tr',
+  }
+}
+
+export async function rememberNativeNotificationLanguage(
+  authResult,
+  reportLanguage,
+) {
+  if (!authResult?.deviceHash || !authResult?.supabase?.rpc) {
+    return false
+  }
+
+  try {
+    const { data, error } = await authResult.supabase.rpc(
+      'set_native_notification_language',
+      {
+        p_device_hash: authResult.deviceHash,
+        p_notification_language:
+          getNotificationLanguageForReportLanguage(reportLanguage),
+      },
+    )
+
+    return !error && data === true
+  } catch {
+    // Language discovery is best effort and must never block a report.
+    return false
   }
 }
 
@@ -342,6 +364,8 @@ export default async function handler(req, res) {
     ) {
       return res.status(400).json({ error: 'Geçerli bir müşteri seçilmelidir.' })
     }
+
+    await rememberNativeNotificationLanguage(authResult, reportLanguage)
 
     const pdfUrl = await getReportPdfUrl(cleanReportCode, {
       barcode: reportDefinition.requiresBarcode ? barcode : '',

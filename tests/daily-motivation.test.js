@@ -4,7 +4,7 @@ import test from 'node:test'
 import {
   DAILY_MOTIVATION_MESSAGES,
   getDailyMotivation,
-  getIstanbulCalendarDate,
+  getCairoCalendarDate,
 } from '../api/_daily-motivation.js'
 import {
   claimDailyMotivationRun,
@@ -14,13 +14,36 @@ import {
 
 test('90 unique and notification-safe motivational messages are configured', () => {
   assert.equal(DAILY_MOTIVATION_MESSAGES.length, 90)
-  assert.equal(new Set(DAILY_MOTIVATION_MESSAGES).size, 90)
+  assert.equal(
+    new Set(DAILY_MOTIVATION_MESSAGES.map((message) => message.en)).size,
+    90,
+  )
+  assert.equal(
+    new Set(DAILY_MOTIVATION_MESSAGES.map((message) => message.tr)).size,
+    90,
+  )
 
   for (const message of DAILY_MOTIVATION_MESSAGES) {
-    assert.equal(typeof message, 'string')
-    assert.ok(message.length > 0)
-    assert.ok(message.length <= 120)
+    assert.equal(typeof message.en, 'string')
+    assert.equal(typeof message.tr, 'string')
+    assert.ok(message.en.length > 0)
+    assert.ok(message.tr.length > 0)
+    assert.ok(message.en.length <= 120)
+    assert.ok(message.tr.length <= 120)
   }
+})
+
+test('daily motivation contains matching English and Turkish payloads', () => {
+  const motivation = getDailyMotivation(
+    new Date('2026-09-04T04:30:00.000Z'),
+  )
+  const message = DAILY_MOTIVATION_MESSAGES[motivation.messageId - 1]
+
+  assert.equal(motivation.body, message.en)
+  assert.equal(motivation.messages.en.body, message.en)
+  assert.equal(motivation.messages.tr.body, message.tr)
+  assert.equal(motivation.messages.en.title, 'Good Morning ☀️')
+  assert.equal(motivation.messages.tr.title, 'Günaydın ☀️')
 })
 
 test('each message is used once before the 90-day cycle repeats', () => {
@@ -36,28 +59,54 @@ test('each message is used once before the 90-day cycle repeats', () => {
   assert.deepEqual(secondCycle, firstCycle)
 })
 
-test('calendar date follows Europe/Istanbul around the UTC day boundary', () => {
+test('calendar date follows Africa/Cairo around the UTC day boundary', () => {
   assert.deepEqual(
-    getIstanbulCalendarDate(new Date('2026-09-03T21:30:00.000Z')),
+    getCairoCalendarDate(new Date('2026-12-31T22:30:00.000Z')),
+    { year: 2027, month: 1, day: 1 },
+  )
+  assert.deepEqual(
+    getCairoCalendarDate(new Date('2026-09-03T21:30:00.000Z')),
     { year: 2026, month: 9, day: 4 },
   )
 })
 
 test('cron authentication requires an exact bearer secret', () => {
   const env = { CRON_SECRET: 'strong-test-secret' }
-  const date = new Date('2026-09-03T04:30:00.000Z')
+  const date = new Date('2026-09-04T04:30:00.000Z')
 
-  assert.deepEqual(
-    getAuthorizedCronMotivation({
+  const motivation = getAuthorizedCronMotivation({
       headers: { authorization: 'Bearer strong-test-secret' },
-    }, { env, date }),
-    getDailyMotivation(date),
-  )
+    }, { env, date })
+  assert.equal(motivation.date, getDailyMotivation(date).date)
+  assert.equal(motivation.messageId, getDailyMotivation(date).messageId)
+  assert.equal(motivation.scheduleAttempt, 'primary')
   assert.throws(
     () => getAuthorizedCronMotivation({
       headers: { authorization: 'Bearer wrong-secret' },
     }, { env, date }),
     /Yetkisiz/,
+  )
+})
+
+test('authenticated cron requests outside Cairo delivery windows are skipped', () => {
+  const request = {
+    headers: { authorization: 'Bearer strong-test-secret' },
+  }
+  const env = { CRON_SECRET: 'strong-test-secret' }
+
+  assert.deepEqual(
+    getAuthorizedCronMotivation(request, {
+      env,
+      date: new Date('2026-09-04T05:30:00.000Z'),
+    }),
+    { skipped: true, reason: 'outside_cairo_schedule' },
+  )
+  assert.deepEqual(
+    getAuthorizedCronMotivation(request, {
+      env,
+      date: new Date('2026-12-01T04:30:00.000Z'),
+    }),
+    { skipped: true, reason: 'outside_cairo_schedule' },
   )
 })
 

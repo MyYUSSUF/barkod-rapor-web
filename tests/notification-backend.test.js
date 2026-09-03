@@ -7,6 +7,7 @@ import {
   fetchAllPages,
   filterEligibleNotificationTargets,
   getDeliveryResponseStatus,
+  getScheduledNotificationPayload,
   MAX_NOTIFICATION_BODY_LENGTH,
   MAX_NOTIFICATION_TITLE_LENGTH,
   validateNotificationPayload,
@@ -18,6 +19,7 @@ import {
   replaceNativePushSubscription,
   unregisterNativePushSubscription,
 } from '../api/push-registration.js'
+import { rememberNativeNotificationLanguage } from '../api/report-url.js'
 
 function createFakeSupabase({
   deleteResults = [],
@@ -110,6 +112,50 @@ test('notification payload applies defaults and rejects unsafe title/body sizes'
   )
 })
 
+test('scheduled payload follows each subscription language and defaults unknown registrations to Turkish', () => {
+  const motivation = {
+    title: 'Good Morning',
+    body: 'Keep going.',
+    url: '/',
+    messages: {
+      en: { title: 'Good Morning', body: 'Keep going.' },
+      tr: { title: 'Günaydın', body: 'Devam et.' },
+    },
+  }
+
+  assert.deepEqual(getScheduledNotificationPayload(motivation, 'en'), {
+    title: 'Good Morning',
+    body: 'Keep going.',
+    url: '/',
+  })
+  assert.deepEqual(getScheduledNotificationPayload(motivation, 'tr'), {
+    title: 'Günaydın',
+    body: 'Devam et.',
+    url: '/',
+  })
+  assert.deepEqual(getScheduledNotificationPayload(motivation, null), {
+    title: 'Günaydın',
+    body: 'Devam et.',
+    url: '/',
+  })
+})
+
+test('scheduled payload also supports the localized compatibility key', () => {
+  const motivation = {
+    title: 'Good Morning',
+    body: 'Keep going.',
+    localized: {
+      en: { title: 'Good Morning', body: 'Keep going.' },
+      tr: { title: 'Günaydın', body: 'Devam et.' },
+    },
+  }
+
+  assert.equal(
+    getScheduledNotificationPayload(motivation, 'tr').body,
+    'Devam et.',
+  )
+})
+
 test('paginated reads consume every counted row and fail explicitly above the bound', async () => {
   const source = Array.from({ length: 1201 }, (_, index) => ({ id: index }))
   const ranges = []
@@ -196,11 +242,13 @@ test('native registration hashes the server device token and replaces a mapped i
   const request = normalizePushRegistrationRequest({
     platform: 'android',
     token: 'fcm-token-value-that-is-long-enough',
+    notificationLanguage: 'EN',
   })
   assert.deepEqual(request, {
     action: 'register',
     platform: 'android',
     token: 'fcm-token-value-that-is-long-enough',
+    notificationLanguage: 'en',
   })
 
   const record = createNativeSubscriptionRecord({
@@ -210,6 +258,7 @@ test('native registration hashes the server device token and replaces a mapped i
     token: request.token,
     deviceName: 'Android',
     appVersion: '16',
+    notificationLanguage: request.notificationLanguage,
     now: new Date('2026-08-03T12:00:00.000Z'),
   })
   const fake = createFakeSupabase()
@@ -221,6 +270,7 @@ test('native registration hashes the server device token and replaces a mapped i
   ])
   assert.equal(fake.calls[1].operation, 'upsert')
   assert.equal(fake.calls[1].record.device_hash, deviceHash)
+  assert.equal(fake.calls[1].record.notification_language, 'en')
   assert.deepEqual(fake.calls[1].options, { onConflict: 'token' })
   assert.equal(
     fake.calls.some((call) =>
@@ -237,6 +287,7 @@ test('authenticated unregister deletes only the current user installation', asyn
     action: 'unregister',
     platform: 'android',
     token: '',
+    notificationLanguage: null,
   })
 
   const fake = createFakeSupabase({
@@ -259,11 +310,103 @@ test('iOS APNs kayitlarini yerel bildirim tablosuna kabul eder', () => {
   const token = 'a'.repeat(64)
   assert.deepEqual(
     normalizePushRegistrationRequest({ platform: 'ios', token }),
-    { action: 'register', platform: 'ios', token },
+    { action: 'register', platform: 'ios', token, notificationLanguage: null },
   )
   assert.deepEqual(
     normalizePushRegistrationRequest({ platform: 'ios-sandbox', token }),
-    { action: 'register', platform: 'ios-sandbox', token },
+    {
+      action: 'register',
+      platform: 'ios-sandbox',
+      token,
+      notificationLanguage: null,
+    },
+  )
+})
+
+test('native registration validates language and preserves it when an older build omits it', () => {
+  assert.throws(
+    () => normalizePushRegistrationRequest({
+      platform: 'android',
+      token: 'fcm-token-value-that-is-long-enough',
+      notificationLanguage: 'de',
+    }),
+    /bildirim dili/,
+  )
+
+  const record = createNativeSubscriptionRecord({
+    userId: 'user-1',
+    deviceHash: 'hash-1',
+    platform: 'android',
+    token: 'fcm-token-value-that-is-long-enough',
+  })
+
+  assert.equal('notification_language' in record, false)
+})
+
+test('native registration remains compatible while the language migration is rolling out', async () => {
+  const missingLanguageError = {
+    message: "Could not find the 'notification_language' column",
+  }
+  const fake = createFakeSupabase({
+    upsertResults: [
+      { error: missingLanguageError },
+      { error: null },
+    ],
+  })
+  const record = createNativeSubscriptionRecord({
+    userId: 'user-1',
+    deviceHash: 'hash-1',
+    platform: 'android',
+    token: 'fcm-token-value-that-is-long-enough',
+    notificationLanguage: 'tr',
+  })
+
+  assert.deepEqual(
+    await replaceNativePushSubscription(fake, record),
+    { legacySchema: false },
+  )
+  assert.equal(fake.calls[1].record.notification_language, 'tr')
+  assert.equal('notification_language' in fake.calls[2].record, false)
+})
+
+test('authenticated report requests can teach an existing native registration its language', async () => {
+  const calls = []
+  const authResult = {
+    deviceHash: 'a'.repeat(64),
+    supabase: {
+      async rpc(name, parameters) {
+        calls.push({ name, parameters })
+        return { data: true, error: null }
+      },
+    },
+  }
+
+  assert.equal(
+    await rememberNativeNotificationLanguage(authResult, 'ar'),
+    true,
+  )
+  assert.deepEqual(calls, [{
+    name: 'set_native_notification_language',
+    parameters: {
+      p_device_hash: 'a'.repeat(64),
+      p_notification_language: 'en',
+    },
+  }])
+})
+
+test('language discovery never blocks a report when the preference cannot be saved', async () => {
+  const authResult = {
+    deviceHash: 'a'.repeat(64),
+    supabase: {
+      async rpc() {
+        return { data: null, error: { message: 'migration pending' } }
+      },
+    },
+  }
+
+  assert.equal(
+    await rememberNativeNotificationLanguage(authResult, 'tr'),
+    false,
   )
 })
 

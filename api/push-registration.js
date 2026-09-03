@@ -2,6 +2,10 @@ import crypto from 'crypto'
 import { createClient } from '@supabase/supabase-js'
 import { verifyApprovedDeviceRequest } from './_device-auth.js'
 import { handleCors } from './_cors.js'
+import {
+  parseOptionalNotificationLanguage,
+  SUPPORTED_NOTIFICATION_LANGUAGES,
+} from './_notification-language.js'
 import { enforceRequestLimit } from './_rate-limit.js'
 
 function isNotBlank(value) {
@@ -34,6 +38,10 @@ export function normalizePushRegistrationRequest(body = {}) {
     body.platform || (action === 'unregister' ? 'android' : ''),
   ).trim().toLowerCase()
   const token = String(body.token || '').trim()
+  const rawNotificationLanguage = body.notificationLanguage
+  const notificationLanguage = parseOptionalNotificationLanguage(
+    rawNotificationLanguage,
+  )
 
   if (!['register', 'unregister'].includes(action)) {
     throw new PushRegistrationError('Geçersiz bildirim kayıt işlemi.')
@@ -50,7 +58,16 @@ export function normalizePushRegistrationRequest(body = {}) {
     throw new PushRegistrationError('Geçersiz bildirim anahtarı.')
   }
 
-  return { action, platform, token }
+  if (
+    isNotBlank(rawNotificationLanguage) &&
+    !SUPPORTED_NOTIFICATION_LANGUAGES.has(
+      String(rawNotificationLanguage).trim().toLowerCase(),
+    )
+  ) {
+    throw new PushRegistrationError('Geçersiz bildirim dili.')
+  }
+
+  return { action, platform, token, notificationLanguage }
 }
 
 export function createNativeSubscriptionRecord({
@@ -60,9 +77,10 @@ export function createNativeSubscriptionRecord({
   token,
   deviceName,
   appVersion,
+  notificationLanguage,
   now = new Date(),
 }) {
-  return {
+  const record = {
     user_id: userId,
     device_hash: deviceHash,
     platform,
@@ -71,10 +89,22 @@ export function createNativeSubscriptionRecord({
     app_version: String(appVersion || '').slice(0, 80),
     updated_at: now.toISOString(),
   }
+
+  // Older app builds do not send a language. Omitting the column keeps an
+  // already learned preference intact during their periodic token refreshes.
+  if (notificationLanguage) {
+    record.notification_language = notificationLanguage
+  }
+
+  return record
 }
 
 function isMissingDeviceHashColumn(error) {
   return String(error?.message || '').includes('device_hash')
+}
+
+function isMissingNotificationLanguageColumn(error) {
+  return String(error?.message || '').includes('notification_language')
 }
 
 export async function replaceNativePushSubscription(
@@ -98,9 +128,20 @@ export async function replaceNativePushSubscription(
         Object.entries(subscriptionRecord).filter(([key]) => key !== 'device_hash'),
       )
     : subscriptionRecord
-  const { error } = await supabaseAdmin
+  let { error } = await supabaseAdmin
     .from('native_push_subscriptions')
     .upsert(record, { onConflict: 'token' })
+
+  if (error && isMissingNotificationLanguageColumn(error)) {
+    const { notification_language: ignoredLanguage, ...legacyLanguageRecord } =
+      record
+    void ignoredLanguage
+
+    const fallbackResult = await supabaseAdmin
+      .from('native_push_subscriptions')
+      .upsert(legacyLanguageRecord, { onConflict: 'token' })
+    error = fallbackResult.error
+  }
 
   if (error) {
     throw new Error(error.message)
@@ -246,7 +287,8 @@ export default async function handler(req, res) {
     }
 
     const body = parseBody(req)
-    const { action, platform, token } = normalizePushRegistrationRequest(body)
+    const { action, platform, token, notificationLanguage } =
+      normalizePushRegistrationRequest(body)
     const deviceToken = String(getHeader(req, 'x-device-token') || '').trim()
     const deviceHash = hashDeviceToken(deviceToken)
 
@@ -286,6 +328,7 @@ export default async function handler(req, res) {
       token,
       deviceName: body.deviceName,
       appVersion: body.appVersion,
+      notificationLanguage,
     })
     const result = await replaceNativePushSubscription(
       supabaseAdmin,

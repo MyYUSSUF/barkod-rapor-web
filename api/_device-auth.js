@@ -265,8 +265,9 @@ export async function verifyApprovedDeviceRequest(req, options = {}) {
     }
   }
 
+  const deviceHash = hashDeviceToken(deviceToken)
   const { data, error } = await authResult.supabase.rpc('check_device_access', {
-    p_device_hash: hashDeviceToken(deviceToken),
+    p_device_hash: deviceHash,
   })
 
   if (error) {
@@ -277,7 +278,7 @@ export async function verifyApprovedDeviceRequest(req, options = {}) {
   let status = result.status || (typeof data === 'string' ? data : 'missing')
   status = await allowDeviceWithoutApproval({
     userId: authResult.userId,
-    deviceHash: hashDeviceToken(deviceToken),
+    deviceHash,
     deviceName: getHeader(req, 'user-agent'),
     status,
   })
@@ -296,6 +297,7 @@ export async function verifyApprovedDeviceRequest(req, options = {}) {
 
   return {
     ...authResult,
+    deviceHash,
     deviceStatus: status,
     deviceApproved: true,
   }

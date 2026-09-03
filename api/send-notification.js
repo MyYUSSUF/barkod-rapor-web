@@ -4,6 +4,8 @@ import { timingSafeEqual } from 'node:crypto'
 import { verifyApprovedDeviceRequest } from './_device-auth.js'
 import { handleCors } from './_cors.js'
 import { getDailyMotivation } from './_daily-motivation.js'
+import { getCairoScheduleAttempt } from './_motivation-schedule.js'
+import { getNotificationLanguage } from './_notification-language.js'
 import { getFcmToken } from './_notification-targets.js'
 import {
   createApnsPayload,
@@ -80,7 +82,19 @@ export function getAuthorizedCronMotivation(
     throw new NotificationBackendError('Yetkisiz zamanlayıcı isteği.', 401)
   }
 
-  return getDailyMotivation(date)
+  const scheduleAttempt = getCairoScheduleAttempt(date)
+
+  if (!scheduleAttempt) {
+    return {
+      skipped: true,
+      reason: 'outside_cairo_schedule',
+    }
+  }
+
+  return {
+    ...getDailyMotivation(date),
+    scheduleAttempt: scheduleAttempt.attempt,
+  }
 }
 
 export async function claimDailyMotivationRun(supabaseAdmin, motivation) {
@@ -255,6 +269,23 @@ export function validateNotificationPayload({ title, body, url } = {}) {
   })
 
   return payload
+}
+
+export function getScheduledNotificationPayload(
+  motivation,
+  notificationLanguage,
+) {
+  const language = getNotificationLanguage(notificationLanguage)
+  const localizedPayload =
+    motivation?.messages?.[language] ||
+    motivation?.localized?.[language] ||
+    {}
+
+  return validateNotificationPayload({
+    title: localizedPayload.title || motivation?.title,
+    body: localizedPayload.body || motivation?.body,
+    url: localizedPayload.url || motivation?.url,
+  })
 }
 
 export async function fetchAllPages(fetchPage, options = {}) {
@@ -462,38 +493,72 @@ export function filterEligibleNotificationTargets({
   }
 }
 
-function isMissingDeviceHashColumn(error) {
-  const message = String(error?.message || error || '')
-  return message.includes('device_hash')
+async function fetchSubscriptionRows(supabaseAdmin, {
+  table,
+  baseColumns,
+  optionalColumns = [],
+  label,
+}) {
+  let selectedOptionalColumns = [...optionalColumns]
+
+  while (true) {
+    try {
+      const rows = await fetchTablePages(supabaseAdmin, {
+        table,
+        columns: [...baseColumns, ...selectedOptionalColumns].join(', '),
+        label,
+      })
+      const missingColumns = optionalColumns.filter(
+        (column) => !selectedOptionalColumns.includes(column),
+      )
+
+      return rows.map((row) => ({
+        ...row,
+        ...Object.fromEntries(missingColumns.map((column) => [column, null])),
+      }))
+    } catch (error) {
+      const message = String(error?.message || error || '')
+      const missingColumn = selectedOptionalColumns.find((column) =>
+        message.includes(column),
+      )
+
+      if (!missingColumn) throw error
+
+      selectedOptionalColumns = selectedOptionalColumns.filter(
+        (column) => column !== missingColumn,
+      )
+    }
+  }
 }
 
 async function loadNotificationTargets(supabaseAdmin) {
-  const webSubscriptions = await fetchTablePages(supabaseAdmin, {
+  const webSubscriptions = await fetchSubscriptionRows(supabaseAdmin, {
     table: 'push_subscriptions',
-    columns: 'id, user_id, endpoint, subscription, user_agent, created_at',
+    baseColumns: [
+      'id',
+      'user_id',
+      'endpoint',
+      'subscription',
+      'user_agent',
+      'created_at',
+    ],
+    optionalColumns: ['notification_language'],
     label: 'Web Push kayıtları',
   })
-  let nativeSubscriptions
-
-  try {
-    nativeSubscriptions = await fetchTablePages(supabaseAdmin, {
-      table: 'native_push_subscriptions',
-      columns: 'id, user_id, device_hash, platform, token, device_name, app_version, created_at',
-      label: 'Yerel bildirim kayıtları',
-    })
-  } catch (error) {
-    if (!isMissingDeviceHashColumn(error)) throw error
-
-    const legacySubscriptions = await fetchTablePages(supabaseAdmin, {
-      table: 'native_push_subscriptions',
-      columns: 'id, user_id, platform, token, device_name, app_version, created_at',
-      label: 'Yerel bildirim kayıtları',
-    })
-    nativeSubscriptions = legacySubscriptions.map((item) => ({
-      ...item,
-      device_hash: null,
-    }))
-  }
+  const nativeSubscriptions = await fetchSubscriptionRows(supabaseAdmin, {
+    table: 'native_push_subscriptions',
+    baseColumns: [
+      'id',
+      'user_id',
+      'platform',
+      'token',
+      'device_name',
+      'app_version',
+      'created_at',
+    ],
+    optionalColumns: ['device_hash', 'notification_language'],
+    label: 'Yerel bildirim kayıtları',
+  })
 
   const storedTotal = webSubscriptions.length + nativeSubscriptions.length
 
@@ -639,6 +704,7 @@ function makeSafeError(sendError) {
 export default async function handler(req, res) {
   let scheduledMotivation = null
   let scheduledSupabaseAdmin = null
+  let scheduledRunClaimed = false
   let scheduledSent = 0
 
   if (handleCors(req, res)) {
@@ -658,6 +724,11 @@ export default async function handler(req, res) {
     scheduledMotivation = isCronRequest
       ? getAuthorizedCronMotivation(req)
       : null
+
+    if (isCronRequest && scheduledMotivation?.skipped) {
+      return res.status(200).json(scheduledMotivation)
+    }
+
     const { secret, title, body, url } = scheduledMotivation || req.body || {}
 
     const vapidPublicKey = getVapidPublicKey()
@@ -706,10 +777,33 @@ export default async function handler(req, res) {
           },
         })
       }
+
+      scheduledRunClaimed = true
     }
 
     const payloadData = validateNotificationPayload({ title, body, url })
-    const payload = JSON.stringify(payloadData)
+    const scheduledPayloads = new Map()
+    const getPayloadForTarget = (target) => {
+      if (!scheduledMotivation) {
+        return payloadData
+      }
+
+      const notificationLanguage = getNotificationLanguage(
+        target?.notification_language,
+      )
+
+      if (!scheduledPayloads.has(notificationLanguage)) {
+        scheduledPayloads.set(
+          notificationLanguage,
+          getScheduledNotificationPayload(
+            scheduledMotivation,
+            notificationLanguage,
+          ),
+        )
+      }
+
+      return scheduledPayloads.get(notificationLanguage)
+    }
 
     const {
       webSubscriptions,
@@ -773,7 +867,10 @@ export default async function handler(req, res) {
           WEB_PUSH_SEND_CONCURRENCY,
           async (item) => {
             try {
-              await webPush.sendNotification(item.subscription, payload)
+              await webPush.sendNotification(
+                item.subscription,
+                JSON.stringify(getPayloadForTarget(item)),
+              )
               return { item, ok: true }
             } catch (sendError) {
               return {
@@ -837,14 +934,15 @@ export default async function handler(req, res) {
             }
 
             try {
+              const targetPayload = getPayloadForTarget(item)
               const response = await sendFcmHttpRequest({
                 accessToken,
                 projectId,
                 message: createFcmMessage({
                   token,
-                  title: payloadData.title,
-                  body: payloadData.body,
-                  url: payloadData.url,
+                  title: targetPayload.title,
+                  body: targetPayload.body,
+                  url: targetPayload.url,
                 }),
               })
               const fcmErrorDetail = response.payload?.error?.details?.find(
@@ -928,7 +1026,6 @@ export default async function handler(req, res) {
       try {
         const configuration = readApnsConfiguration(process.env, environment)
         const providerToken = getApnsProviderToken(configuration)
-        const apnsPayload = createApnsPayload(payloadData)
 
         const apnsResults = await withApnsClient({
           environment,
@@ -938,6 +1035,9 @@ export default async function handler(req, res) {
               APNS_SEND_CONCURRENCY,
               async (item) => {
                 try {
+                  const apnsPayload = createApnsPayload(
+                    getPayloadForTarget(item),
+                  )
                   const response = await sendApnsHttpRequest({
                     client,
                     token: item.token,
@@ -1053,6 +1153,7 @@ export default async function handler(req, res) {
       responsePayload.scheduledMotivation = {
         date: scheduledMotivation.date,
         messageId: scheduledMotivation.messageId,
+        attempt: scheduledMotivation.scheduleAttempt,
       }
 
       await finishDailyMotivationRun(supabaseAdmin, scheduledMotivation, {
@@ -1071,7 +1172,11 @@ export default async function handler(req, res) {
 
     return res.status(responseStatus).json(responsePayload)
   } catch (error) {
-    if (scheduledMotivation && scheduledSupabaseAdmin) {
+    if (
+      scheduledRunClaimed &&
+      scheduledMotivation &&
+      scheduledSupabaseAdmin
+    ) {
       await finishDailyMotivationRun(
         scheduledSupabaseAdmin,
         scheduledMotivation,

@@ -1982,13 +1982,33 @@ function App() {
       return false
     }
 
+    const notificationLanguage = getReportLanguageForAppLanguage()
     const currentRegistration = webPushRegistrationRef.current
-
-    if (
+    const hasCurrentRegistration =
       currentRegistration?.userId === userId &&
       currentRegistration?.generation === notificationSession.generation
-    ) {
-      return currentRegistration.promise
+
+    if (hasCurrentRegistration) {
+      if (currentRegistration.notificationLanguage === notificationLanguage) {
+        return currentRegistration.promise
+      }
+
+      await currentRegistration.promise
+
+      if (webPushRegistrationRef.current === currentRegistration) {
+        webPushRegistrationRef.current = null
+      }
+
+      if (
+        !isSessionLifecycleCurrent(
+          notificationSessionRef.current,
+          notificationSession,
+        )
+      ) {
+        return false
+      }
+
+      return registerPushSubscription(userId, options)
     }
 
     const isCurrent = () =>
@@ -2079,20 +2099,34 @@ function App() {
 
       const subscriptionJson = subscription.toJSON()
 
-      const { error } = await supabase
+      const subscriptionRecord = {
+        user_id: userId,
+        endpoint: subscription.endpoint,
+        subscription: subscriptionJson,
+        user_agent: getDeviceName(),
+        notification_language: notificationLanguage,
+        updated_at: new Date().toISOString(),
+      }
+      let { error } = await supabase
         .from('push_subscriptions')
         .upsert(
-          {
-            user_id: userId,
-            endpoint: subscription.endpoint,
-            subscription: subscriptionJson,
-            user_agent: getDeviceName(),
-            updated_at: new Date().toISOString(),
-          },
+          subscriptionRecord,
           {
             onConflict: 'endpoint',
           }
         )
+
+      if (error && String(error.message || '').includes('notification_language')) {
+        const {
+          notification_language: ignoredLanguage,
+          ...legacySubscriptionRecord
+        } = subscriptionRecord
+        void ignoredLanguage
+        const fallbackResult = await supabase
+          .from('push_subscriptions')
+          .upsert(legacySubscriptionRecord, { onConflict: 'endpoint' })
+        error = fallbackResult.error
+      }
 
       if (error) {
         throw new Error(error.message)
@@ -2126,6 +2160,7 @@ function App() {
       generation: notificationSession.generation,
       promise: registrationTask,
       userId,
+      notificationLanguage,
     }
     webPushRegistrationRef.current = registrationRecord
 
@@ -2154,13 +2189,33 @@ function App() {
       return false
     }
 
+    const notificationLanguage = getReportLanguageForAppLanguage()
     const currentRegistration = nativePushRegistrationRef.current
-
-    if (
+    const hasCurrentRegistration =
       currentRegistration?.userId === userId &&
       currentRegistration?.generation === notificationSession.generation
-    ) {
-      return currentRegistration.promise
+
+    if (hasCurrentRegistration) {
+      if (currentRegistration.notificationLanguage === notificationLanguage) {
+        return currentRegistration.promise
+      }
+
+      await currentRegistration.promise
+
+      if (nativePushRegistrationRef.current === currentRegistration) {
+        nativePushRegistrationRef.current = null
+      }
+
+      if (
+        !isSessionLifecycleCurrent(
+          notificationSessionRef.current,
+          notificationSession,
+        )
+      ) {
+        return false
+      }
+
+      return registerNativePushSubscription(userId, options)
     }
 
     const isCurrent = () =>
@@ -2242,6 +2297,7 @@ function App() {
               appVersion: nativeAppInfo
                 ? `${nativeAppInfo.version || ''} (${nativeAppInfo.build || ''})`
                 : APP_LOG_VERSION,
+              notificationLanguage,
             }),
           },
           NOTIFICATION_OPERATION_TIMEOUT_MS,
@@ -2284,6 +2340,7 @@ function App() {
       generation: notificationSession.generation,
       promise: registrationTask,
       userId,
+      notificationLanguage,
     }
     nativePushRegistrationRef.current = registrationRecord
 
@@ -3581,11 +3638,12 @@ function App() {
 
       return () => window.clearTimeout(subscriptionTimer)
     }
-    // Abonelik yenileme yalnızca oturum kullanıcısı değiştiğinde çalışmalıdır.
+    // Dil değiştiğinde mevcut aboneliğin bildirim dili de güncellenir.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     appUpdateCheckPending,
     appUpdateNotice.mandatory,
+    language,
     userProfile?.id,
   ])
 
@@ -3627,11 +3685,12 @@ function App() {
       active = false
       listenerHandle?.remove()
     }
-    // Foreground token refresh must follow the active signed-in Android user.
+    // Foreground token refresh must follow the active user and language.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     appUpdateCheckPending,
     appUpdateNotice.mandatory,
+    language,
     userProfile?.id,
   ])
 
