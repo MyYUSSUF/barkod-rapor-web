@@ -246,9 +246,15 @@ async function getAdminData(supabaseAdmin) {
     profileMap.set(profile.id, profile)
   }
 
-  const { data: loginLogs, error: loginLogsError } = await supabaseAdmin
+  const {
+    data: loginLogs,
+    count: loginLogCount,
+    error: loginLogsError,
+  } = await supabaseAdmin
     .from('login_logs')
-    .select('id, user_id, event_type, device_name, app_version, created_at')
+    .select('id, user_id, event_type, device_name, app_version, created_at', {
+      count: 'exact',
+    })
     .order('created_at', { ascending: false })
     .limit(30)
 
@@ -256,9 +262,16 @@ async function getAdminData(supabaseAdmin) {
     throw new Error(loginLogsError.message)
   }
 
-  const { data: reportLogs, error: reportLogsError } = await supabaseAdmin
+  const {
+    data: reportLogs,
+    count: reportLogCount,
+    error: reportLogsError,
+  } = await supabaseAdmin
     .from('report_logs')
-    .select('id, user_id, barcode, report_code, report_name, device_name, app_version, created_at')
+    .select(
+      'id, user_id, barcode, report_code, report_name, device_name, app_version, created_at',
+      { count: 'exact' }
+    )
     .order('created_at', { ascending: false })
     .range(0, 9999)
 
@@ -307,6 +320,8 @@ async function getAdminData(supabaseAdmin) {
     devices: enrichLogs(visibleDevices, profileMap),
     loginLogs: enrichLogs(loginLogs || [], profileMap),
     reportLogs: enrichLogs(reportLogs || [], profileMap),
+    loginLogCount: loginLogCount ?? (loginLogs || []).length,
+    reportLogCount: reportLogCount ?? (reportLogs || []).length,
     subscriptionCount:
       (subscriptionCount || 0) + (nativeSubscriptionCount || 0),
   }

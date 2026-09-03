@@ -874,6 +874,24 @@ const statBoxStyle = {
   background: '#ffffff',
 }
 
+function PasswordVisibilityIcon({ visible }) {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M2.1 12s3.6-6 9.9-6 9.9 6 9.9 6-3.6 6-9.9 6-9.9-6-9.9-6Z" />
+      <circle cx="12" cy="12" r="2.8" />
+      {visible && <path d="m4 4 16 16" />}
+    </svg>
+  )
+}
+
 function AppFooter({ text, privacyLabel }) {
   return (
     <p className="appFooter">
@@ -1459,6 +1477,8 @@ function App() {
     devices: [],
     loginLogs: [],
     reportLogs: [],
+    loginLogCount: 0,
+    reportLogCount: 0,
     subscriptionCount: 0,
   })
 
@@ -2480,6 +2500,8 @@ function App() {
         devices: result.devices || [],
         loginLogs: result.loginLogs || [],
         reportLogs: result.reportLogs || [],
+        loginLogCount: result.loginLogCount ?? result.loginLogs?.length ?? 0,
+        reportLogCount: result.reportLogCount ?? result.reportLogs?.length ?? 0,
         subscriptionCount: result.subscriptionCount || 0,
       })
     } catch (err) {
@@ -4986,7 +5008,11 @@ function App() {
     {
       key: 'logs',
       title: 'Son Hareketler',
-      summary: `${selectedAdminLogs.length} kayıt`,
+      summary: `${
+        adminLogView === 'login'
+          ? adminData.loginLogCount
+          : adminData.reportLogCount
+      } kayıt`,
     },
     {
       key: 'users',
@@ -5032,7 +5058,7 @@ function App() {
     {
       key: 'reports',
       title: 'Raporlar',
-      count: `${adminData.reportLogs.length} kayıt`,
+      count: `${adminData.reportLogCount} kayıt`,
       description: 'Rapor kullanım hareketlerini inceleyin',
     },
     {
@@ -5266,7 +5292,7 @@ function App() {
                         }))
                       }
                     >
-                      {passwordVisible ? 'Gizle' : 'Göster'}
+                      <PasswordVisibilityIcon visible={passwordVisible} />
                     </button>
                   </div>
                   <button
@@ -5630,8 +5656,8 @@ function App() {
                 </article>
                 <article>
                   <span>Rapor Log</span>
-                  <strong>{adminData.reportLogs.length}</strong>
-                  <small>{adminData.loginLogs.length} giriş kaydı</small>
+                  <strong>{adminData.reportLogCount}</strong>
+                  <small>{adminData.loginLogCount} giriş kaydı</small>
                 </article>
               </div>
 
@@ -5932,7 +5958,9 @@ function App() {
                             setNewAdminUserPasswordVisible((current) => !current)
                           }
                         >
-                          {newAdminUserPasswordVisible ? 'Gizle' : 'Göster'}
+                          <PasswordVisibilityIcon
+                            visible={newAdminUserPasswordVisible}
+                          />
                         </button>
                       </span>
                     </label>
@@ -6071,14 +6099,14 @@ function App() {
             <div className="adminStatBox" style={statBoxStyle}>
               <strong>Login Log</strong>
               <p className="subtitle" style={{ margin: '8px 0 0' }}>
-                {adminData.loginLogs.length}
+                {adminData.loginLogCount}
               </p>
             </div>
 
             <div className="adminStatBox" style={statBoxStyle}>
               <strong>Rapor Log</strong>
               <p className="subtitle" style={{ margin: '8px 0 0' }}>
-                {adminData.reportLogs.length}
+                {adminData.reportLogCount}
               </p>
             </div>
 

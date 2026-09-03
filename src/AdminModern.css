@@ -358,29 +358,43 @@
 
 .desktopPasswordField input {
   width: 100%;
-  padding-right: 72px !important;
+  padding-right: 48px !important;
 }
 
 .desktopPasswordToggle {
   position: absolute;
   top: 50%;
-  right: 7px;
-  width: auto;
-  min-height: 30px;
-  padding: 4px 8px;
+  right: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  min-height: 34px;
+  margin: 0;
+  padding: 0;
   border: 0;
-  border-radius: 7px;
+  border-radius: 8px;
   background: #eef2f6;
   color: #344054;
   font: inherit;
-  font-size: 11px;
-  font-weight: 800;
   transform: translateY(-50%);
   cursor: pointer;
 }
 
+.desktopPasswordToggle svg {
+  width: 18px;
+  height: 18px;
+  pointer-events: none;
+}
+
 .desktopPasswordToggle:hover {
   background: #e4e7ec;
+}
+
+.desktopPasswordToggle:hover:not(:disabled),
+.desktopPasswordToggle:active {
+  transform: translateY(-50%);
 }
 
 .desktopInlineForm .desktopPasswordField {
