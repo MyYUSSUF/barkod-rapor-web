@@ -3,6 +3,7 @@ import test from 'node:test'
 
 import {
   DAILY_MOTIVATION_MESSAGES,
+  formatDailyMotivationBody,
   getDailyMotivation,
   getCairoCalendarDate,
 } from '../api/_daily-motivation.js'
@@ -26,10 +27,23 @@ test('90 unique and notification-safe motivational messages are configured', () 
   for (const message of DAILY_MOTIVATION_MESSAGES) {
     assert.equal(typeof message.en, 'string')
     assert.equal(typeof message.tr, 'string')
+    assert.equal(typeof message.author, 'string')
     assert.ok(message.en.length > 0)
     assert.ok(message.tr.length > 0)
+    assert.ok(message.author.length > 0)
     assert.ok(message.en.length <= 120)
     assert.ok(message.tr.length <= 120)
+    assert.ok(formatDailyMotivationBody(message, 'en').length <= 160)
+    assert.ok(formatDailyMotivationBody(message, 'tr').length <= 160)
+  }
+})
+
+test('messages exclude religious, political, war, and death themes', () => {
+  const excludedThemes = /\b(?:god|heaven|religion|government|politics|war|death)\b|allah|tanrı|cennet|dinî|hükümet|siyaset|savaş|ölüm/iu
+
+  for (const message of DAILY_MOTIVATION_MESSAGES) {
+    assert.doesNotMatch(message.en, excludedThemes)
+    assert.doesNotMatch(message.tr, excludedThemes)
   }
 })
 
@@ -39,9 +53,12 @@ test('daily motivation contains matching English and Turkish payloads', () => {
   )
   const message = DAILY_MOTIVATION_MESSAGES[motivation.messageId - 1]
 
-  assert.equal(motivation.body, message.en)
-  assert.equal(motivation.messages.en.body, message.en)
-  assert.equal(motivation.messages.tr.body, message.tr)
+  const englishBody = formatDailyMotivationBody(message, 'en')
+  const turkishBody = formatDailyMotivationBody(message, 'tr')
+
+  assert.equal(motivation.body, englishBody)
+  assert.equal(motivation.messages.en.body, englishBody)
+  assert.equal(motivation.messages.tr.body, turkishBody)
   assert.equal(motivation.messages.en.title, 'Good Morning ☀️')
   assert.equal(motivation.messages.tr.title, 'Günaydın ☀️')
 })
