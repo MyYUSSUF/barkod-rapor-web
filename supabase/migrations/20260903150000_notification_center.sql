@@ -157,8 +157,8 @@ begin
 
   dispatcher_command := replace(
     template_command,
-    '/api/send-notification',
-    '/api/notification-automations'
+    '(select decrypted_secret from vault.decrypted_secrets where name = ''daily_motivation_url'' limit 1)',
+    'replace((select decrypted_secret from vault.decrypted_secrets where name = ''daily_motivation_url'' limit 1), ''/api/send-notification'', ''/api/notification-automations'')'
   );
 
   if dispatcher_command = template_command then
