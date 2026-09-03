@@ -1369,12 +1369,14 @@ function App() {
   const webPushRegistrationRef = useRef(null)
   const nativePushTokenRef = useRef('')
   const notificationSessionRef = useRef({ generation: 0, userId: '' })
+  const notificationLanguageRef = useRef('tr')
   const logoutInProgressRef = useRef(false)
   const messageTimeoutRef = useRef(null)
 
   const [language, setLanguage] = useState(() => {
     return localStorage.getItem(LANGUAGE_KEY) || 'tr'
   })
+  notificationLanguageRef.current = language === 'tr' ? 'tr' : 'en'
 
   const t = LANGUAGES[language]
   const isArabic = language === 'ar'
@@ -1982,7 +1984,7 @@ function App() {
       return false
     }
 
-    const notificationLanguage = getReportLanguageForAppLanguage()
+    const notificationLanguage = notificationLanguageRef.current
     const currentRegistration = webPushRegistrationRef.current
     const hasCurrentRegistration =
       currentRegistration?.userId === userId &&
@@ -2189,7 +2191,7 @@ function App() {
       return false
     }
 
-    const notificationLanguage = getReportLanguageForAppLanguage()
+    const notificationLanguage = notificationLanguageRef.current
     const currentRegistration = nativePushRegistrationRef.current
     const hasCurrentRegistration =
       currentRegistration?.userId === userId &&
