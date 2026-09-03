@@ -8,8 +8,10 @@ import {
   filterEligibleNotificationTargets,
   getDeliveryResponseStatus,
   getScheduledNotificationPayload,
+  limitNotificationTargetsToLatest,
   MAX_NOTIFICATION_BODY_LENGTH,
   MAX_NOTIFICATION_TITLE_LENGTH,
+  normalizeNotificationTargetUserId,
   validateNotificationPayload,
 } from '../api/send-notification.js'
 import {
@@ -110,6 +112,40 @@ test('notification payload applies defaults and rejects unsafe title/body sizes'
     () => validateNotificationPayload({ body: '😀'.repeat(701) }),
     /bayt/,
   )
+})
+
+test('manual notification target accepts only a valid user UUID', () => {
+  const userId = 'c02e2629-18e0-4e2f-b38b-cc4fa0044bb6'
+
+  assert.equal(normalizeNotificationTargetUserId(` ${userId.toUpperCase()} `), userId)
+  assert.equal(normalizeNotificationTargetUserId(''), null)
+  assert.throws(
+    () => normalizeNotificationTargetUserId('yusuf'),
+    /Geçersiz bildirim hedefi/,
+  )
+})
+
+test('single-device delivery keeps only the most recently updated eligible target', () => {
+  const targets = {
+    webSubscriptions: [
+      { id: 'web-1', updated_at: '2026-09-01T08:00:00.000Z' },
+    ],
+    nativeSubscriptions: [
+      { id: 'ios-old', updated_at: '2026-08-16T10:00:00.000Z' },
+      { id: 'ios-current', updated_at: '2026-09-03T11:00:00.000Z' },
+    ],
+    skipped: { inactiveProfile: 0 },
+    storedTotal: 3,
+  }
+
+  assert.deepEqual(limitNotificationTargetsToLatest(targets), {
+    webSubscriptions: [],
+    nativeSubscriptions: [
+      { id: 'ios-current', updated_at: '2026-09-03T11:00:00.000Z' },
+    ],
+    skipped: { inactiveProfile: 0, otherDevices: 2 },
+    storedTotal: 3,
+  })
 })
 
 test('scheduled payload follows each subscription language and defaults unknown registrations to Turkish', () => {

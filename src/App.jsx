@@ -1422,6 +1422,8 @@ function App() {
 
   const [adminNotificationTitle, setAdminNotificationTitle] = useState('Elvan Barkod Rapor')
   const [adminNotificationBody, setAdminNotificationBody] = useState('')
+  const [adminNotificationTargetUserId, setAdminNotificationTargetUserId] =
+    useState('')
   const [adminNotificationSending, setAdminNotificationSending] = useState(false)
   const [adminNotificationMessage, setAdminNotificationMessage] = useState('')
 
@@ -2751,6 +2753,8 @@ function App() {
             title: cleanTitle,
             body: cleanBody,
             url: '/',
+            targetUserId: adminNotificationTargetUserId || undefined,
+            singleDevice: Boolean(adminNotificationTargetUserId),
           }),
         },
         NOTIFICATION_SEND_TIMEOUT_MS,
@@ -5824,6 +5828,26 @@ function App() {
                   rows={5}
                 />
 
+                <label htmlFor="desktopNotificationTarget">Alıcı</label>
+                <select
+                  id="desktopNotificationTarget"
+                  value={adminNotificationTargetUserId}
+                  onChange={(e) =>
+                    setAdminNotificationTargetUserId(e.target.value)
+                  }
+                  disabled={adminNotificationSending}
+                >
+                  <option value="">Tüm aktif kullanıcılar</option>
+                  {adminData.users.map((user) => (
+                    <option key={user.id} value={user.id}>
+                      {user.full_name || user.email}
+                    </option>
+                  ))}
+                </select>
+                {adminNotificationTargetUserId && (
+                  <small>Yalnızca bu kullanıcının en son aktif cihazına gönderilir.</small>
+                )}
+
                 <button
                   type="button"
                   className="mainButton"
@@ -5960,6 +5984,26 @@ function App() {
               disabled={adminNotificationSending}
               rows={4}
             />
+
+            <label htmlFor="adminNotificationTarget">Alıcı</label>
+            <select
+              id="adminNotificationTarget"
+              value={adminNotificationTargetUserId}
+              onChange={(e) =>
+                setAdminNotificationTargetUserId(e.target.value)
+              }
+              disabled={adminNotificationSending}
+            >
+              <option value="">Tüm aktif kullanıcılar</option>
+              {adminData.users.map((user) => (
+                <option key={user.id} value={user.id}>
+                  {user.full_name || user.email}
+                </option>
+              ))}
+            </select>
+            {adminNotificationTargetUserId && (
+              <small>Yalnızca bu kullanıcının en son aktif cihazına gönderilir.</small>
+            )}
 
             <button
               type="button"

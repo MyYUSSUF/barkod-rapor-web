@@ -38,6 +38,8 @@ const MAX_NOTIFICATION_TITLE_BYTES = 480
 const MAX_NOTIFICATION_BODY_BYTES = 2800
 const MAX_NOTIFICATION_URL_LENGTH = 512
 const MAX_NOTIFICATION_URL_BYTES = 512
+const USER_ID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
 export class NotificationBackendError extends Error {
   constructor(message, statusCode = 500) {
@@ -49,6 +51,20 @@ export class NotificationBackendError extends Error {
 
 function isNotBlank(value) {
   return value !== null && value !== undefined && String(value).trim() !== ''
+}
+
+export function normalizeNotificationTargetUserId(value) {
+  if (!isNotBlank(value)) {
+    return null
+  }
+
+  const targetUserId = String(value).trim().toLowerCase()
+
+  if (!USER_ID_PATTERN.test(targetUserId)) {
+    throw new NotificationBackendError('Geçersiz bildirim hedefi.', 400)
+  }
+
+  return targetUserId
 }
 
 function secretsMatch(actual, expected) {
@@ -498,6 +514,7 @@ async function fetchSubscriptionRows(supabaseAdmin, {
   baseColumns,
   optionalColumns = [],
   label,
+  applyFilters,
 }) {
   let selectedOptionalColumns = [...optionalColumns]
 
@@ -507,6 +524,7 @@ async function fetchSubscriptionRows(supabaseAdmin, {
         table,
         columns: [...baseColumns, ...selectedOptionalColumns].join(', '),
         label,
+        applyFilters,
       })
       const missingColumns = optionalColumns.filter(
         (column) => !selectedOptionalColumns.includes(column),
@@ -531,7 +549,48 @@ async function fetchSubscriptionRows(supabaseAdmin, {
   }
 }
 
-async function loadNotificationTargets(supabaseAdmin) {
+export function limitNotificationTargetsToLatest(targets = {}) {
+  const webSubscriptions = targets.webSubscriptions || []
+  const nativeSubscriptions = targets.nativeSubscriptions || []
+  const candidates = [
+    ...webSubscriptions.map((item) => ({ item, type: 'web' })),
+    ...nativeSubscriptions.map((item) => ({ item, type: 'native' })),
+  ]
+
+  if (candidates.length <= 1) {
+    return targets
+  }
+
+  const latest = candidates.reduce((currentLatest, candidate) => {
+    const candidateTime = new Date(
+      candidate.item.updated_at || candidate.item.created_at || 0,
+    ).getTime()
+    const latestTime = new Date(
+      currentLatest.item.updated_at || currentLatest.item.created_at || 0,
+    ).getTime()
+
+    return candidateTime > latestTime ? candidate : currentLatest
+  })
+
+  return {
+    ...targets,
+    webSubscriptions: latest.type === 'web' ? [latest.item] : [],
+    nativeSubscriptions: latest.type === 'native' ? [latest.item] : [],
+    skipped: {
+      ...(targets.skipped || {}),
+      otherDevices:
+        Number(targets.skipped?.otherDevices || 0) + candidates.length - 1,
+    },
+  }
+}
+
+async function loadNotificationTargets(
+  supabaseAdmin,
+  { targetUserId, singleDevice = false } = {},
+) {
+  const applyTargetFilter = targetUserId
+    ? (query) => query.eq('user_id', targetUserId)
+    : undefined
   const webSubscriptions = await fetchSubscriptionRows(supabaseAdmin, {
     table: 'push_subscriptions',
     baseColumns: [
@@ -541,9 +600,11 @@ async function loadNotificationTargets(supabaseAdmin) {
       'subscription',
       'user_agent',
       'created_at',
+      'updated_at',
     ],
     optionalColumns: ['notification_language'],
     label: 'Web Push kayıtları',
+    applyFilters: applyTargetFilter,
   })
   const nativeSubscriptions = await fetchSubscriptionRows(supabaseAdmin, {
     table: 'native_push_subscriptions',
@@ -555,9 +616,11 @@ async function loadNotificationTargets(supabaseAdmin) {
       'device_name',
       'app_version',
       'created_at',
+      'updated_at',
     ],
     optionalColumns: ['device_hash', 'notification_language'],
     label: 'Yerel bildirim kayıtları',
+    applyFilters: applyTargetFilter,
   })
 
   const storedTotal = webSubscriptions.length + nativeSubscriptions.length
@@ -591,12 +654,16 @@ async function loadNotificationTargets(supabaseAdmin) {
     }),
   ])
 
-  return filterEligibleNotificationTargets({
+  const targets = filterEligibleNotificationTargets({
     webSubscriptions,
     nativeSubscriptions,
     profiles,
     userDevices,
   })
+
+  return targetUserId && singleDevice
+    ? limitNotificationTargetsToLatest(targets)
+    : targets
 }
 
 export function getDeliveryResponseStatus({ total, sent, failed }) {
@@ -729,7 +796,8 @@ export default async function handler(req, res) {
       return res.status(200).json(scheduledMotivation)
     }
 
-    const { secret, title, body, url } = scheduledMotivation || req.body || {}
+    const requestData = scheduledMotivation || req.body || {}
+    const { secret, title, body, url } = requestData
 
     const vapidPublicKey = getVapidPublicKey()
     const vapidPrivateKey = getVapidPrivateKey()
@@ -746,6 +814,11 @@ export default async function handler(req, res) {
         error: authResult.error || 'Yetkisiz istek.',
       })
     }
+
+    const targetUserId = isCronRequest
+      ? null
+      : normalizeNotificationTargetUserId(requestData.targetUserId)
+    const singleDevice = Boolean(targetUserId && requestData.singleDevice === true)
 
     if (
       !enforceRequestLimit(res, {
@@ -810,7 +883,10 @@ export default async function handler(req, res) {
       nativeSubscriptions,
       skipped,
       storedTotal,
-    } = await loadNotificationTargets(supabaseAdmin)
+    } = await loadNotificationTargets(supabaseAdmin, {
+      targetUserId,
+      singleDevice,
+    })
     const androidSubscriptions = nativeSubscriptions.filter(
       (item) => !item.platform || item.platform === 'android',
     )
@@ -1144,6 +1220,8 @@ export default async function handler(req, res) {
       cleanupFailed: cleanup.failed,
       cleanup,
       authMethod: authResult.method,
+      targeted: Boolean(targetUserId),
+      singleDevice,
       vapidPublicKeyLength: vapidPublicKey.length,
       vapidSubject,
       failedDetails,
