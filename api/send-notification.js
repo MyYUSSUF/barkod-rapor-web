@@ -1,7 +1,9 @@
 import webPush from 'web-push'
 import { createClient } from '@supabase/supabase-js'
+import { timingSafeEqual } from 'node:crypto'
 import { verifyApprovedDeviceRequest } from './_device-auth.js'
 import { handleCors } from './_cors.js'
+import { getDailyMotivation } from './_daily-motivation.js'
 import { getFcmToken } from './_notification-targets.js'
 import {
   createApnsPayload,
@@ -45,6 +47,100 @@ export class NotificationBackendError extends Error {
 
 function isNotBlank(value) {
   return value !== null && value !== undefined && String(value).trim() !== ''
+}
+
+function secretsMatch(actual, expected) {
+  if (!isNotBlank(actual) || !isNotBlank(expected)) {
+    return false
+  }
+
+  const actualBuffer = Buffer.from(String(actual))
+  const expectedBuffer = Buffer.from(String(expected))
+
+  return actualBuffer.length === expectedBuffer.length &&
+    timingSafeEqual(actualBuffer, expectedBuffer)
+}
+
+export function getAuthorizedCronMotivation(
+  req,
+  { env = process.env, date = new Date() } = {},
+) {
+  const cronSecret = env.CRON_SECRET
+
+  if (!isNotBlank(cronSecret)) {
+    throw new NotificationBackendError(
+      'Zamanlayıcı güvenlik ayarı eksik.',
+      503,
+    )
+  }
+
+  const authorization = req.headers?.authorization || req.headers?.Authorization || ''
+
+  if (!secretsMatch(authorization, `Bearer ${cronSecret}`)) {
+    throw new NotificationBackendError('Yetkisiz zamanlayıcı isteği.', 401)
+  }
+
+  return getDailyMotivation(date)
+}
+
+export async function claimDailyMotivationRun(supabaseAdmin, motivation) {
+  const { data, error } = await supabaseAdmin.rpc(
+    'claim_daily_motivation_run',
+    {
+      p_run_date: motivation.date,
+      p_message_id: motivation.messageId,
+      // Keep ambiguous, interrupted runs locked beyond the scheduled retry
+      // window so a device is not sent the same morning message twice.
+      p_lease_minutes: 60,
+    },
+  )
+
+  if (error) {
+    throw new NotificationBackendError(
+      'Günlük bildirim kaydı oluşturulamadı.',
+    )
+  }
+
+  if (data !== true) {
+    return { claimed: false, reason: 'already_completed_or_running' }
+  }
+
+  return { claimed: true }
+}
+
+export function getDailyMotivationRunStatus({ sent = 0, failed = 0 } = {}) {
+  if (failed <= 0) {
+    return 'completed'
+  }
+
+  // A partially delivered broadcast is terminal for the day. Retrying the
+  // entire broadcast would send the same message again to successful targets.
+  return sent > 0 ? 'partial' : 'failed'
+}
+
+async function finishDailyMotivationRun(
+  supabaseAdmin,
+  motivation,
+  { status, summary = null },
+) {
+  try {
+    const { error } = await supabaseAdmin
+      .from('daily_motivation_runs')
+      .update({
+        status,
+        finished_at: new Date().toISOString(),
+        delivery_summary: summary,
+      })
+      .eq('run_date', motivation.date)
+
+    if (error) {
+      console.error('Günlük bildirim sonucu kaydedilemedi.', {
+        code: error.code || null,
+      })
+    }
+  } catch {
+    // Gönderim sonucunun kaydedilememesi ikinci bir bildirime yol açmamalı.
+  }
 }
 
 function makeSafeCleanupError({ provider, affected, error }) {
@@ -541,25 +637,38 @@ function makeSafeError(sendError) {
 }
 
 export default async function handler(req, res) {
+  let scheduledMotivation = null
+  let scheduledSupabaseAdmin = null
+  let scheduledSent = 0
+
   if (handleCors(req, res)) {
     return
   }
 
   try {
-    if (req.method !== 'POST') {
+    const isCronRequest = req.method === 'GET'
+
+    if (!isCronRequest && req.method !== 'POST') {
+      res.setHeader('Allow', 'GET, POST, OPTIONS')
       return res.status(405).json({
-        error: 'Sadece POST isteği desteklenir.',
+        error: 'Yalnızca GET ve POST istekleri desteklenir.',
       })
     }
 
-    const { secret, title, body, url } = req.body || {}
+    scheduledMotivation = isCronRequest
+      ? getAuthorizedCronMotivation(req)
+      : null
+    const { secret, title, body, url } = scheduledMotivation || req.body || {}
 
     const vapidPublicKey = getVapidPublicKey()
     const vapidPrivateKey = getVapidPrivateKey()
     const vapidSubject = getVapidSubject()
 
     const supabaseAdmin = createSupabaseAdminClient()
-    const authResult = await verifyAdminRequest(req, secret)
+    scheduledSupabaseAdmin = isCronRequest ? supabaseAdmin : null
+    const authResult = isCronRequest
+      ? { ok: true, method: 'scheduled_motivation', userId: null }
+      : await verifyAdminRequest(req, secret)
 
     if (!authResult.ok) {
       return res.status(authResult.statusCode || 401).json({
@@ -579,6 +688,24 @@ export default async function handler(req, res) {
       })
     ) {
       return
+    }
+
+    if (scheduledMotivation) {
+      const claim = await claimDailyMotivationRun(
+        supabaseAdmin,
+        scheduledMotivation,
+      )
+
+      if (!claim.claimed) {
+        return res.status(200).json({
+          skipped: true,
+          reason: claim.reason,
+          scheduledMotivation: {
+            date: scheduledMotivation.date,
+            messageId: scheduledMotivation.messageId,
+          },
+        })
+      }
     }
 
     const payloadData = validateNotificationPayload({ title, body, url })
@@ -602,6 +729,13 @@ export default async function handler(req, res) {
     const totalSubscriptions = webSubscriptions.length + nativeSubscriptions.length
 
     if (totalSubscriptions === 0) {
+      if (scheduledMotivation) {
+        await finishDailyMotivationRun(supabaseAdmin, scheduledMotivation, {
+          status: 'completed',
+          summary: { total: 0, sent: 0, failed: 0 },
+        })
+      }
+
       return res.status(200).json({
         total: 0,
         sent: 0,
@@ -657,6 +791,7 @@ export default async function handler(req, res) {
           if (result.ok) {
             sent += 1
             webSent += 1
+            if (scheduledMotivation) scheduledSent += 1
             return
           }
 
@@ -749,6 +884,7 @@ export default async function handler(req, res) {
           if (result.ok) {
             sent += 1
             nativeSent += 1
+            if (scheduledMotivation) scheduledSent += 1
             return
           }
 
@@ -836,6 +972,7 @@ export default async function handler(req, res) {
           if (result.ok) {
             sent += 1
             nativeSent += 1
+            if (scheduledMotivation) scheduledSent += 1
             return
           }
 
@@ -912,12 +1049,41 @@ export default async function handler(req, res) {
       failedDetails,
     }
 
+    if (scheduledMotivation) {
+      responsePayload.scheduledMotivation = {
+        date: scheduledMotivation.date,
+        messageId: scheduledMotivation.messageId,
+      }
+
+      await finishDailyMotivationRun(supabaseAdmin, scheduledMotivation, {
+        status: getDailyMotivationRunStatus({ sent, failed }),
+        summary: {
+          total: responsePayload.total,
+          sent: responsePayload.sent,
+          failed: responsePayload.failed,
+        },
+      })
+    }
+
     if (responseStatus !== 200) {
       responsePayload.error = 'Bildirim hiçbir uygun cihaza teslim edilemedi.'
     }
 
     return res.status(responseStatus).json(responsePayload)
   } catch (error) {
+    if (scheduledMotivation && scheduledSupabaseAdmin) {
+      await finishDailyMotivationRun(
+        scheduledSupabaseAdmin,
+        scheduledMotivation,
+        {
+          status: getDailyMotivationRunStatus({
+            sent: scheduledSent,
+            failed: 1,
+          }),
+        },
+      )
+    }
+
     return res.status(error.statusCode || 500).json({
       error: error.message || 'Bildirim gönderilemedi.',
     })
