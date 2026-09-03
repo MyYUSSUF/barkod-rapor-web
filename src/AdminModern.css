@@ -582,3 +582,694 @@
     flex-basis: auto;
   }
 }
+
+/* Desktop usability pass: predictable widths, one-row user records and
+   controls that stay aligned when details are opened. */
+.desktopAdminPage,
+.desktopAdminPage * {
+  box-sizing: border-box;
+}
+
+.desktopAdminPage {
+  width: 100%;
+  max-width: 100vw;
+  overflow-x: hidden;
+  grid-template-columns: 238px minmax(0, 1fr);
+}
+
+.desktopAdminSidebar {
+  width: 238px;
+  padding: 20px 14px;
+}
+
+.desktopAdminMain {
+  max-width: none;
+  padding: 26px clamp(20px, 2.2vw, 38px) 52px;
+  overflow: hidden;
+}
+
+.desktopAdminHeader {
+  align-items: center;
+  margin-bottom: 16px;
+  padding-bottom: 16px;
+}
+
+.desktopAdminHeaderCopy {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.desktopAdminHeaderCopy p {
+  max-width: 620px;
+  overflow: visible;
+  white-space: normal;
+}
+
+.desktopAdminHeader .desktopAdminRefresh {
+  width: auto;
+  min-width: 142px;
+  flex: 0 0 auto;
+  padding: 10px 16px;
+}
+
+.desktopAdminToolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  margin: 0 0 16px;
+  padding: 10px;
+  border: 1px solid var(--admin-line);
+  border-radius: 12px;
+  background: #ffffff;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.035);
+}
+
+.desktopAdminSearchField {
+  position: relative;
+  min-width: 260px;
+  flex: 1 1 480px;
+}
+
+.desktopAdminSearchField > span {
+  position: absolute;
+  top: 50%;
+  left: 13px;
+  color: #667085;
+  font-size: 11px;
+  font-weight: 850;
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+
+.desktopAdminSearchField input {
+  width: 100%;
+  min-height: 42px;
+  margin: 0;
+  padding: 10px 76px 10px 46px;
+  border: 1px solid #d0d5dd;
+  border-radius: 9px;
+  background: #ffffff;
+  color: var(--admin-navy);
+  font: inherit;
+  font-size: 13px;
+}
+
+.desktopAdminSearchField input:focus,
+.desktopAdminToolbar select:focus {
+  border-color: #e66a77;
+  outline: 3px solid rgba(180, 35, 50, 0.1);
+}
+
+.desktopAdminSearchField button {
+  position: absolute;
+  top: 50%;
+  right: 7px;
+  width: auto;
+  min-height: 30px;
+  padding: 4px 8px;
+  border: 0;
+  border-radius: 7px;
+  background: #eef2f6;
+  color: #475467;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 800;
+  transform: translateY(-50%);
+  cursor: pointer;
+}
+
+.desktopAdminToolbar select {
+  width: auto;
+  min-width: 154px;
+  min-height: 42px;
+  margin: 0;
+  padding: 9px 34px 9px 11px;
+  border: 1px solid #d0d5dd;
+  border-radius: 9px;
+  background-color: #ffffff;
+  color: #344054;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.desktopAdminResultCount {
+  flex: 0 0 auto;
+  padding: 7px 10px;
+  border-radius: 999px;
+  background: #f2f4f7;
+  color: #475467;
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.desktopAdminPanel {
+  overflow: hidden;
+  box-shadow: 0 2px 10px rgba(15, 23, 42, 0.035);
+}
+
+.desktopAdminTwoColumn {
+  align-items: start;
+}
+
+.desktopEntityGrid {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr));
+}
+
+.desktopEntityGrid .desktopEntityCard {
+  height: 100%;
+}
+
+.desktopEntityGrid .desktopAdminRowActions {
+  margin-top: auto;
+}
+
+.desktopUsersPanel {
+  padding: 0;
+}
+
+.desktopUsersPanel > .desktopPanelHeader {
+  margin: 0;
+  padding: 18px 20px;
+}
+
+.desktopUserFilterBar {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 11px 20px;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--admin-line);
+  background: #fafbfc;
+  scrollbar-width: thin;
+}
+
+.desktopUserFilterBar button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  width: auto;
+  min-height: 34px;
+  padding: 7px 10px;
+  border: 1px solid #d8dee8;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #475467;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 750;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.desktopUserFilterBar button strong {
+  min-width: 22px;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: #f2f4f7;
+  color: #667085;
+  text-align: center;
+  font-size: 10px;
+}
+
+.desktopUserFilterBar button:hover {
+  border-color: #f0a3ac;
+  color: var(--admin-teal-dark);
+}
+
+.desktopUserFilterBar button.isActive {
+  border-color: #e38a95;
+  background: #fff1f2;
+  color: var(--admin-teal-dark);
+}
+
+.desktopUserFilterBar button.isActive strong {
+  background: #ffffff;
+  color: var(--admin-teal-dark);
+}
+
+.desktopUserGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+  padding: 12px;
+}
+
+.desktopUserCard {
+  display: block;
+  width: 100%;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid #dfe4eb;
+  border-left: 1px solid #dfe4eb;
+  border-radius: 10px;
+  box-shadow: none;
+}
+
+.desktopUserCard:hover {
+  border-color: #cbd2dc;
+  background: #ffffff;
+}
+
+.desktopUserCard.isExpanded {
+  border-color: #e6a2aa;
+  border-left-color: #e6a2aa;
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.055);
+}
+
+.desktopUserCardHeader {
+  display: grid;
+  grid-template-columns: minmax(250px, 1fr) minmax(370px, 0.85fr) 96px;
+  align-items: center;
+  gap: 18px;
+  min-height: 78px;
+  padding: 12px 14px;
+}
+
+.desktopUserIdentity {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.desktopUserAvatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  flex: 0 0 42px;
+  border-radius: 11px;
+  background: #f2f4f7;
+  color: #344054;
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.desktopUserBadgeRow {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 20px;
+}
+
+.desktopUserCard .desktopEntityMain strong {
+  margin-top: 3px;
+  font-size: 14px;
+}
+
+.desktopUserCard .desktopMiniMeta {
+  display: grid;
+  grid-template-columns: 74px 74px minmax(170px, 1fr);
+  gap: 0;
+}
+
+.desktopUserCard .desktopMiniMeta div {
+  min-height: 44px;
+  padding: 4px 12px;
+  border: 0;
+  border-left: 1px solid #e4e7ec;
+  border-radius: 0;
+  background: transparent;
+}
+
+.desktopUserCard .desktopMiniMeta dt {
+  font-size: 9px;
+}
+
+.desktopUserCard .desktopMiniMeta dd {
+  font-size: 11px;
+}
+
+.desktopUserDetailsToggle {
+  width: 96px;
+  min-height: 38px;
+  justify-self: end;
+  padding: 8px 12px;
+  border-color: #cfd5df;
+  background: #ffffff;
+  font-size: 12px;
+}
+
+.desktopUserCard.isExpanded .desktopUserDetailsToggle {
+  border-color: #e4a1aa;
+  background: #fff5f6;
+  color: var(--admin-teal-dark);
+}
+
+.desktopUserExpandedContent {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border-top: 1px solid #e4e7ec;
+  background: #f8fafc;
+}
+
+.desktopUserBodyGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 12px;
+}
+
+.desktopUserExpandedContent .desktopSubPanel {
+  padding: 14px;
+  border: 1px solid #e1e6ed;
+  border-radius: 10px;
+  background: #ffffff;
+}
+
+.desktopSubPanelHeader {
+  margin-bottom: 11px;
+}
+
+.desktopSubPanelHeader strong,
+.desktopSubPanelHeader small {
+  display: block;
+}
+
+.desktopSubPanelHeader strong {
+  color: var(--admin-navy);
+  font-size: 13px;
+}
+
+.desktopSubPanelHeader small {
+  margin-top: 3px;
+  color: var(--admin-muted);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.desktopPermissionList {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.desktopPermissionCheck {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  min-height: 38px;
+  margin: 0;
+  padding: 8px 9px;
+  border: 1px solid #e4e7ec;
+  border-radius: 8px;
+  background: #fafbfc;
+  color: #344054;
+  font-size: 11px;
+  font-weight: 750;
+  white-space: normal;
+}
+
+.desktopPermissionCheck span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.desktopInlineNote {
+  margin-top: 9px;
+}
+
+.desktopInlineForm {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.desktopInlineForm .adminSmallButton {
+  min-height: 42px;
+  white-space: nowrap;
+}
+
+.desktopDeviceList {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.desktopDeviceRow {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 2px 7px;
+  align-items: center;
+  min-width: 0;
+  padding: 9px;
+  border: 1px solid #e4e7ec;
+  border-radius: 8px;
+  background: #fafbfc;
+}
+
+.desktopDeviceRow > span {
+  grid-row: 1 / span 2;
+  padding: 3px 6px;
+  border-radius: 999px;
+  background: #eaf7ef;
+  color: #276749;
+  font-size: 9px;
+  font-weight: 850;
+}
+
+.desktopDeviceRow.is-pending > span {
+  background: #fff7e6;
+  color: #975a16;
+}
+
+.desktopDeviceRow strong,
+.desktopDeviceRow small {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.desktopDeviceRow strong {
+  color: #344054;
+  font-size: 11px;
+}
+
+.desktopDeviceRow small {
+  color: #667085;
+  font-size: 9px;
+}
+
+.desktopMoreDevices {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 50px;
+  margin: 0;
+  border: 1px dashed #cfd5df;
+  border-radius: 8px;
+  color: #667085;
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.desktopUserActionBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 12px 14px;
+  border: 1px solid #e1e6ed;
+  border-radius: 10px;
+  background: #ffffff;
+}
+
+.desktopUserActionBar > div:first-child strong,
+.desktopUserActionBar > div:first-child small {
+  display: block;
+}
+
+.desktopUserActionBar > div:first-child strong {
+  color: var(--admin-navy);
+  font-size: 12px;
+}
+
+.desktopUserActionBar > div:first-child small {
+  margin-top: 2px;
+  color: var(--admin-muted);
+  font-size: 10px;
+}
+
+.desktopUserActionBar .desktopAdminRowActions {
+  margin: 0;
+  flex: 0 0 auto;
+}
+
+.desktopUserActionBar .adminSmallButton {
+  min-height: 36px;
+  padding: 8px 11px;
+  box-shadow: none;
+  white-space: nowrap;
+}
+
+.desktopUserActionBar .adminRejectButton {
+  border-color: #e0a34a;
+  background: #fff8eb;
+  color: #854d0e;
+}
+
+.desktopUserActionBar .adminRoleButton {
+  border-color: #cbd2dc;
+  background: #ffffff;
+  color: #344054;
+}
+
+.desktopUserActionBar .adminDeleteUserButton {
+  border-color: #b42332;
+  background: #b42332;
+  color: #ffffff;
+}
+
+@media (min-width: 1121px) {
+  .desktopAdminSidebar {
+    width: 238px;
+  }
+}
+
+@media (max-width: 1180px) {
+  .desktopUserCardHeader {
+    grid-template-columns: minmax(220px, 1fr) minmax(300px, 0.85fr) 90px;
+    gap: 10px;
+  }
+
+  .desktopUserCard .desktopMiniMeta {
+    grid-template-columns: 66px 66px minmax(150px, 1fr);
+  }
+
+  .desktopPermissionList,
+  .desktopDeviceList {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 1120px) {
+  .desktopAdminPage {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .desktopAdminSidebar {
+    width: 100%;
+  }
+}
+
+@media (max-width: 860px) {
+  .desktopAdminHeader {
+    align-items: flex-start;
+    flex-direction: row;
+  }
+
+  .desktopAdminToolbar {
+    align-items: stretch;
+    flex-wrap: wrap;
+  }
+
+  .desktopAdminSearchField {
+    min-width: 100%;
+    flex-basis: 100%;
+  }
+
+  .desktopUserCardHeader {
+    grid-template-columns: minmax(0, 1fr) 88px;
+  }
+
+  .desktopUserCard .desktopMiniMeta {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+
+  .desktopUserDetailsToggle {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .desktopUserBodyGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 620px) {
+  .desktopAdminMain {
+    padding: 18px 12px 38px;
+  }
+
+  .desktopAdminHeader {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .desktopAdminHeader .desktopAdminRefresh {
+    width: 100%;
+  }
+
+  .desktopAdminToolbar select,
+  .desktopAdminResultCount {
+    width: 100%;
+  }
+
+  .desktopAdminResultCount {
+    text-align: center;
+  }
+
+  .desktopUsersPanel > .desktopPanelHeader,
+  .desktopUserFilterBar {
+    padding-inline: 14px;
+  }
+
+  .desktopUserGrid {
+    padding: 8px;
+  }
+
+  .desktopUserCardHeader {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 11px;
+    padding: 12px;
+  }
+
+  .desktopUserDetailsToggle {
+    width: 100%;
+    grid-column: 1;
+    grid-row: auto;
+  }
+
+  .desktopUserCard .desktopMiniMeta {
+    grid-column: 1;
+    grid-row: auto;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .desktopUserCard .desktopMiniMeta div:last-child {
+    grid-column: 1 / -1;
+  }
+
+  .desktopUserExpandedContent {
+    padding: 10px;
+  }
+
+  .desktopPermissionList,
+  .desktopDeviceList,
+  .desktopInlineForm {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .desktopUserActionBar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .desktopUserActionBar .desktopAdminRowActions {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .desktopUserActionBar .adminSmallButton {
+    width: 100%;
+  }
+}

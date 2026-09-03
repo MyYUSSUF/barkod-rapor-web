@@ -4,9 +4,12 @@ import test from 'node:test'
 import {
   findDueAutomationOccurrence,
   getAutomationNotificationPayload,
+  MAX_AUTOMATION_TARGET_USERS,
   normalizeAutomationDays,
   normalizeAutomationInput,
+  normalizeAutomationTargetUserIds,
   normalizeAutomationTime,
+  serializeAutomation,
 } from '../api/_notification-automation.js'
 import {
   dispatchDueAutomations,
@@ -16,6 +19,7 @@ import {
 
 const AUTOMATION_ID = 'c02e2629-18e0-4e2f-b38b-cc4fa0044bb6'
 const RUN_ID = '01d6c5c5-cbfd-4eb5-a10d-df3bedbdb2a7'
+const SECOND_USER_ID = '0c9c2753-7304-4d77-941d-2be58ccfb05a'
 
 function makeCustomAutomation(overrides = {}) {
   return {
@@ -24,6 +28,7 @@ function makeCustomAutomation(overrides = {}) {
     content_type: 'custom',
     audience_type: 'all',
     target_user_id: null,
+    target_user_ids: null,
     delivery_scope: 'all_devices',
     timezone: 'Africa/Cairo',
     send_time: '07:30:00',
@@ -57,6 +62,7 @@ test('automation input normalizes a bilingual Cairo schedule', () => {
       content_type: 'custom',
       audience_type: 'all',
       target_user_id: null,
+      target_user_ids: null,
       delivery_scope: 'all_devices',
       timezone: 'Africa/Cairo',
       send_time: '07:30',
@@ -72,6 +78,61 @@ test('automation input normalizes a bilingual Cairo schedule', () => {
 
   assert.equal(normalizeAutomationTime('07:30:00'), '07:30')
   assert.deepEqual(normalizeAutomationDays([5, 0, 5]), [0, 5])
+})
+
+test('automation targets accept multiple users, deduplicate IDs and keep legacy output', () => {
+  const normalized = normalizeAutomationInput({
+    ...makeCustomAutomation(),
+    audienceType: 'user',
+    targetUserIds: [
+      AUTOMATION_ID.toUpperCase(),
+      SECOND_USER_ID,
+      AUTOMATION_ID,
+    ],
+    deliveryScope: 'latest_device',
+  })
+
+  assert.deepEqual(normalized.target_user_ids, [AUTOMATION_ID, SECOND_USER_ID])
+  assert.equal(normalized.target_user_id, AUTOMATION_ID)
+  assert.deepEqual(
+    normalizeAutomationTargetUserIds({ targetUserId: SECOND_USER_ID }),
+    [SECOND_USER_ID],
+  )
+
+  const serialized = serializeAutomation({
+    ...makeCustomAutomation(),
+    audience_type: 'user',
+    target_user_id: AUTOMATION_ID,
+    target_user_ids: [AUTOMATION_ID, SECOND_USER_ID],
+  })
+  assert.deepEqual(serialized.targetUserIds, [AUTOMATION_ID, SECOND_USER_ID])
+  assert.equal(serialized.targetUserId, AUTOMATION_ID)
+
+  assert.throws(
+    () => normalizeAutomationInput({
+      ...makeCustomAutomation(),
+      audienceType: 'user',
+      targetUserIds: [],
+    }),
+    /en az bir kullanıcı/,
+  )
+  assert.throws(
+    () => normalizeAutomationInput({
+      ...makeCustomAutomation(),
+      targetUserIds: [AUTOMATION_ID],
+    }),
+    /kullanıcı hedeflenemez/,
+  )
+  assert.throws(
+    () => normalizeAutomationTargetUserIds({
+      targetUserIds: Array.from(
+        { length: MAX_AUTOMATION_TARGET_USERS + 1 },
+        (_, index) =>
+          `00000000-0000-4000-8000-${index.toString(16).padStart(12, '0')}`,
+      ),
+    }),
+    /En fazla 100 kullanıcı/,
+  )
 })
 
 test('automation input rejects invalid days, times and broadcast device scope', () => {
@@ -159,10 +220,16 @@ test('cron authorization compares the bearer secret and send URL stays on the co
   )
 })
 
-test('due dispatcher claims one run and sends localized content without putting its secret in the body', async () => {
+test('due dispatcher sends all selected user IDs without putting its secret in the body', async () => {
   const databaseCalls = []
   const fetchCalls = []
-  const automation = makeCustomAutomation({ days_of_week: [4] })
+  const automation = makeCustomAutomation({
+    days_of_week: [4],
+    audience_type: 'user',
+    target_user_id: AUTOMATION_ID,
+    target_user_ids: [AUTOMATION_ID, SECOND_USER_ID],
+    delivery_scope: 'latest_device',
+  })
   const supabaseAdmin = {
     from(table) {
       if (table === 'notification_automations') {
@@ -237,6 +304,13 @@ test('due dispatcher claims one run and sends localized content without putting 
   assert.equal('secret' in fetchCalls[0].body, false)
   assert.equal(fetchCalls[0].body.automationId, AUTOMATION_ID)
   assert.equal(fetchCalls[0].body.automationRunId, RUN_ID)
+  assert.equal(fetchCalls[0].body.audienceType, 'user')
+  assert.deepEqual(fetchCalls[0].body.targetUserIds, [
+    AUTOMATION_ID,
+    SECOND_USER_ID,
+  ])
+  assert.equal(fetchCalls[0].body.targetUserId, AUTOMATION_ID)
+  assert.equal(fetchCalls[0].body.singleDevice, true)
   assert.equal(fetchCalls[0].body.localizedMessages.tr.title, 'Günaydın')
   assert.equal(
     databaseCalls.filter((call) => call.operation === 'insert').length,

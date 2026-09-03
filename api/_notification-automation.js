@@ -1,6 +1,7 @@
 import { getDailyMotivation } from './_daily-motivation.js'
 
 export const AUTOMATION_TIMEZONE = 'Africa/Cairo'
+export const MAX_AUTOMATION_TARGET_USERS = 100
 export const AUTOMATION_CONTENT_TYPES = new Set(['custom', 'daily_motivation'])
 export const AUTOMATION_AUDIENCES = new Set(['all', 'user'])
 export const AUTOMATION_DELIVERY_SCOPES = new Set([
@@ -96,6 +97,54 @@ export function normalizeAutomationId(value, label = 'Otomasyon') {
   return result
 }
 
+export function normalizeAutomationTargetUserIds(input = {}) {
+  const targetUserIdsValue = input.targetUserIds ?? input.target_user_ids
+  const hasTargetUserIds =
+    targetUserIdsValue !== undefined && targetUserIdsValue !== null
+  const rawTargetUserIds = hasTargetUserIds
+    ? targetUserIdsValue
+    : [input.targetUserId ?? input.target_user_id].filter(
+      (targetUserId) =>
+        targetUserId !== undefined &&
+        targetUserId !== null &&
+        String(targetUserId).trim() !== '',
+    )
+
+  if (!Array.isArray(rawTargetUserIds)) {
+    throw new NotificationAutomationError(
+      'Otomasyon hedefleri bir kullanıcı listesi olmalıdır.',
+    )
+  }
+
+  const normalizedTargetUserIds = []
+  const seenTargetUserIds = new Set()
+
+  for (const targetUserId of rawTargetUserIds) {
+    const normalizedTargetUserId = String(targetUserId ?? '')
+      .trim()
+      .toLowerCase()
+
+    if (!USER_ID_PATTERN.test(normalizedTargetUserId)) {
+      throw new NotificationAutomationError(
+        'Otomasyon hedeflerindeki kullanıcı ID geçersiz.',
+      )
+    }
+
+    if (seenTargetUserIds.has(normalizedTargetUserId)) continue
+
+    seenTargetUserIds.add(normalizedTargetUserId)
+    normalizedTargetUserIds.push(normalizedTargetUserId)
+
+    if (normalizedTargetUserIds.length > MAX_AUTOMATION_TARGET_USERS) {
+      throw new NotificationAutomationError(
+        `En fazla ${MAX_AUTOMATION_TARGET_USERS} kullanıcı seçilebilir.`,
+      )
+    }
+  }
+
+  return normalizedTargetUserIds
+}
+
 export function normalizeAutomationInput(input = {}) {
   const name = normalizeText(input.name, 'Otomasyon adı', { maxLength: 80 })
   const contentType = String(input.contentType || input.content_type || 'custom')
@@ -110,11 +159,7 @@ export function normalizeAutomationInput(input = {}) {
   )
     .trim()
     .toLowerCase()
-  const targetUserId = String(
-    input.targetUserId || input.target_user_id || '',
-  )
-    .trim()
-    .toLowerCase()
+  const targetUserIds = normalizeAutomationTargetUserIds(input)
   const sendTime = normalizeAutomationTime(input.sendTime || input.send_time)
   const daysOfWeek = normalizeAutomationDays(
     input.daysOfWeek || input.days_of_week,
@@ -133,12 +178,12 @@ export function normalizeAutomationInput(input = {}) {
     throw new NotificationAutomationError('Geçersiz cihaz gönderim seçimi.')
   }
 
-  if (audienceType === 'user' && !USER_ID_PATTERN.test(targetUserId)) {
-    throw new NotificationAutomationError('Kişiye özel otomasyon için kullanıcı seçilmelidir.')
+  if (audienceType === 'user' && targetUserIds.length === 0) {
+    throw new NotificationAutomationError('Kişiye özel otomasyon için en az bir kullanıcı seçilmelidir.')
   }
 
-  if (audienceType === 'all' && targetUserId) {
-    throw new NotificationAutomationError('Toplu otomasyonda tek kullanıcı hedeflenemez.')
+  if (audienceType === 'all' && targetUserIds.length > 0) {
+    throw new NotificationAutomationError('Toplu otomasyonda kullanıcı hedeflenemez.')
   }
 
   if (audienceType === 'all' && deliveryScope !== 'all_devices') {
@@ -153,7 +198,8 @@ export function normalizeAutomationInput(input = {}) {
     name,
     content_type: contentType,
     audience_type: audienceType,
-    target_user_id: audienceType === 'user' ? targetUserId : null,
+    target_user_id: audienceType === 'user' ? targetUserIds[0] : null,
+    target_user_ids: audienceType === 'user' ? targetUserIds : null,
     delivery_scope: deliveryScope,
     timezone: AUTOMATION_TIMEZONE,
     send_time: sendTime,
@@ -281,8 +327,14 @@ export function getAutomationNotificationPayload(automation, date = new Date()) 
 export function serializeAutomation(automation) {
   if (!automation) return automation
 
+  const targetUserIds = normalizeAutomationTargetUserIds(automation)
+
   return {
     ...automation,
+    target_user_id: targetUserIds[0] || null,
+    target_user_ids: targetUserIds,
+    targetUserId: targetUserIds[0] || null,
+    targetUserIds,
     send_time: normalizeAutomationTime(automation.send_time),
     days_of_week: normalizeAutomationDays(automation.days_of_week),
     timezone: AUTOMATION_TIMEZONE,

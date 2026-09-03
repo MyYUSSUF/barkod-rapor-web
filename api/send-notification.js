@@ -34,6 +34,7 @@ const MAX_LOOKUP_ROWS = 10000
 export const CLEANUP_BATCH_SIZE = 100
 export const MAX_NOTIFICATION_TITLE_LENGTH = 120
 export const MAX_NOTIFICATION_BODY_LENGTH = 800
+export const MAX_NOTIFICATION_TARGET_USERS = 100
 const MAX_NOTIFICATION_TITLE_BYTES = 480
 const MAX_NOTIFICATION_BODY_BYTES = 2800
 const MAX_NOTIFICATION_URL_LENGTH = 512
@@ -65,6 +66,81 @@ export function normalizeNotificationTargetUserId(value) {
   }
 
   return targetUserId
+}
+
+export function normalizeNotificationTargetUserIds(
+  value,
+  legacyTargetUserId,
+) {
+  const hasTargetUserIds = value !== undefined && value !== null
+
+  if (hasTargetUserIds && !Array.isArray(value)) {
+    throw new NotificationBackendError(
+      'Bildirim hedefleri bir kullanıcı listesi olmalıdır.',
+      400,
+    )
+  }
+
+  const rawTargetUserIds = hasTargetUserIds
+    ? value
+    : isNotBlank(legacyTargetUserId) ? [legacyTargetUserId] : []
+
+  const normalizedTargetUserIds = []
+  const seenTargetUserIds = new Set()
+
+  for (const targetUserId of rawTargetUserIds) {
+    const normalizedTargetUserId = normalizeNotificationTargetUserId(
+      targetUserId,
+    )
+
+    if (!normalizedTargetUserId) {
+      throw new NotificationBackendError(
+        'Bildirim hedeflerindeki kullanıcı ID geçersiz.',
+        400,
+      )
+    }
+
+    if (seenTargetUserIds.has(normalizedTargetUserId)) continue
+
+    seenTargetUserIds.add(normalizedTargetUserId)
+    normalizedTargetUserIds.push(normalizedTargetUserId)
+
+    if (normalizedTargetUserIds.length > MAX_NOTIFICATION_TARGET_USERS) {
+      throw new NotificationBackendError(
+        `En fazla ${MAX_NOTIFICATION_TARGET_USERS} kullanıcı seçilebilir.`,
+        400,
+      )
+    }
+  }
+
+  return normalizedTargetUserIds
+}
+
+export function normalizeNotificationAudienceType(value, targetUserIds = []) {
+  const inferredAudienceType = targetUserIds.length > 0 ? 'user' : 'all'
+  const audienceType = isNotBlank(value)
+    ? String(value).trim().toLowerCase()
+    : inferredAudienceType
+
+  if (!['all', 'user'].includes(audienceType)) {
+    throw new NotificationBackendError('Geçersiz bildirim alıcı türü.', 400)
+  }
+
+  if (audienceType === 'user' && targetUserIds.length === 0) {
+    throw new NotificationBackendError(
+      'Kişiye özel bildirim için en az bir kullanıcı seçilmelidir.',
+      400,
+    )
+  }
+
+  if (audienceType === 'all' && targetUserIds.length > 0) {
+    throw new NotificationBackendError(
+      'Toplu bildirimde kullanıcı hedeflenemez.',
+      400,
+    )
+  }
+
+  return audienceType
 }
 
 export function normalizeNotificationAutomationId(value, label = 'Otomasyon') {
@@ -626,7 +702,17 @@ export function limitNotificationTargetsToLatest(targets = {}) {
     return targets
   }
 
-  const latest = candidates.reduce((currentLatest, candidate) => {
+  const latestByUser = new Map()
+
+  for (const candidate of candidates) {
+    const userId = String(candidate.item?.user_id || '')
+    const currentLatest = latestByUser.get(userId)
+
+    if (!currentLatest) {
+      latestByUser.set(userId, candidate)
+      continue
+    }
+
     const candidateTime = new Date(
       candidate.item.updated_at || candidate.item.created_at || 0,
     ).getTime()
@@ -634,27 +720,36 @@ export function limitNotificationTargetsToLatest(targets = {}) {
       currentLatest.item.updated_at || currentLatest.item.created_at || 0,
     ).getTime()
 
-    return candidateTime > latestTime ? candidate : currentLatest
-  })
+    if (candidateTime > latestTime) {
+      latestByUser.set(userId, candidate)
+    }
+  }
+
+  const latestTargets = [...latestByUser.values()]
 
   return {
     ...targets,
-    webSubscriptions: latest.type === 'web' ? [latest.item] : [],
-    nativeSubscriptions: latest.type === 'native' ? [latest.item] : [],
+    webSubscriptions: latestTargets
+      .filter((candidate) => candidate.type === 'web')
+      .map((candidate) => candidate.item),
+    nativeSubscriptions: latestTargets
+      .filter((candidate) => candidate.type === 'native')
+      .map((candidate) => candidate.item),
     skipped: {
       ...(targets.skipped || {}),
       otherDevices:
-        Number(targets.skipped?.otherDevices || 0) + candidates.length - 1,
+        Number(targets.skipped?.otherDevices || 0) +
+        candidates.length - latestTargets.length,
     },
   }
 }
 
 async function loadNotificationTargets(
   supabaseAdmin,
-  { targetUserId, singleDevice = false } = {},
+  { targetUserIds = [], singleDevice = false } = {},
 ) {
-  const applyTargetFilter = targetUserId
-    ? (query) => query.eq('user_id', targetUserId)
+  const applyTargetFilter = targetUserIds.length > 0
+    ? (query) => query.in('user_id', targetUserIds)
     : undefined
   const webSubscriptions = await fetchSubscriptionRows(supabaseAdmin, {
     table: 'push_subscriptions',
@@ -726,7 +821,7 @@ async function loadNotificationTargets(
     userDevices,
   })
 
-  return targetUserId && singleDevice
+  return targetUserIds.length > 0 && singleDevice
     ? limitNotificationTargetsToLatest(targets)
     : targets
 }
@@ -833,7 +928,6 @@ function makeSafeError(sendError) {
     statusCode: sendError.statusCode || null,
     message: sendError.message || 'Bilinmeyen gönderim hatası',
     body: sendError.body ? String(sendError.body).slice(0, 500) : null,
-    endpoint: sendError.endpoint || null,
   }
 }
 
@@ -845,6 +939,7 @@ async function recordNotificationDelivery(
     automationRunId,
     createdBy,
     targetUserId,
+    targetUserIds = [],
     payload,
     localizedMessages,
     total,
@@ -861,6 +956,7 @@ async function recordNotificationDelivery(
         automation_run_id: automationRunId,
         created_by: createdBy,
         target_user_id: targetUserId,
+        target_user_ids: targetUserIds.length > 0 ? targetUserIds : null,
         title: payload.title,
         body: payload.body,
         localized_messages: localizedMessages,
@@ -964,10 +1060,22 @@ export default async function handler(req, res) {
       })
     }
 
-    const targetUserId = isCronRequest
-      ? null
-      : normalizeNotificationTargetUserId(requestData.targetUserId)
-    const singleDevice = Boolean(targetUserId && requestData.singleDevice === true)
+    const targetUserIds = isCronRequest
+      ? []
+      : normalizeNotificationTargetUserIds(
+        requestData.targetUserIds,
+        requestData.targetUserId,
+      )
+    const audienceType = isCronRequest
+      ? 'all'
+      : normalizeNotificationAudienceType(
+        requestData.audienceType,
+        targetUserIds,
+      )
+    const targetUserId = targetUserIds[0] || null
+    const singleDevice = Boolean(
+      targetUserIds.length > 0 && requestData.singleDevice === true,
+    )
     const automationId = isCronRequest
       ? null
       : normalizeNotificationAutomationId(requestData.automationId)
@@ -1080,7 +1188,7 @@ export default async function handler(req, res) {
       skipped,
       storedTotal,
     } = await loadNotificationTargets(supabaseAdmin, {
-      targetUserId,
+      targetUserIds,
       singleDevice,
     })
     const androidSubscriptions = nativeSubscriptions.filter(
@@ -1110,6 +1218,7 @@ export default async function handler(req, res) {
         automationRunId,
         createdBy: authResult.userId,
         targetUserId,
+        targetUserIds,
         payload: payloadData,
         localizedMessages:
           localizedPayloads || scheduledMotivation?.messages || null,
@@ -1125,6 +1234,10 @@ export default async function handler(req, res) {
         deleted: 0,
         storedTotal,
         skipped,
+        audienceType,
+        targeted: targetUserIds.length > 0,
+        targetUserIds,
+        singleDevice,
         message: 'Uygun kayıtlı bildirim cihazı yok.',
       })
     }
@@ -1184,9 +1297,6 @@ export default async function handler(req, res) {
           failedDetails.push({
             id: result.item.id,
             provider: 'web-push',
-            endpointStart: result.item.endpoint
-              ? String(result.item.endpoint).slice(0, 80)
-              : null,
             userAgent: result.item.user_agent || null,
             createdAt: result.item.created_at || null,
             error: makeSafeError(result.sendError),
@@ -1432,7 +1542,9 @@ export default async function handler(req, res) {
       cleanupFailed: cleanup.failed,
       cleanup,
       authMethod: authResult.method,
-      targeted: Boolean(targetUserId),
+      audienceType,
+      targeted: targetUserIds.length > 0,
+      targetUserIds,
       singleDevice,
       vapidPublicKeyLength: vapidPublicKey.length,
       vapidSubject,
@@ -1464,6 +1576,7 @@ export default async function handler(req, res) {
       automationRunId,
       createdBy: authResult.userId,
       targetUserId,
+      targetUserIds,
       payload: payloadData,
       localizedMessages:
         localizedPayloads || scheduledMotivation?.messages || null,

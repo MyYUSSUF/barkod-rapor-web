@@ -11,8 +11,11 @@ import {
   getScheduledNotificationPayload,
   limitNotificationTargetsToLatest,
   MAX_NOTIFICATION_BODY_LENGTH,
+  MAX_NOTIFICATION_TARGET_USERS,
   MAX_NOTIFICATION_TITLE_LENGTH,
+  normalizeNotificationAudienceType,
   normalizeNotificationTargetUserId,
+  normalizeNotificationTargetUserIds,
   validateLocalizedNotificationPayloads,
   validateNotificationPayload,
 } from '../api/send-notification.js'
@@ -127,6 +130,59 @@ test('manual notification target accepts only a valid user UUID', () => {
   )
 })
 
+test('manual notification targets validate, normalize, deduplicate and preserve legacy requests', () => {
+  const firstUserId = 'c02e2629-18e0-4e2f-b38b-cc4fa0044bb6'
+  const secondUserId = '01d6c5c5-cbfd-4eb5-a10d-df3bedbdb2a7'
+
+  assert.deepEqual(
+    normalizeNotificationTargetUserIds([
+      ` ${firstUserId.toUpperCase()} `,
+      secondUserId,
+      firstUserId,
+    ]),
+    [firstUserId, secondUserId],
+  )
+  assert.deepEqual(
+    normalizeNotificationTargetUserIds(undefined, firstUserId),
+    [firstUserId],
+  )
+  assert.deepEqual(normalizeNotificationTargetUserIds([]), [])
+  assert.throws(
+    () => normalizeNotificationTargetUserIds(firstUserId),
+    /kullanıcı listesi/,
+  )
+  assert.throws(
+    () => normalizeNotificationTargetUserIds(['']),
+    /kullanıcı ID geçersiz/,
+  )
+  assert.throws(
+    () => normalizeNotificationTargetUserIds(
+      Array.from(
+        { length: MAX_NOTIFICATION_TARGET_USERS + 1 },
+        (_, index) =>
+          `00000000-0000-4000-8000-${index.toString(16).padStart(12, '0')}`,
+      ),
+    ),
+    /En fazla 100 kullanıcı/,
+  )
+})
+
+test('manual notification audience requires recipients for targeted sends', () => {
+  const userId = 'c02e2629-18e0-4e2f-b38b-cc4fa0044bb6'
+
+  assert.equal(normalizeNotificationAudienceType(undefined, []), 'all')
+  assert.equal(normalizeNotificationAudienceType(undefined, [userId]), 'user')
+  assert.equal(normalizeNotificationAudienceType(' USER ', [userId]), 'user')
+  assert.throws(
+    () => normalizeNotificationAudienceType('user', []),
+    /en az bir kullanıcı/,
+  )
+  assert.throws(
+    () => normalizeNotificationAudienceType('all', [userId]),
+    /kullanıcı hedeflenemez/,
+  )
+})
+
 test('single-device delivery keeps only the most recently updated eligible target', () => {
   const targets = {
     webSubscriptions: [
@@ -148,6 +204,33 @@ test('single-device delivery keeps only the most recently updated eligible targe
     skipped: { inactiveProfile: 0, otherDevices: 2 },
     storedTotal: 3,
   })
+})
+
+test('single-device delivery keeps the latest device separately for every selected user', () => {
+  const targets = {
+    webSubscriptions: [
+      { id: 'web-a-old', user_id: 'user-a', updated_at: '2026-09-01T08:00:00.000Z' },
+      { id: 'web-b-new', user_id: 'user-b', updated_at: '2026-09-03T12:00:00.000Z' },
+    ],
+    nativeSubscriptions: [
+      { id: 'native-a-new', user_id: 'user-a', updated_at: '2026-09-03T11:00:00.000Z' },
+      { id: 'native-b-old', user_id: 'user-b', updated_at: '2026-08-16T10:00:00.000Z' },
+    ],
+    skipped: {},
+    storedTotal: 4,
+  }
+
+  const result = limitNotificationTargetsToLatest(targets)
+
+  assert.deepEqual(
+    result.webSubscriptions.map((item) => item.id),
+    ['web-b-new'],
+  )
+  assert.deepEqual(
+    result.nativeSubscriptions.map((item) => item.id),
+    ['native-a-new'],
+  )
+  assert.equal(result.skipped.otherDevices, 2)
 })
 
 test('scheduled payload follows each subscription language and defaults unknown registrations to Turkish', () => {

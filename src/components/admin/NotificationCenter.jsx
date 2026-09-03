@@ -17,7 +17,7 @@ const WEEKDAYS = [
 
 const DEFAULT_SEND_FORM = {
   audienceType: 'all',
-  targetUserId: '',
+  targetUserIds: [],
   deliveryScope: 'all_devices',
   titleTr: 'Elvan Rapor',
   bodyTr: '',
@@ -29,7 +29,7 @@ const DEFAULT_AUTOMATION_FORM = {
   name: 'Günlük Motivasyon',
   contentType: 'daily_motivation',
   audienceType: 'all',
-  targetUserId: '',
+  targetUserIds: [],
   deliveryScope: 'all_devices',
   sendTime: '07:30',
   daysOfWeek: [0, 1, 2, 3, 4, 5, 6],
@@ -60,6 +60,12 @@ function normalizeList(value) {
   return Array.isArray(value) ? value : []
 }
 
+function normalizeUserIds(value, legacyValue = '') {
+  const values = normalizeList(value)
+  const source = values.length > 0 ? values : legacyValue ? [legacyValue] : []
+  return [...new Set(source.map((item) => String(item || '').trim()).filter(Boolean))]
+}
+
 function getAutomationId(automation) {
   return automation?.id || automation?.automation_id || ''
 }
@@ -75,8 +81,10 @@ function automationToDraft(automation) {
       automation?.content_type || automation?.contentType || 'daily_motivation',
     audienceType:
       automation?.audience_type || automation?.audienceType || 'all',
-    targetUserId:
-      automation?.target_user_id || automation?.targetUserId || '',
+    targetUserIds: normalizeUserIds(
+      automation?.target_user_ids || automation?.targetUserIds,
+      automation?.target_user_id || automation?.targetUserId,
+    ),
     deliveryScope:
       automation?.delivery_scope || automation?.deliveryScope || 'all_devices',
     sendTime: String(
@@ -159,6 +167,136 @@ function CharacterCount({ value, max }) {
   )
 }
 
+function UserMultiSelect({
+  idPrefix,
+  users,
+  selectedIds,
+  onChange,
+}) {
+  const [query, setQuery] = useState('')
+  const validUserIdSet = new Set(users.map((user) => String(user.id)))
+  const normalizedSelectedIds = normalizeUserIds(selectedIds).filter((id) =>
+    validUserIdSet.has(id),
+  )
+  const selectedIdSet = new Set(normalizedSelectedIds)
+  const normalizedQuery = query.trim().toLocaleLowerCase('tr-TR')
+  const visibleUsers = useMemo(
+    () => users.filter((user) => {
+      if (!normalizedQuery) return true
+      return [user?.full_name, user?.username, user?.email]
+        .filter(Boolean)
+        .some((value) =>
+          String(value).toLocaleLowerCase('tr-TR').includes(normalizedQuery),
+        )
+    }),
+    [normalizedQuery, users],
+  )
+  const selectedUsers = users.filter((user) => selectedIdSet.has(String(user.id)))
+  const visibleIds = visibleUsers.map((user) => String(user.id))
+
+  const toggleUser = (userId) => {
+    const normalizedId = String(userId)
+    onChange(
+      selectedIdSet.has(normalizedId)
+        ? normalizedSelectedIds.filter((id) => id !== normalizedId)
+        : [...normalizedSelectedIds, normalizedId],
+    )
+  }
+
+  const selectVisible = () => {
+    onChange([...new Set([...normalizedSelectedIds, ...visibleIds])])
+  }
+
+  return (
+    <section className="ncUserPicker" aria-labelledby={`${idPrefix}-title`}>
+      <div className="ncUserPickerHeader">
+        <div>
+          <strong id={`${idPrefix}-title`}>Kullanıcı seçimi</strong>
+          <span aria-live="polite">{normalizedSelectedIds.length} kişi seçili</span>
+        </div>
+        <div className="ncPickerActions">
+          <button
+            type="button"
+            className="ncTextButton"
+            onClick={selectVisible}
+            disabled={visibleIds.length === 0}
+          >
+            Görünenleri seç
+          </button>
+          <button
+            type="button"
+            className="ncTextButton"
+            onClick={() => onChange([])}
+            disabled={normalizedSelectedIds.length === 0}
+          >
+            Seçimi temizle
+          </button>
+        </div>
+      </div>
+
+      <label className="ncUserSearch" htmlFor={`${idPrefix}-search`}>
+        <span className="ncSrOnly">Kullanıcı ara</span>
+        <input
+          id={`${idPrefix}-search`}
+          type="search"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder="Ad, kullanıcı adı veya e-posta ara"
+          autoComplete="off"
+        />
+        <small>{visibleUsers.length} kullanıcı gösteriliyor</small>
+      </label>
+
+      {selectedUsers.length > 0 && (
+        <div className="ncSelectedUsers" aria-label="Seçili kullanıcılar">
+          {selectedUsers.slice(0, 8).map((user) => (
+            <span className="ncUserChip" key={user.id}>
+              {userLabel(user)}
+              <button
+                type="button"
+                onClick={() => toggleUser(user.id)}
+                aria-label={`${userLabel(user)} seçimini kaldır`}
+              >
+                ×
+              </button>
+            </span>
+          ))}
+          {selectedUsers.length > 8 && (
+            <span className="ncMoreUsers">+{selectedUsers.length - 8} kişi daha</span>
+          )}
+        </div>
+      )}
+
+      <div className="ncUserList" role="group" aria-label="Aktif kullanıcılar">
+        {visibleUsers.map((user) => {
+          const userId = String(user.id)
+          const checked = selectedIdSet.has(userId)
+          return (
+            <label key={userId} className={checked ? 'isSelected' : ''}>
+              <input
+                type="checkbox"
+                checked={checked}
+                onChange={() => toggleUser(userId)}
+              />
+              <span className="ncUserCheck" aria-hidden="true">✓</span>
+              <span className="ncUserIdentity">
+                <strong>{userLabel(user)}</strong>
+                <small>{user.email || user.username || 'E-posta bilgisi yok'}</small>
+              </span>
+              <span className="ncUserDeviceCount">
+                {Number(user.approved_device_count || 0)} cihaz
+              </span>
+            </label>
+          )
+        })}
+        {visibleUsers.length === 0 && (
+          <div className="ncPickerEmpty">Aramanızla eşleşen kullanıcı yok.</div>
+        )}
+      </div>
+    </section>
+  )
+}
+
 function Feedback({ feedback, onDismiss }) {
   if (!feedback?.message) return null
 
@@ -209,8 +347,12 @@ export function NotificationCenter({
     [users],
   )
 
-  const selectedSendUser = usersById.get(sendForm.targetUserId)
-  const selectedAutomationUser = usersById.get(automationDraft.targetUserId)
+  const selectedSendUsers = normalizeUserIds(sendForm.targetUserIds)
+    .map((id) => usersById.get(id))
+    .filter(Boolean)
+  const selectedAutomationUsers = normalizeUserIds(automationDraft.targetUserIds)
+    .map((id) => usersById.get(id))
+    .filter(Boolean)
 
   const authorizedRequest = useCallback(
     async (path, options = {}) => {
@@ -340,18 +482,18 @@ export function NotificationCenter({
       return
     }
 
-    if (sendForm.audienceType === 'user' && !selectedSendUser) {
-      setFeedback({ type: 'danger', message: 'Bir kullanıcı seçmelisiniz.' })
+    if (sendForm.audienceType === 'user' && selectedSendUsers.length === 0) {
+      setFeedback({ type: 'danger', message: 'En az bir kullanıcı seçmelisiniz.' })
       return
     }
 
     const recipientText =
       sendForm.audienceType === 'all'
         ? `Tüm aktif kullanıcılar · ${subscriptionCount} kayıtlı bildirim cihazı`
-        : `${userLabel(selectedSendUser)} · ${
+        : `${selectedSendUsers.length} kullanıcı · ${
             sendForm.deliveryScope === 'latest_device'
-              ? 'yalnızca son bildirim cihazı'
-              : 'tüm bildirim cihazları'
+              ? 'her kişinin son bildirim cihazı'
+              : 'seçilen kişilerin tüm bildirim cihazları'
           }`
 
     setConfirmation({
@@ -367,6 +509,7 @@ export function NotificationCenter({
     setSendBusy(true)
 
     const payload = {
+      audienceType: sendForm.audienceType,
       title: sendForm.titleEn.trim(),
       body: sendForm.bodyEn.trim(),
       url: '/',
@@ -382,9 +525,9 @@ export function NotificationCenter({
           url: '/',
         },
       },
-      targetUserId:
+      targetUserIds:
         sendForm.audienceType === 'user'
-          ? sendForm.targetUserId
+          ? selectedSendUsers.map((user) => String(user.id))
           : undefined,
       singleDevice:
         sendForm.audienceType === 'user' &&
@@ -451,8 +594,10 @@ export function NotificationCenter({
     name: draft.name.trim(),
     contentType: draft.contentType,
     audienceType: draft.audienceType,
-    targetUserId:
-      draft.audienceType === 'user' ? draft.targetUserId : undefined,
+    targetUserIds:
+      draft.audienceType === 'user'
+        ? normalizeUserIds(draft.targetUserIds)
+        : undefined,
     deliveryScope:
       draft.audienceType === 'user' ? draft.deliveryScope : 'all_devices',
     sendTime: draft.sendTime,
@@ -480,8 +625,11 @@ export function NotificationCenter({
       })
       return
     }
-    if (automationDraft.audienceType === 'user' && !selectedAutomationUser) {
-      setFeedback({ type: 'danger', message: 'Bir kullanıcı seçmelisiniz.' })
+    if (
+      automationDraft.audienceType === 'user' &&
+      selectedAutomationUsers.length === 0
+    ) {
+      setFeedback({ type: 'danger', message: 'En az bir kullanıcı seçmelisiniz.' })
       return
     }
     if (automationDraft.contentType === 'custom') {
@@ -599,11 +747,11 @@ export function NotificationCenter({
   return (
     <section className="notificationCenter" aria-labelledby="notificationCenterTitle">
       <header className="ncHeader">
-        <div>
-          <span className="ncEyebrow">İletişim merkezi</span>
-          <h2 id="notificationCenterTitle">Bildirim Yönetimi</h2>
+        <div className="ncHeaderIntro">
+          <h2 id="notificationCenterTitle" className="ncSrOnly">Bildirim Yönetimi</h2>
+          <strong>Mesajlar ve zamanlamalar</strong>
           <p>
-            Anlık mesajları ve planlı bildirimleri tek ekrandan yönetin.
+            Anlık gönderim, otomasyon ve sonuçlar tek yerde.
           </p>
         </div>
         <div className="ncHeaderStats" aria-label="Bildirim özeti">
@@ -655,224 +803,228 @@ export function NotificationCenter({
           id="nc-panel-send"
           role="tabpanel"
           aria-labelledby="nc-tab-send"
-          className="ncPanel ncSendLayout"
+          className="ncPanel ncSendPanel"
         >
-          <form className="ncCard ncComposer" onSubmit={prepareSend}>
-            <div className="ncCardHeading">
-              <div>
-                <span className="ncStep">1</span>
+          <form className="ncComposer" onSubmit={prepareSend}>
+            <section className="ncCard ncStepCard" aria-labelledby="ncRecipientsTitle">
+              <div className="ncCardHeading">
                 <div>
-                  <h3>Alıcıları belirleyin</h3>
-                  <p>Toplu gönderin veya tek kullanıcı seçin.</p>
+                  <span className="ncStep">1</span>
+                  <div>
+                    <h3 id="ncRecipientsTitle">Kimlere gönderilecek?</h3>
+                    <p>Herkese gönderin veya birden fazla kullanıcı seçin.</p>
+                  </div>
                 </div>
               </div>
-            </div>
 
-            <fieldset className="ncFieldset">
-              <legend className="ncSrOnly">Alıcı türü</legend>
-              <div className="ncSegmentedControl">
-                <label>
-                  <input
-                    type="radio"
-                    name="sendAudience"
-                    value="all"
-                    checked={sendForm.audienceType === 'all'}
-                    onChange={() =>
-                      updateSendForm({
-                        audienceType: 'all',
-                        targetUserId: '',
-                        deliveryScope: 'all_devices',
-                      })
-                    }
+              <fieldset className="ncFieldset">
+                <legend className="ncSrOnly">Alıcı türü</legend>
+                <div className="ncSegmentedControl">
+                  <label>
+                    <input
+                      type="radio"
+                      name="sendAudience"
+                      value="all"
+                      checked={sendForm.audienceType === 'all'}
+                      onChange={() =>
+                        updateSendForm({
+                          audienceType: 'all',
+                          deliveryScope: 'all_devices',
+                        })
+                      }
+                    />
+                    <span>
+                      <strong>Tüm aktif kullanıcılar</strong>
+                      <small>{activeUsers.length} kullanıcı · {subscriptionCount} cihaz</small>
+                    </span>
+                  </label>
+                  <label>
+                    <input
+                      type="radio"
+                      name="sendAudience"
+                      value="user"
+                      checked={sendForm.audienceType === 'user'}
+                      onChange={() =>
+                        updateSendForm({
+                          audienceType: 'user',
+                          deliveryScope: 'latest_device',
+                        })
+                      }
+                    />
+                    <span>
+                      <strong>Belirli kullanıcılar</strong>
+                      <small>Bir veya birden fazla kişi seçin</small>
+                    </span>
+                  </label>
+                </div>
+              </fieldset>
+
+              {sendForm.audienceType === 'user' && (
+                <>
+                  <UserMultiSelect
+                    idPrefix="send-users"
+                    users={activeUsers}
+                    selectedIds={sendForm.targetUserIds}
+                    onChange={(targetUserIds) => updateSendForm({ targetUserIds })}
                   />
-                  <span>
-                    <strong>Toplu bildirim</strong>
-                    <small>Tüm aktif kullanıcılar</small>
-                  </span>
-                </label>
-                <label>
-                  <input
-                    type="radio"
-                    name="sendAudience"
-                    value="user"
-                    checked={sendForm.audienceType === 'user'}
-                    onChange={() =>
-                      updateSendForm({
-                        audienceType: 'user',
-                        deliveryScope: 'latest_device',
-                      })
-                    }
-                  />
-                  <span>
-                    <strong>Kişiye özel</strong>
-                    <small>Seçilen kullanıcı</small>
-                  </span>
-                </label>
-              </div>
-            </fieldset>
 
-            {sendForm.audienceType === 'user' && (
-              <div className="ncTwoColumnFields">
-                <label className="ncField">
-                  <span>Kullanıcı</span>
-                  <select
-                    value={sendForm.targetUserId}
-                    onChange={(event) =>
-                      updateSendForm({ targetUserId: event.target.value })
-                    }
-                    required
-                  >
-                    <option value="">Kullanıcı seçin</option>
-                    {activeUsers.map((user) => (
-                      <option key={user.id} value={user.id}>
-                        {userLabel(user)}
-                        {user.email && user.email !== userLabel(user)
-                          ? ` · ${user.email}`
-                          : ''}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label className="ncField">
-                  <span>Cihaz kapsamı</span>
-                  <select
-                    value={sendForm.deliveryScope}
-                    onChange={(event) =>
-                      updateSendForm({ deliveryScope: event.target.value })
-                    }
-                  >
-                    <option value="latest_device">Yalnızca son cihaz</option>
-                    <option value="all_devices">Kullanıcının tüm cihazları</option>
-                  </select>
-                </label>
-              </div>
-            )}
+                  <fieldset className="ncFieldset ncDeliveryFieldset">
+                    <legend>Cihaz kapsamı</legend>
+                    <div className="ncSegmentedControl isCompact">
+                      <label>
+                        <input
+                          type="radio"
+                          name="sendDeliveryScope"
+                          checked={sendForm.deliveryScope === 'latest_device'}
+                          onChange={() => updateSendForm({ deliveryScope: 'latest_device' })}
+                        />
+                        <span>
+                          <strong>Her kişinin son cihazı</strong>
+                          <small>Tekrarlanan bildirimi azaltır</small>
+                        </span>
+                      </label>
+                      <label>
+                        <input
+                          type="radio"
+                          name="sendDeliveryScope"
+                          checked={sendForm.deliveryScope === 'all_devices'}
+                          onChange={() => updateSendForm({ deliveryScope: 'all_devices' })}
+                        />
+                        <span>
+                          <strong>Tüm kayıtlı cihazları</strong>
+                          <small>Seçilen kişilerin her cihazı</small>
+                        </span>
+                      </label>
+                    </div>
+                  </fieldset>
+                </>
+              )}
+            </section>
 
-            <div className="ncDivider" />
-
-            <div className="ncCardHeading">
-              <div>
-                <span className="ncStep">2</span>
+            <section className="ncCard ncStepCard" aria-labelledby="ncMessageTitle">
+              <div className="ncCardHeading">
                 <div>
-                  <h3>Mesajı hazırlayın</h3>
-                  <p>Uygulama dili Türkçe ise TR, İngilizce ise EN mesaj gider.</p>
+                  <span className="ncStep">2</span>
+                  <div>
+                    <h3 id="ncMessageTitle">Mesajı hazırlayın</h3>
+                    <p>Her cihaz, uygulamada seçili olan dile uygun mesajı alır.</p>
+                  </div>
+                </div>
+                <span className="ncLocaleBadge">TR + EN</span>
+              </div>
+
+              <div className="ncLanguageGrid">
+                <fieldset className="ncLanguageFieldset">
+                  <legend><span>TR</span> Türkçe</legend>
+                  <label className="ncField">
+                    <span>Başlık</span>
+                    <input
+                      type="text"
+                      value={sendForm.titleTr}
+                      maxLength={MAX_TITLE_LENGTH}
+                      onChange={(event) => updateSendForm({ titleTr: event.target.value })}
+                      required
+                    />
+                    <CharacterCount value={sendForm.titleTr} max={MAX_TITLE_LENGTH} />
+                  </label>
+                  <label className="ncField">
+                    <span>Mesaj</span>
+                    <textarea
+                      value={sendForm.bodyTr}
+                      maxLength={MAX_BODY_LENGTH}
+                      rows={4}
+                      onChange={(event) => updateSendForm({ bodyTr: event.target.value })}
+                      placeholder="Türkçe bildirimi yazın"
+                      required
+                    />
+                    <CharacterCount value={sendForm.bodyTr} max={MAX_BODY_LENGTH} />
+                  </label>
+                </fieldset>
+
+                <fieldset className="ncLanguageFieldset">
+                  <legend><span>EN</span> English</legend>
+                  <label className="ncField">
+                    <span>Title</span>
+                    <input
+                      type="text"
+                      value={sendForm.titleEn}
+                      maxLength={MAX_TITLE_LENGTH}
+                      onChange={(event) => updateSendForm({ titleEn: event.target.value })}
+                      required
+                    />
+                    <CharacterCount value={sendForm.titleEn} max={MAX_TITLE_LENGTH} />
+                  </label>
+                  <label className="ncField">
+                    <span>Message</span>
+                    <textarea
+                      value={sendForm.bodyEn}
+                      maxLength={MAX_BODY_LENGTH}
+                      rows={4}
+                      onChange={(event) => updateSendForm({ bodyEn: event.target.value })}
+                      placeholder="Write the English notification"
+                      required
+                    />
+                    <CharacterCount value={sendForm.bodyEn} max={MAX_BODY_LENGTH} />
+                  </label>
+                </fieldset>
+              </div>
+            </section>
+
+            <section className="ncCard ncStepCard ncReviewStep" aria-labelledby="ncReviewTitle">
+              <div className="ncCardHeading">
+                <div>
+                  <span className="ncStep">3</span>
+                  <div>
+                    <h3 id="ncReviewTitle">Kontrol edin ve gönderin</h3>
+                    <p>Göndermeden önce alıcıları ve iki dildeki mesajı doğrulayın.</p>
+                  </div>
                 </div>
               </div>
-              <span className="ncLocaleBadge">TR + EN</span>
-            </div>
 
-            <div className="ncLanguageGrid">
-              <fieldset className="ncLanguageFieldset">
-                <legend><span>TR</span> Türkçe</legend>
-                <label className="ncField">
-                  <span>Başlık</span>
-                  <input
-                    type="text"
-                    value={sendForm.titleTr}
-                    maxLength={MAX_TITLE_LENGTH}
-                    onChange={(event) =>
-                      updateSendForm({ titleTr: event.target.value })
-                    }
-                    required
-                  />
-                  <CharacterCount value={sendForm.titleTr} max={MAX_TITLE_LENGTH} />
-                </label>
-                <label className="ncField">
-                  <span>Mesaj</span>
-                  <textarea
-                    value={sendForm.bodyTr}
-                    maxLength={MAX_BODY_LENGTH}
-                    rows={4}
-                    onChange={(event) =>
-                      updateSendForm({ bodyTr: event.target.value })
-                    }
-                    placeholder="Türkçe bildirimi yazın"
-                    required
-                  />
-                  <CharacterCount value={sendForm.bodyTr} max={MAX_BODY_LENGTH} />
-                </label>
-              </fieldset>
+              <div className="ncReviewGrid">
+                <div className="ncRecipientSummary" aria-live="polite">
+                  <span>ALICILAR</span>
+                  <strong>
+                    {sendForm.audienceType === 'all'
+                      ? 'Tüm aktif kullanıcılar'
+                      : selectedSendUsers.length > 0
+                        ? `${selectedSendUsers.length} kullanıcı seçildi`
+                        : 'Henüz kullanıcı seçilmedi'}
+                  </strong>
+                  <small>
+                    {sendForm.audienceType === 'all'
+                      ? `${subscriptionCount} kayıtlı bildirim cihazı`
+                      : sendForm.deliveryScope === 'latest_device'
+                        ? 'Her kullanıcının son cihazı'
+                        : 'Seçilen kullanıcıların tüm cihazları'}
+                  </small>
+                  {sendForm.audienceType === 'user' && selectedSendUsers.length > 0 && (
+                    <p>
+                      {selectedSendUsers.slice(0, 4).map(userLabel).join(', ')}
+                      {selectedSendUsers.length > 4
+                        ? ` ve ${selectedSendUsers.length - 4} kişi daha`
+                        : ''}
+                    </p>
+                  )}
+                </div>
 
-              <fieldset className="ncLanguageFieldset">
-                <legend><span>EN</span> English</legend>
-                <label className="ncField">
-                  <span>Title</span>
-                  <input
-                    type="text"
-                    value={sendForm.titleEn}
-                    maxLength={MAX_TITLE_LENGTH}
-                    onChange={(event) =>
-                      updateSendForm({ titleEn: event.target.value })
-                    }
-                    required
-                  />
-                  <CharacterCount value={sendForm.titleEn} max={MAX_TITLE_LENGTH} />
-                </label>
-                <label className="ncField">
-                  <span>Message</span>
-                  <textarea
-                    value={sendForm.bodyEn}
-                    maxLength={MAX_BODY_LENGTH}
-                    rows={4}
-                    onChange={(event) =>
-                      updateSendForm({ bodyEn: event.target.value })
-                    }
-                    placeholder="Write the English notification"
-                    required
-                  />
-                  <CharacterCount value={sendForm.bodyEn} max={MAX_BODY_LENGTH} />
-                </label>
-              </fieldset>
-            </div>
-
-            <div className="ncFormFooter">
-              <div className="ncRecipientSummary" aria-live="polite">
-                <strong>Alıcı özeti</strong>
-                <span>
-                  {sendForm.audienceType === 'all'
-                    ? `${subscriptionCount} kayıtlı cihaz · tüm aktif kullanıcılar`
-                    : selectedSendUser
-                      ? `${userLabel(selectedSendUser)} · ${
-                          sendForm.deliveryScope === 'latest_device'
-                            ? 'son cihaz'
-                            : 'tüm cihazlar'
-                        }`
-                      : 'Henüz kullanıcı seçilmedi'}
-                </span>
+                <div className="ncReviewPreviews" aria-label="Bildirim önizlemeleri">
+                  <NotificationPreview language="TR" title={sendForm.titleTr} body={sendForm.bodyTr} />
+                  <NotificationPreview language="EN" title={sendForm.titleEn} body={sendForm.bodyEn} />
+                </div>
               </div>
-              <button type="submit" className="ncPrimaryButton" disabled={sendBusy}>
-                Gönderimi Kontrol Et
-              </button>
-            </div>
+
+              <div className="ncFormFooter">
+                <div className="ncInfoNote">
+                  <strong>Dil otomatik seçilir</strong>
+                  <p>Cihazın uygulama dili Türkçe ise TR, diğer durumda EN mesaj gönderilir.</p>
+                </div>
+                <button type="submit" className="ncPrimaryButton ncSendButton" disabled={sendBusy}>
+                  {sendBusy ? 'Hazırlanıyor…' : 'Gönderimi Gözden Geçir'}
+                </button>
+              </div>
+            </section>
           </form>
-
-          <aside className="ncCard ncPreviewPanel" aria-label="Bildirim önizlemesi">
-            <div className="ncCardHeading">
-              <div>
-                <div>
-                  <h3>Önizleme</h3>
-                  <p>Alıcının uygulama diline göre görünen mesaj.</p>
-                </div>
-              </div>
-            </div>
-            <NotificationPreview
-              language="TR"
-              title={sendForm.titleTr}
-              body={sendForm.bodyTr}
-            />
-            <NotificationPreview
-              language="EN"
-              title={sendForm.titleEn}
-              body={sendForm.bodyEn}
-            />
-            <div className="ncInfoNote">
-              <strong>Dil seçimi otomatik</strong>
-              <p>
-                Bildirim iki dilde hazırlanır; sunucu her cihazın son kaydedilen dilini
-                kullanır.
-              </p>
-            </div>
-          </aside>
         </div>
       )}
 
@@ -1007,7 +1159,6 @@ export function NotificationCenter({
                         onChange={() =>
                           updateAutomationDraft({
                             audienceType: 'all',
-                            targetUserId: '',
                             deliveryScope: 'all_devices',
                           })
                         }
@@ -1026,42 +1177,36 @@ export function NotificationCenter({
                           })
                         }
                       />
-                      <span><strong>Bir kullanıcı</strong></span>
+                      <span><strong>Belirli kullanıcılar</strong></span>
                     </label>
                   </div>
                 </fieldset>
-                {automationDraft.audienceType === 'user' && (
-                  <div className="ncTwoColumnFields isNested">
-                    <label className="ncField">
-                      <span>Kullanıcı</span>
-                      <select
-                        value={automationDraft.targetUserId}
-                        onChange={(event) =>
-                          updateAutomationDraft({ targetUserId: event.target.value })
-                        }
-                        required
-                      >
-                        <option value="">Kullanıcı seçin</option>
-                        {activeUsers.map((user) => (
-                          <option key={user.id} value={user.id}>{userLabel(user)}</option>
-                        ))}
-                      </select>
-                    </label>
-                    <label className="ncField">
-                      <span>Cihaz kapsamı</span>
-                      <select
-                        value={automationDraft.deliveryScope}
-                        onChange={(event) =>
-                          updateAutomationDraft({ deliveryScope: event.target.value })
-                        }
-                      >
-                        <option value="latest_device">Son cihaz</option>
-                        <option value="all_devices">Tüm cihazlar</option>
-                      </select>
-                    </label>
-                  </div>
-                )}
               </div>
+
+              {automationDraft.audienceType === 'user' && (
+                <div className="ncAutomationAudiencePicker">
+                  <UserMultiSelect
+                    idPrefix="automation-users"
+                    users={activeUsers}
+                    selectedIds={automationDraft.targetUserIds}
+                    onChange={(targetUserIds) =>
+                      updateAutomationDraft({ targetUserIds })
+                    }
+                  />
+                  <label className="ncField ncAutomationDeviceScope">
+                    <span>Cihaz kapsamı</span>
+                    <select
+                      value={automationDraft.deliveryScope}
+                      onChange={(event) =>
+                        updateAutomationDraft({ deliveryScope: event.target.value })
+                      }
+                    >
+                      <option value="latest_device">Her kullanıcının son cihazı</option>
+                      <option value="all_devices">Seçilen kullanıcıların tüm cihazları</option>
+                    </select>
+                  </label>
+                </div>
+              )}
 
               {automationDraft.contentType === 'custom' && (
                 <div className="ncLanguageGrid ncCustomMessageGrid">
@@ -1171,9 +1316,13 @@ export function NotificationCenter({
                 const active = isAutomationActive(automation)
                 const contentType = automation.content_type || automation.contentType
                 const audienceType = automation.audience_type || automation.audienceType
-                const targetUser = usersById.get(
+                const targetUserIds = normalizeUserIds(
+                  automation.target_user_ids || automation.targetUserIds,
                   automation.target_user_id || automation.targetUserId,
                 )
+                const targetUsers = targetUserIds
+                  .map((userId) => usersById.get(userId))
+                  .filter(Boolean)
                 const sendTime = String(
                   automation.send_time || automation.sendTime || '',
                 ).slice(0, 5)
@@ -1208,7 +1357,12 @@ export function NotificationCenter({
                           <dt>Alıcı</dt>
                           <dd>
                             {audienceType === 'user'
-                              ? userLabel(targetUser)
+                              ? targetUsers.length > 0
+                                ? `${targetUsers.length} kullanıcı · ${targetUsers
+                                    .slice(0, 2)
+                                    .map(userLabel)
+                                    .join(', ')}${targetUsers.length > 2 ? '…' : ''}`
+                                : 'Kullanıcı seçilmedi'
                               : `Tüm aktif kullanıcılar (${subscriptionCount} cihaz)`}
                           </dd>
                         </div>
@@ -1346,7 +1500,18 @@ export function NotificationCenter({
                         <span>{formatCairoDate(log.created_at)}</span>
                       </div>
                       <div className="ncHistoryResult">
-                        <span>{log.target_user_name || (log.target_user_id ? 'Kişiye özel' : 'Toplu')}</span>
+                        <span>
+                          {log.target_user_name ||
+                            (normalizeUserIds(
+                              log.target_user_ids || log.targetUserIds,
+                              log.target_user_id || log.targetUserId,
+                            ).length > 0
+                              ? `${normalizeUserIds(
+                                  log.target_user_ids || log.targetUserIds,
+                                  log.target_user_id || log.targetUserId,
+                                ).length} kullanıcı`
+                              : 'Toplu')}
+                        </span>
                         <small>
                           {Number(log.sent_count ?? log.sent ?? 0)} başarılı ·{' '}
                           {Number(log.failed_count ?? log.failed ?? 0)} başarısız

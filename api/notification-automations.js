@@ -19,6 +19,7 @@ const AUTOMATION_SELECT = [
   'content_type',
   'audience_type',
   'target_user_id',
+  'target_user_ids',
   'delivery_scope',
   'timezone',
   'send_time',
@@ -54,6 +55,7 @@ const DELIVERY_SELECT = [
   'automation_run_id',
   'created_by',
   'target_user_id',
+  'target_user_ids',
   'title',
   'body',
   'localized_messages',
@@ -157,14 +159,13 @@ export function getNotificationSendEndpoint(env = process.env) {
   return parsedUrl.toString()
 }
 
-async function assertActiveTargetUser(supabaseAdmin, targetUserId) {
-  if (!targetUserId) return
+async function assertActiveTargetUsers(supabaseAdmin, targetUserIds) {
+  if (!targetUserIds?.length) return
 
   const { data, error } = await supabaseAdmin
     .from('profiles')
     .select('id, is_active')
-    .eq('id', targetUserId)
-    .maybeSingle()
+    .in('id', targetUserIds)
 
   if (error) {
     throw new NotificationAutomationError(
@@ -173,11 +174,30 @@ async function assertActiveTargetUser(supabaseAdmin, targetUserId) {
     )
   }
 
-  if (!data || data.is_active === false) {
+  const activeTargetIds = new Set(
+    (data || [])
+      .filter((profile) => profile?.id && profile.is_active !== false)
+      .map((profile) => String(profile.id).toLowerCase()),
+  )
+
+  if (targetUserIds.some((targetUserId) => !activeTargetIds.has(targetUserId))) {
     throw new NotificationAutomationError(
-      'Aktif bir hedef kullanıcı seçilmelidir.',
+      'Seçilen kullanıcıların tamamı aktif olmalıdır.',
       400,
     )
+  }
+}
+
+function serializeDelivery(delivery) {
+  const targetUserIds = Array.isArray(delivery?.target_user_ids)
+    ? delivery.target_user_ids
+    : delivery?.target_user_id ? [delivery.target_user_id] : []
+
+  return {
+    ...delivery,
+    target_user_ids: targetUserIds,
+    targetUserId: targetUserIds[0] || null,
+    targetUserIds,
   }
 }
 
@@ -212,13 +232,13 @@ async function listNotificationCenter(supabaseAdmin) {
   return {
     automations: (automationsResult.data || []).map(serializeAutomation),
     runs: runsResult.data || [],
-    deliveries: deliveriesResult.data || [],
+    deliveries: (deliveriesResult.data || []).map(serializeDelivery),
   }
 }
 
 async function createAutomation(supabaseAdmin, authResult, body) {
   const automation = normalizeAutomationInput(body)
-  await assertActiveTargetUser(supabaseAdmin, automation.target_user_id)
+  await assertActiveTargetUsers(supabaseAdmin, automation.target_user_ids)
 
   const { data, error } = await supabaseAdmin
     .from('notification_automations')
@@ -249,9 +269,9 @@ async function updateAutomation(supabaseAdmin, body) {
     updatePayload = { is_active: activeValue }
   } else {
     updatePayload = normalizeAutomationInput(body)
-    await assertActiveTargetUser(
+    await assertActiveTargetUsers(
       supabaseAdmin,
-      updatePayload.target_user_id,
+      updatePayload.target_user_ids,
     )
   }
 
@@ -402,6 +422,8 @@ async function dispatchAutomation(
         body: notification.body,
         url: notification.url,
         localizedMessages: notification.localizedMessages,
+        audienceType: automation.audience_type,
+        targetUserIds: automation.targetUserIds,
         targetUserId: automation.target_user_id,
         singleDevice:
           automation.audience_type === 'user' &&
