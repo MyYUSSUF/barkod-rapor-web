@@ -7,11 +7,13 @@ import {
   fetchAllPages,
   filterEligibleNotificationTargets,
   getDeliveryResponseStatus,
+  getLocalizedNotificationPayload,
   getScheduledNotificationPayload,
   limitNotificationTargetsToLatest,
   MAX_NOTIFICATION_BODY_LENGTH,
   MAX_NOTIFICATION_TITLE_LENGTH,
   normalizeNotificationTargetUserId,
+  validateLocalizedNotificationPayloads,
   validateNotificationPayload,
 } from '../api/send-notification.js'
 import {
@@ -189,6 +191,30 @@ test('scheduled payload also supports the localized compatibility key', () => {
   assert.equal(
     getScheduledNotificationPayload(motivation, 'tr').body,
     'Devam et.',
+  )
+})
+
+test('manual localized payload is validated and selected using the subscription language', () => {
+  const localized = validateLocalizedNotificationPayloads({
+    tr: { title: 'Günaydın', body: 'İyi çalışmalar.' },
+    en: { title: 'Good morning', body: 'Have a productive day.' },
+  })
+
+  assert.deepEqual(getLocalizedNotificationPayload(localized, 'en'), {
+    title: 'Good morning',
+    body: 'Have a productive day.',
+    url: '/',
+  })
+  assert.deepEqual(getLocalizedNotificationPayload(localized, null), {
+    title: 'Günaydın',
+    body: 'İyi çalışmalar.',
+    url: '/',
+  })
+  assert.throws(
+    () => validateLocalizedNotificationPayloads({
+      tr: { title: 'Günaydın', body: 'İyi çalışmalar.' },
+    }),
+    /EN bildirim başlığı ve mesajı zorunludur/,
   )
 })
 

@@ -28,6 +28,7 @@ import { isSupabaseConfigured, supabase } from './lib/supabaseClient'
 import { ReportList } from './components/ReportList'
 import { ConfirmationDialog } from './components/ConfirmationDialog'
 import { SelectionDialog } from './components/SelectionDialog'
+import { NotificationCenter } from './components/admin/NotificationCenter'
 import {
   decideAndroidUpdateState,
   decideNativeUpdateState,
@@ -44,6 +45,7 @@ import {
 import { blurAndroidImeTarget } from './lib/androidSystemInsets'
 import './App.css'
 import './IndustrialTheme.css'
+import './AdminModern.css'
 
 const NativePdfViewer = lazy(() => import('./NativePdfViewer'))
 const AndroidUpdateRecovery = registerPlugin('AndroidUpdateRecovery')
@@ -1438,6 +1440,9 @@ function App() {
   const [desktopAdminSearch, setDesktopAdminSearch] = useState('')
   const [desktopDeviceFilter, setDesktopDeviceFilter] = useState('all')
   const [desktopPasswordDrafts, setDesktopPasswordDrafts] = useState({})
+  const [desktopPasswordVisibility, setDesktopPasswordVisibility] = useState({})
+  const [newAdminUserPasswordVisible, setNewAdminUserPasswordVisible] =
+    useState(false)
   const [newAdminUser, setNewAdminUser] = useState({
     username: '',
     full_name: '',
@@ -4992,14 +4997,19 @@ function App() {
       count: `${adminData.devices.length} cihaz`,
     },
     {
+      key: 'notifications',
+      title: 'Bildirimler',
+      count: `${adminData.subscriptionCount} cihaz`,
+    },
+    {
       key: 'reports',
       title: 'Raporlar',
       count: `${adminData.reportLogs.length} kayıt`,
     },
     {
       key: 'tools',
-      title: 'Araçlar',
-      count: 'Kullanıcı ve bildirim',
+      title: 'Kullanıcı Ekle',
+      count: 'Yeni hesap',
     },
   ]
 
@@ -5049,9 +5059,14 @@ function App() {
   const renderDesktopUserCard = (user) => {
     const userDevices = user.devices || []
     const passwordDraft = desktopPasswordDrafts[user.id] || ''
+    const passwordVisible = desktopPasswordVisibility[user.id] === true
+    const isExpanded = expandedAdminUserId === user.id
 
     return (
-      <article key={user.id} className="desktopEntityCard desktopUserCard">
+      <article
+        key={user.id}
+        className={`desktopEntityCard desktopUserCard${isExpanded ? ' isExpanded' : ''}`}
+      >
         <div className="desktopUserCardHeader">
           <div className="desktopEntityMain">
             <span
@@ -5080,9 +5095,20 @@ function App() {
               <dd>{formatDateTime(user.last_device_seen_at)}</dd>
             </div>
           </dl>
+
+          <button
+            type="button"
+            className="desktopUserDetailsToggle"
+            aria-expanded={isExpanded}
+            onClick={() => setExpandedAdminUserId(isExpanded ? '' : user.id)}
+          >
+            {isExpanded ? 'Ayrıntıları Kapat' : 'Ayrıntıları Aç'}
+          </button>
         </div>
 
-        <div className="desktopUserBodyGrid">
+        {isExpanded && (
+          <>
+            <div className="desktopUserBodyGrid">
           <section className="desktopSubPanel">
             <strong>Rapor Yetkileri</strong>
             <label className="desktopPermissionCheck">
@@ -5139,18 +5165,33 @@ function App() {
           <section className="desktopSubPanel">
             <strong>Şifre Yenile</strong>
             <div className="desktopInlineForm">
-              <input
-                type="password"
-                value={passwordDraft}
-                onChange={(e) =>
-                  setDesktopPasswordDrafts((current) => ({
-                    ...current,
-                    [user.id]: e.target.value,
-                  }))
-                }
-                placeholder="Yeni şifre"
-                autoComplete="new-password"
-              />
+              <div className="desktopPasswordField">
+                <input
+                  type={passwordVisible ? 'text' : 'password'}
+                  value={passwordDraft}
+                  onChange={(e) =>
+                    setDesktopPasswordDrafts((current) => ({
+                      ...current,
+                      [user.id]: e.target.value,
+                    }))
+                  }
+                  placeholder="Yeni şifre"
+                  autoComplete="new-password"
+                />
+                <button
+                  type="button"
+                  className="desktopPasswordToggle"
+                  aria-label={passwordVisible ? 'Yeni şifreyi gizle' : 'Yeni şifreyi göster'}
+                  onClick={() =>
+                    setDesktopPasswordVisibility((current) => ({
+                      ...current,
+                      [user.id]: !passwordVisible,
+                    }))
+                  }
+                >
+                  {passwordVisible ? 'Gizle' : 'Göster'}
+                </button>
+              </div>
               <button
                 type="button"
                 className="adminSmallButton adminRoleButton"
@@ -5160,23 +5201,27 @@ function App() {
               </button>
             </div>
           </section>
-        </div>
+            </div>
 
-        <section className="desktopSubPanel">
-          <strong>Cihazlar</strong>
-          <div className="desktopDeviceChips">
-            {userDevices.map((device) => (
-              <span key={device.id} className={`desktopDeviceChip is-${device.status}`}>
-                {getDeviceStatusLabel(device.status)} · {device.device_name || 'Cihaz'}
-              </span>
-            ))}
-            {userDevices.length === 0 && (
-              <span className="desktopDeviceChip">Cihaz kaydı yok</span>
-            )}
-          </div>
-        </section>
+            <section className="desktopSubPanel">
+              <strong>Cihazlar</strong>
+              <div className="desktopDeviceChips">
+                {userDevices.map((device) => (
+                  <span
+                    key={device.id}
+                    className={`desktopDeviceChip is-${device.status}`}
+                  >
+                    {getDeviceStatusLabel(device.status)} ·{' '}
+                    {device.device_name || 'Cihaz'}
+                  </span>
+                ))}
+                {userDevices.length === 0 && (
+                  <span className="desktopDeviceChip">Cihaz kaydı yok</span>
+                )}
+              </div>
+            </section>
 
-        <div className="desktopAdminRowActions">
+            <div className="desktopAdminRowActions">
           <button
             type="button"
             className={`adminSmallButton ${
@@ -5211,7 +5256,9 @@ function App() {
           >
             Tamamen Sil
           </button>
-        </div>
+            </div>
+          </>
+        )}
       </article>
     )
   }
@@ -5396,23 +5443,29 @@ function App() {
             </div>
 
             <div className="desktopAdminHeaderActions">
-              <input
-                type="search"
-                value={desktopAdminSearch}
-                onChange={(e) => setDesktopAdminSearch(e.target.value)}
-                placeholder="Kullanıcı, cihaz, barkod ara"
-                aria-label="Yönetim panelinde ara"
-              />
+              {['dashboard', 'users', 'devices', 'reports'].includes(
+                activeDesktopAdminView,
+              ) && (
+                <input
+                  type="search"
+                  value={desktopAdminSearch}
+                  onChange={(e) => setDesktopAdminSearch(e.target.value)}
+                  placeholder="Kullanıcı, cihaz, barkod ara"
+                  aria-label="Yönetim panelinde ara"
+                />
+              )}
 
-              <select
-                value={desktopDeviceFilter}
-                onChange={(e) => setDesktopDeviceFilter(e.target.value)}
-                aria-label="Cihaz durum filtresi"
-              >
-                <option value="all">Tüm cihazlar</option>
-                <option value="pending">Onay bekleyen</option>
-                <option value="approved">Onaylı</option>
-              </select>
+              {['dashboard', 'devices'].includes(activeDesktopAdminView) && (
+                <select
+                  value={desktopDeviceFilter}
+                  onChange={(e) => setDesktopDeviceFilter(e.target.value)}
+                  aria-label="Cihaz durum filtresi"
+                >
+                  <option value="all">Tüm cihazlar</option>
+                  <option value="pending">Onay bekleyen</option>
+                  <option value="approved">Onaylı</option>
+                </select>
+              )}
 
               <button
                 type="button"
@@ -5427,12 +5480,14 @@ function App() {
 
           {adminMessage && <p className="message">{adminMessage}</p>}
 
-          <section className="desktopAdminRuleStrip">
-            <strong>Cihaz kuralı</strong>
-            <span>
-              Admin cihazları otomatik onaylanır. Normal kullanıcıda ilk cihaz otomatik açılır, sonraki cihazlar onay bekler.
-            </span>
-          </section>
+          {activeDesktopAdminView === 'dashboard' && (
+            <section className="desktopAdminRuleStrip">
+              <strong>Cihaz kuralı</strong>
+              <span>
+                Admin cihazları otomatik onaylanır. Normal kullanıcıda ilk cihaz otomatik açılır, sonraki cihazlar onay bekler.
+              </span>
+            </section>
+          )}
 
           {activeDesktopAdminView === 'dashboard' && (
             <section className="desktopAdminContent">
@@ -5574,6 +5629,17 @@ function App() {
             </section>
           )}
 
+          {activeDesktopAdminView === 'notifications' && (
+            <NotificationCenter
+              users={adminData.users}
+              subscriptionCount={adminData.subscriptionCount}
+              apiBaseUrl={API_BASE_URL}
+              getAccessToken={getAccessToken}
+              makeAuthorizedHeaders={makeAuthorizedHeaders}
+              sessionMissingMessage={t.sessionMissing}
+            />
+          )}
+
           {activeDesktopAdminView === 'reports' && (
             <section className="desktopAdminContent">
               <section className="desktopAdminPanel">
@@ -5645,7 +5711,7 @@ function App() {
           )}
 
           {activeDesktopAdminView === 'tools' && (
-            <section className="desktopToolsGrid">
+            <section className="desktopToolsGrid isSingle">
               <section className="desktopAdminPanel desktopFormPanel">
                 <div className="desktopPanelHeader">
                   <div>
@@ -5693,19 +5759,35 @@ function App() {
 
                     <label>
                       Şifre
-                      <input
-                        type="password"
-                        value={newAdminUser.password}
-                        onChange={(e) =>
-                          setNewAdminUser((current) => ({
-                            ...current,
-                            password: e.target.value,
-                          }))
-                        }
-                        placeholder="Şifre"
-                        autoComplete="new-password"
-                        disabled={creatingAdminUser}
-                      />
+                      <span className="desktopPasswordField">
+                        <input
+                          type={newAdminUserPasswordVisible ? 'text' : 'password'}
+                          value={newAdminUser.password}
+                          onChange={(e) =>
+                            setNewAdminUser((current) => ({
+                              ...current,
+                              password: e.target.value,
+                            }))
+                          }
+                          placeholder="Şifre"
+                          autoComplete="new-password"
+                          disabled={creatingAdminUser}
+                        />
+                        <button
+                          type="button"
+                          className="desktopPasswordToggle"
+                          aria-label={
+                            newAdminUserPasswordVisible
+                              ? 'Yeni kullanıcı şifresini gizle'
+                              : 'Yeni kullanıcı şifresini göster'
+                          }
+                          onClick={() =>
+                            setNewAdminUserPasswordVisible((current) => !current)
+                          }
+                        >
+                          {newAdminUserPasswordVisible ? 'Gizle' : 'Göster'}
+                        </button>
+                      </span>
                     </label>
 
                     <label>
@@ -5794,72 +5876,6 @@ function App() {
                     {creatingAdminUser ? 'Ekleniyor...' : 'Kullanıcı Ekle'}
                   </button>
                 </form>
-              </section>
-
-              <section className="desktopAdminPanel desktopFormPanel">
-                <div className="desktopPanelHeader">
-                  <div>
-                    <strong>Bildirim Gönder</strong>
-                    <small>Bildirim izni olan cihazlara gönderilir.</small>
-                  </div>
-                  <span>{adminData.subscriptionCount}</span>
-                </div>
-
-                <label htmlFor="desktopNotificationTitle">Bildirim Başlığı</label>
-                <input
-                  id="desktopNotificationTitle"
-                  type="text"
-                  value={adminNotificationTitle}
-                  onChange={(e) => setAdminNotificationTitle(e.target.value)}
-                  maxLength={120}
-                  placeholder="Elvan Barkod Rapor"
-                  disabled={adminNotificationSending}
-                />
-
-                <label htmlFor="desktopNotificationBody">Bildirim Mesajı</label>
-                <textarea
-                  id="desktopNotificationBody"
-                  className="adminTextarea"
-                  value={adminNotificationBody}
-                  onChange={(e) => setAdminNotificationBody(e.target.value)}
-                  maxLength={800}
-                  placeholder="Gönderilecek mesajı yaz"
-                  disabled={adminNotificationSending}
-                  rows={5}
-                />
-
-                <label htmlFor="desktopNotificationTarget">Alıcı</label>
-                <select
-                  id="desktopNotificationTarget"
-                  value={adminNotificationTargetUserId}
-                  onChange={(e) =>
-                    setAdminNotificationTargetUserId(e.target.value)
-                  }
-                  disabled={adminNotificationSending}
-                >
-                  <option value="">Tüm aktif kullanıcılar</option>
-                  {adminData.users.map((user) => (
-                    <option key={user.id} value={user.id}>
-                      {user.full_name || user.email}
-                    </option>
-                  ))}
-                </select>
-                {adminNotificationTargetUserId && (
-                  <small>Yalnızca bu kullanıcının en son aktif cihazına gönderilir.</small>
-                )}
-
-                <button
-                  type="button"
-                  className="mainButton"
-                  onClick={sendAdminNotification}
-                  disabled={adminNotificationSending}
-                >
-                  {adminNotificationSending ? 'Gönderiliyor...' : 'Bildirimi Gönder'}
-                </button>
-
-                {adminNotificationMessage && (
-                  <p className="message">{adminNotificationMessage}</p>
-                )}
               </section>
             </section>
           )}

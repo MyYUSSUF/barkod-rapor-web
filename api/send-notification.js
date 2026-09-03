@@ -67,6 +67,18 @@ export function normalizeNotificationTargetUserId(value) {
   return targetUserId
 }
 
+export function normalizeNotificationAutomationId(value, label = 'Otomasyon') {
+  if (!isNotBlank(value)) return null
+
+  const automationId = String(value).trim().toLowerCase()
+
+  if (!USER_ID_PATTERN.test(automationId)) {
+    throw new NotificationBackendError(`${label} ID geçersiz.`, 400)
+  }
+
+  return automationId
+}
+
 function secretsMatch(actual, expected) {
   if (!isNotBlank(actual) || !isNotBlank(expected)) {
     return false
@@ -302,6 +314,59 @@ export function getScheduledNotificationPayload(
     body: localizedPayload.body || motivation?.body,
     url: localizedPayload.url || motivation?.url,
   })
+}
+
+export function validateLocalizedNotificationPayloads(
+  localizedMessages,
+  { fallbackUrl = '/' } = {},
+) {
+  if (localizedMessages === null || localizedMessages === undefined) {
+    return null
+  }
+
+  if (
+    typeof localizedMessages !== 'object' ||
+    Array.isArray(localizedMessages)
+  ) {
+    throw new NotificationBackendError(
+      'Çok dilli bildirim içeriği geçersiz.',
+      400,
+    )
+  }
+
+  const result = {}
+
+  for (const language of ['tr', 'en']) {
+    const message = localizedMessages[language]
+
+    if (
+      !message ||
+      typeof message !== 'object' ||
+      !isNotBlank(message.title) ||
+      !isNotBlank(message.body)
+    ) {
+      throw new NotificationBackendError(
+        `${language.toUpperCase()} bildirim başlığı ve mesajı zorunludur.`,
+        400,
+      )
+    }
+
+    result[language] = validateNotificationPayload({
+      title: message.title,
+      body: message.body,
+      url: message.url || fallbackUrl,
+    })
+  }
+
+  return result
+}
+
+export function getLocalizedNotificationPayload(
+  localizedMessages,
+  notificationLanguage,
+) {
+  const language = getNotificationLanguage(notificationLanguage)
+  return localizedMessages?.[language] || localizedMessages?.tr
 }
 
 export async function fetchAllPages(fetchPage, options = {}) {
@@ -731,10 +796,14 @@ function createSupabaseAdminClient() {
 
 async function verifyAdminRequest(req, secret) {
   const notificationAdminSecret = process.env.NOTIFICATION_ADMIN_SECRET
+  const authorization =
+    req.headers?.authorization || req.headers?.Authorization || ''
   const secretIsValid =
-    isNotBlank(secret) &&
     isNotBlank(notificationAdminSecret) &&
-    secret === notificationAdminSecret
+    (
+      secretsMatch(secret, notificationAdminSecret) ||
+      secretsMatch(authorization, `Bearer ${notificationAdminSecret}`)
+    )
 
   if (secretIsValid) {
     return {
@@ -768,6 +837,76 @@ function makeSafeError(sendError) {
   }
 }
 
+async function recordNotificationDelivery(
+  supabaseAdmin,
+  {
+    source,
+    automationId,
+    automationRunId,
+    createdBy,
+    targetUserId,
+    payload,
+    localizedMessages,
+    total,
+    sent,
+    failed,
+  },
+) {
+  try {
+    const { error } = await supabaseAdmin
+      .from('notification_delivery_logs')
+      .insert({
+        source,
+        automation_id: automationId,
+        automation_run_id: automationRunId,
+        created_by: createdBy,
+        target_user_id: targetUserId,
+        title: payload.title,
+        body: payload.body,
+        localized_messages: localizedMessages,
+        total,
+        sent,
+        failed,
+      })
+
+    if (error) {
+      console.error('Bildirim teslim kaydı oluşturulamadı.', {
+        code: error.code || null,
+      })
+    }
+  } catch {
+    // Bildirim başarıyla gönderildiyse geçmiş kaydı gönderimi başarısız yapmamalı.
+  }
+}
+
+async function verifyClaimedAutomationRun(
+  supabaseAdmin,
+  { automationId, automationRunId },
+) {
+  if (!automationId || !automationRunId) return
+
+  const { data, error } = await supabaseAdmin
+    .from('notification_automation_runs')
+    .select('id, status')
+    .eq('id', automationRunId)
+    .eq('automation_id', automationId)
+    .maybeSingle()
+
+  if (error) {
+    throw new NotificationBackendError(
+      'Otomasyon çalıştırma kaydı doğrulanamadı.',
+      500,
+    )
+  }
+
+  if (!data || data.status !== 'started') {
+    throw new NotificationBackendError(
+      'Otomasyon çalıştırma kaydı geçerli değil.',
+      409,
+    )
+  }
+}
+
 export default async function handler(req, res) {
   let scheduledMotivation = null
   let scheduledSupabaseAdmin = null
@@ -796,8 +935,18 @@ export default async function handler(req, res) {
       return res.status(200).json(scheduledMotivation)
     }
 
-    const requestData = scheduledMotivation || req.body || {}
-    const { secret, title, body, url } = requestData
+    let bodyData = req.body || {}
+
+    if (typeof bodyData === 'string') {
+      try {
+        bodyData = JSON.parse(bodyData)
+      } catch {
+        throw new NotificationBackendError('İstek içeriği geçersiz.', 400)
+      }
+    }
+
+    const requestData = scheduledMotivation || bodyData
+    const { secret, title, body, url, localizedMessages } = requestData
 
     const vapidPublicKey = getVapidPublicKey()
     const vapidPrivateKey = getVapidPrivateKey()
@@ -819,8 +968,42 @@ export default async function handler(req, res) {
       ? null
       : normalizeNotificationTargetUserId(requestData.targetUserId)
     const singleDevice = Boolean(targetUserId && requestData.singleDevice === true)
+    const automationId = isCronRequest
+      ? null
+      : normalizeNotificationAutomationId(requestData.automationId)
+    const automationRunId = isCronRequest
+      ? null
+      : normalizeNotificationAutomationId(
+        requestData.automationRunId,
+        'Otomasyon çalıştırma',
+      )
 
     if (
+      (automationId || automationRunId) &&
+      authResult.method !== 'secret'
+    ) {
+      throw new NotificationBackendError(
+        'Otomasyon gönderim bilgisi yalnızca zamanlayıcı tarafından kullanılabilir.',
+        403,
+      )
+    }
+
+    if (Boolean(automationId) !== Boolean(automationRunId)) {
+      throw new NotificationBackendError(
+        'Otomasyon gönderim bilgisi eksik.',
+        400,
+      )
+    }
+
+    await verifyClaimedAutomationRun(supabaseAdmin, {
+      automationId,
+      automationRunId,
+    })
+
+    if (
+      // A dispatcher request is already protected by its unique database run
+      // claim; the human/manual send throttle must not block another schedule.
+      !automationId &&
       !enforceRequestLimit(res, {
         scope: 'send-notification',
         key: authResult.userId || 'admin-secret',
@@ -854,9 +1037,22 @@ export default async function handler(req, res) {
       scheduledRunClaimed = true
     }
 
-    const payloadData = validateNotificationPayload({ title, body, url })
+    const localizedPayloads = scheduledMotivation
+      ? null
+      : validateLocalizedNotificationPayloads(localizedMessages, {
+        fallbackUrl: url,
+      })
+    const payloadData = localizedPayloads?.en ||
+      validateNotificationPayload({ title, body, url })
     const scheduledPayloads = new Map()
     const getPayloadForTarget = (target) => {
+      if (localizedPayloads) {
+        return getLocalizedNotificationPayload(
+          localizedPayloads,
+          target?.notification_language,
+        )
+      }
+
       if (!scheduledMotivation) {
         return payloadData
       }
@@ -905,6 +1101,22 @@ export default async function handler(req, res) {
           summary: { total: 0, sent: 0, failed: 0 },
         })
       }
+
+      await recordNotificationDelivery(supabaseAdmin, {
+        source: scheduledMotivation
+          ? 'daily_motivation'
+          : automationId ? 'automation' : 'manual',
+        automationId,
+        automationRunId,
+        createdBy: authResult.userId,
+        targetUserId,
+        payload: payloadData,
+        localizedMessages:
+          localizedPayloads || scheduledMotivation?.messages || null,
+        total: 0,
+        sent: 0,
+        failed: 0,
+      })
 
       return res.status(200).json({
         total: 0,
@@ -1243,6 +1455,22 @@ export default async function handler(req, res) {
         },
       })
     }
+
+    await recordNotificationDelivery(supabaseAdmin, {
+      source: scheduledMotivation
+        ? 'daily_motivation'
+        : automationId ? 'automation' : 'manual',
+      automationId,
+      automationRunId,
+      createdBy: authResult.userId,
+      targetUserId,
+      payload: payloadData,
+      localizedMessages:
+        localizedPayloads || scheduledMotivation?.messages || null,
+      total: responsePayload.total,
+      sent: responsePayload.sent,
+      failed: responsePayload.failed,
+    })
 
     if (responseStatus !== 200) {
       responsePayload.error = 'Bildirim hiçbir uygun cihaza teslim edilemedi.'

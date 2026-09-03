@@ -1,0 +1,690 @@
+.notificationCenter {
+  --nc-ink: #172033;
+  --nc-muted: #667085;
+  --nc-border: #e4e7ec;
+  --nc-border-strong: #d0d5dd;
+  --nc-surface: #ffffff;
+  --nc-canvas: #f7f8fa;
+  --nc-accent: #b4232d;
+  --nc-accent-dark: #8f1721;
+  --nc-accent-soft: #fff1f2;
+  --nc-success: #067647;
+  --nc-success-soft: #ecfdf3;
+  --nc-warning: #b54708;
+  --nc-warning-soft: #fffaeb;
+  --nc-danger: #b42318;
+  --nc-danger-soft: #fef3f2;
+  color: var(--nc-ink);
+  width: 100%;
+  max-width: 1440px;
+  margin: 0 auto;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.notificationCenter *,
+.notificationCenter *::before,
+.notificationCenter *::after {
+  box-sizing: border-box;
+}
+
+.ncHeader {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 32px;
+  padding: 4px 2px 24px;
+}
+
+.ncEyebrow {
+  display: block;
+  margin-bottom: 7px;
+  color: var(--nc-accent);
+  font-size: 12px;
+  font-weight: 750;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.ncHeader h2,
+.ncSectionToolbar h3,
+.ncCardHeading h3 {
+  color: var(--nc-ink);
+  margin: 0;
+}
+
+.ncHeader h2 {
+  font-size: clamp(26px, 2.3vw, 34px);
+  line-height: 1.15;
+  letter-spacing: -0.035em;
+}
+
+.ncHeader p,
+.ncSectionToolbar p,
+.ncCardHeading p {
+  color: var(--nc-muted);
+  margin: 7px 0 0;
+  line-height: 1.5;
+}
+
+.ncHeaderStats {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+}
+
+.ncHeaderStats > div {
+  display: grid;
+  min-width: 126px;
+  padding: 10px 16px;
+  border: 1px solid var(--nc-border);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.82);
+}
+
+.ncHeaderStats strong {
+  font-size: 21px;
+  line-height: 1.1;
+}
+
+.ncHeaderStats span {
+  color: var(--nc-muted);
+  font-size: 12px;
+  margin-top: 3px;
+}
+
+.ncIconButton {
+  align-items: center;
+  background: var(--nc-surface);
+  border: 1px solid var(--nc-border);
+  border-radius: 12px;
+  color: var(--nc-ink);
+  cursor: pointer;
+  display: inline-flex;
+  font-size: 22px;
+  justify-content: center;
+  min-width: 46px;
+}
+
+.ncIconButton:hover:not(:disabled) {
+  border-color: var(--nc-border-strong);
+  background: #f9fafb;
+}
+
+.ncIconButton:disabled {
+  cursor: wait;
+  opacity: 0.55;
+}
+
+.isSpinning {
+  animation: ncSpin 0.8s linear infinite;
+}
+
+@keyframes ncSpin {
+  to { transform: rotate(360deg); }
+}
+
+.ncFeedback {
+  align-items: center;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  display: flex;
+  font-size: 14px;
+  justify-content: space-between;
+  margin-bottom: 16px;
+  padding: 12px 14px;
+}
+
+.ncFeedback.is-success { background: var(--nc-success-soft); border-color: #abefc6; color: #05603a; }
+.ncFeedback.is-warning { background: var(--nc-warning-soft); border-color: #fedf89; color: #93370d; }
+.ncFeedback.is-danger { background: var(--nc-danger-soft); border-color: #fecdca; color: #912018; }
+.ncFeedback.is-info { background: #eff8ff; border-color: #b2ddff; color: #175cd3; }
+
+.ncFeedback button {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font-size: 20px;
+  line-height: 1;
+  padding: 2px 4px;
+}
+
+.ncTabs {
+  align-items: flex-end;
+  border-bottom: 1px solid var(--nc-border);
+  display: flex;
+  gap: 28px;
+  margin-bottom: 22px;
+  overflow-x: auto;
+}
+
+.ncTabs button {
+  align-items: center;
+  appearance: none;
+  background: transparent;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  color: var(--nc-muted);
+  cursor: pointer;
+  display: inline-flex;
+  flex: 0 0 auto;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 650;
+  gap: 8px;
+  margin: 0;
+  padding: 13px 2px 12px;
+}
+
+.ncTabs button:hover { color: var(--nc-ink); }
+.ncTabs button.isActive { border-bottom-color: var(--nc-accent); color: var(--nc-accent); }
+
+.ncTabs button span {
+  align-items: center;
+  background: #f2f4f7;
+  border-radius: 999px;
+  color: #475467;
+  display: inline-flex;
+  font-size: 11px;
+  justify-content: center;
+  min-width: 21px;
+  padding: 2px 6px;
+}
+
+.ncPanel { animation: ncFadeIn 0.18s ease-out; }
+@keyframes ncFadeIn { from { opacity: 0; transform: translateY(3px); } }
+
+.ncSendLayout {
+  align-items: start;
+  display: grid;
+  gap: 20px;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 350px);
+}
+
+.ncCard {
+  background: var(--nc-surface);
+  border: 1px solid var(--nc-border);
+  border-radius: 16px;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.035);
+}
+
+.ncComposer,
+.ncAutomationEditor {
+  padding: 24px;
+}
+
+.ncCardHeading,
+.ncCardHeading > div {
+  align-items: flex-start;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.ncCardHeading h3 {
+  font-size: 17px;
+  letter-spacing: -0.015em;
+}
+
+.ncCardHeading p { font-size: 13px; }
+
+.ncStep {
+  align-items: center;
+  background: var(--nc-accent-soft);
+  border-radius: 9px;
+  color: var(--nc-accent);
+  display: inline-flex;
+  flex: 0 0 32px;
+  font-size: 14px;
+  font-style: normal;
+  font-weight: 750;
+  height: 32px;
+  justify-content: center;
+}
+
+.ncFieldset {
+  border: 0;
+  margin: 0;
+  min-width: 0;
+  padding: 0;
+}
+
+.ncSegmentedControl {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-top: 18px;
+}
+
+.ncSegmentedControl label { cursor: pointer; min-width: 0; }
+.ncSegmentedControl input { position: absolute; opacity: 0; pointer-events: none; }
+
+.ncSegmentedControl label > span {
+  background: #fff;
+  border: 1px solid var(--nc-border);
+  border-radius: 12px;
+  display: grid;
+  gap: 3px;
+  min-height: 66px;
+  padding: 13px 15px;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+}
+
+.ncSegmentedControl input:checked + span {
+  background: var(--nc-accent-soft);
+  border-color: #fda4af;
+  box-shadow: 0 0 0 1px rgba(180, 35, 45, 0.06);
+}
+
+.ncSegmentedControl input:focus-visible + span {
+  outline: 3px solid rgba(180, 35, 45, 0.17);
+  outline-offset: 2px;
+}
+
+.ncSegmentedControl strong { color: var(--nc-ink); font-size: 14px; }
+.ncSegmentedControl small { color: var(--nc-muted); font-size: 12px; }
+.ncSegmentedControl.isCompact label > span { min-height: 46px; padding: 11px 13px; }
+
+.ncTwoColumnFields,
+.ncThreeColumnFields,
+.ncLanguageGrid {
+  display: grid;
+  gap: 14px;
+  margin-top: 18px;
+}
+
+.ncTwoColumnFields,
+.ncLanguageGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.ncThreeColumnFields { grid-template-columns: 1.35fr 1.15fr 0.65fr; }
+.ncTwoColumnFields.isNested { margin-top: 0; }
+
+.ncField {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+  position: relative;
+}
+
+.ncField > span,
+.ncDaysFieldset > legend,
+.ncAudienceFields legend {
+  color: #344054;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.ncField input,
+.ncField select,
+.ncField textarea,
+.ncTimeInput input {
+  appearance: none;
+  background: #fff;
+  border: 1px solid var(--nc-border-strong);
+  border-radius: 10px;
+  color: var(--nc-ink);
+  font: inherit;
+  font-size: 14px;
+  line-height: 1.45;
+  min-height: 43px;
+  padding: 10px 12px;
+  width: 100%;
+}
+
+.ncField select {
+  background-image: linear-gradient(45deg, transparent 50%, #667085 50%), linear-gradient(135deg, #667085 50%, transparent 50%);
+  background-position: calc(100% - 17px) 18px, calc(100% - 12px) 18px;
+  background-repeat: no-repeat;
+  background-size: 5px 5px, 5px 5px;
+  padding-right: 34px;
+}
+
+.ncField textarea { min-height: 104px; resize: vertical; }
+
+.ncField input:hover,
+.ncField select:hover,
+.ncField textarea:hover,
+.ncTimeInput input:hover { border-color: #98a2b3; }
+
+.ncField input:focus,
+.ncField select:focus,
+.ncField textarea:focus,
+.ncTimeInput input:focus {
+  border-color: var(--nc-accent);
+  box-shadow: 0 0 0 3px rgba(180, 35, 45, 0.1);
+  outline: none;
+}
+
+.ncCharacterCount {
+  bottom: 8px;
+  color: #98a2b3;
+  font-size: 10px;
+  pointer-events: none;
+  position: absolute;
+  right: 10px;
+}
+
+.ncCharacterCount.isOver { color: var(--nc-danger); }
+.ncField:has(.ncCharacterCount) input,
+.ncField:has(.ncCharacterCount) textarea { padding-right: 54px; }
+
+.ncDivider {
+  border-top: 1px solid var(--nc-border);
+  margin: 24px 0;
+}
+
+.ncLocaleBadge,
+.ncContentBadge {
+  background: #f2f4f7;
+  border-radius: 999px;
+  color: #475467;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 5px 9px;
+  white-space: nowrap;
+}
+
+.ncLanguageFieldset {
+  background: #fcfcfd;
+  border: 1px solid var(--nc-border);
+  border-radius: 12px;
+  margin: 0;
+  min-width: 0;
+  padding: 16px;
+}
+
+.ncLanguageFieldset legend {
+  color: #344054;
+  font-size: 13px;
+  font-weight: 700;
+  padding: 0 6px;
+}
+
+.ncLanguageFieldset legend span,
+.ncLanguageTag,
+.ncAutomationMessage span {
+  background: var(--nc-ink);
+  border-radius: 5px;
+  color: #fff;
+  display: inline-flex;
+  font-size: 10px;
+  font-weight: 750;
+  letter-spacing: 0.04em;
+  margin-right: 5px;
+  padding: 3px 5px;
+}
+
+.ncLanguageFieldset .ncField + .ncField { margin-top: 13px; }
+
+.ncFormFooter {
+  align-items: center;
+  border-top: 1px solid var(--nc-border);
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+  margin-top: 24px;
+  padding-top: 20px;
+}
+
+.ncRecipientSummary { display: grid; gap: 3px; }
+.ncRecipientSummary strong { font-size: 12px; }
+.ncRecipientSummary span { color: var(--nc-muted); font-size: 12px; }
+
+.ncPrimaryButton,
+.ncSecondaryButton,
+.ncDangerButton,
+.ncTextButton {
+  align-items: center;
+  border-radius: 9px;
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 680;
+  justify-content: center;
+  min-height: 39px;
+  padding: 9px 14px;
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
+}
+
+.ncPrimaryButton { background: var(--nc-accent); border: 1px solid var(--nc-accent); color: #fff; }
+.ncPrimaryButton:hover:not(:disabled) { background: var(--nc-accent-dark); border-color: var(--nc-accent-dark); }
+.ncSecondaryButton { background: #fff; border: 1px solid var(--nc-border-strong); color: #344054; }
+.ncSecondaryButton:hover:not(:disabled) { background: #f9fafb; border-color: #98a2b3; }
+.ncDangerButton { background: #fff; border: 1px solid #fda29b; color: var(--nc-danger); }
+.ncDangerButton:hover:not(:disabled), .ncDangerButton.isSolid { background: var(--nc-danger); border-color: var(--nc-danger); color: #fff; }
+.ncDangerButton.isSolid:hover:not(:disabled) { background: #912018; border-color: #912018; }
+.ncTextButton { background: transparent; border: 1px solid transparent; color: #475467; }
+.ncTextButton:hover:not(:disabled) { background: #f2f4f7; color: var(--nc-ink); }
+
+.ncPrimaryButton:disabled,
+.ncSecondaryButton:disabled,
+.ncDangerButton:disabled,
+.ncTextButton:disabled { cursor: not-allowed; opacity: 0.55; }
+
+.ncPrimaryButton:focus-visible,
+.ncSecondaryButton:focus-visible,
+.ncDangerButton:focus-visible,
+.ncTextButton:focus-visible,
+.ncIconButton:focus-visible,
+.ncTabs button:focus-visible {
+  outline: 3px solid rgba(180, 35, 45, 0.18);
+  outline-offset: 2px;
+}
+
+.ncPreviewPanel {
+  padding: 20px;
+  position: sticky;
+  top: 18px;
+}
+
+.ncPreviewCard {
+  align-items: flex-start;
+  background: linear-gradient(145deg, #202939, #101828);
+  border: 1px solid #344054;
+  border-radius: 13px;
+  box-shadow: 0 10px 24px rgba(16, 24, 40, 0.12);
+  color: #fff;
+  display: flex;
+  gap: 10px;
+  margin-top: 14px;
+  min-height: 84px;
+  padding: 14px;
+}
+
+.ncPreviewCard .ncLanguageTag { background: rgba(255, 255, 255, 0.16); flex: 0 0 auto; margin: 0; }
+.ncPreviewCard strong { display: block; font-size: 13px; line-height: 1.35; }
+.ncPreviewCard p { color: #d0d5dd; font-size: 12px; line-height: 1.45; margin: 5px 0 0; overflow-wrap: anywhere; }
+
+.ncInfoNote {
+  background: #f8f9fc;
+  border-radius: 11px;
+  margin-top: 16px;
+  padding: 13px 14px;
+}
+
+.ncInfoNote strong { font-size: 12px; }
+.ncInfoNote p { color: var(--nc-muted); font-size: 12px; line-height: 1.45; margin: 4px 0 0; }
+
+.ncSectionToolbar {
+  align-items: center;
+  display: flex;
+  gap: 20px;
+  justify-content: space-between;
+  margin-bottom: 18px;
+}
+
+.ncSectionToolbar h3 { font-size: 19px; letter-spacing: -0.02em; }
+.ncSectionToolbar p { font-size: 13px; }
+.ncAutomationEditor { margin-bottom: 18px; }
+.ncAutomationEditor .ncCardHeading { margin-bottom: 20px; }
+
+.ncTimeInput { position: relative; }
+.ncTimeInput input { padding-right: 58px; }
+.ncTimeInput em { color: var(--nc-muted); font-size: 10px; font-style: normal; pointer-events: none; position: absolute; right: 30px; top: 15px; }
+
+.ncDaysFieldset {
+  border-top: 1px solid var(--nc-border);
+  margin-top: 22px;
+  padding-top: 18px;
+}
+
+.ncDaysFieldset > legend { padding-right: 8px; }
+.ncQuickDays { display: flex; gap: 7px; margin-bottom: 10px; }
+.ncQuickDays button { background: transparent; border: 0; color: var(--nc-accent); cursor: pointer; font: inherit; font-size: 12px; font-weight: 650; padding: 0; }
+.ncQuickDays button + button::before { color: var(--nc-border-strong); content: "·"; margin-right: 7px; }
+
+.ncWeekdayPicker { display: grid; gap: 8px; grid-template-columns: repeat(7, minmax(44px, 1fr)); }
+.ncWeekdayPicker label { cursor: pointer; }
+.ncWeekdayPicker input { position: absolute; opacity: 0; pointer-events: none; }
+.ncWeekdayPicker span { align-items: center; background: #fff; border: 1px solid var(--nc-border); border-radius: 9px; color: #475467; display: flex; font-size: 12px; font-weight: 650; justify-content: center; min-height: 40px; }
+.ncWeekdayPicker input:checked + span { background: var(--nc-ink); border-color: var(--nc-ink); color: #fff; }
+.ncWeekdayPicker input:focus-visible + span { outline: 3px solid rgba(180, 35, 45, 0.17); outline-offset: 2px; }
+
+.ncAudienceFields { align-items: end; border-top: 1px solid var(--nc-border); margin-top: 22px; padding-top: 18px; }
+.ncAudienceFields .ncSegmentedControl { margin-top: 8px; }
+.ncCustomMessageGrid { border-top: 1px solid var(--nc-border); margin-top: 22px; padding-top: 20px; }
+
+.ncSwitch {
+  align-items: center;
+  color: #344054;
+  cursor: pointer;
+  display: inline-flex;
+  font-size: 13px;
+  font-weight: 600;
+  gap: 9px;
+}
+
+.ncSwitch input { position: absolute; opacity: 0; pointer-events: none; }
+.ncSwitch > span { background: #d0d5dd; border-radius: 999px; display: inline-block; height: 22px; position: relative; transition: background 0.15s ease; width: 38px; }
+.ncSwitch > span::after { background: #fff; border-radius: 50%; box-shadow: 0 1px 2px rgba(16, 24, 40, 0.25); content: ""; height: 16px; left: 3px; position: absolute; top: 3px; transition: transform 0.15s ease; width: 16px; }
+.ncSwitch input:checked + span { background: var(--nc-success); }
+.ncSwitch input:checked + span::after { transform: translateX(16px); }
+.ncSwitch input:focus-visible + span { outline: 3px solid rgba(180, 35, 45, 0.17); outline-offset: 2px; }
+.ncButtonGroup { display: flex; gap: 8px; }
+
+.ncAutomationList { display: grid; gap: 12px; }
+.ncAutomationCard { background: #fff; border: 1px solid var(--nc-border); border-radius: 14px; display: grid; grid-template-columns: 4px minmax(0, 1fr) auto; overflow: hidden; }
+.ncAutomationCard.isPaused { background: #fcfcfd; }
+.ncAutomationStatusRail { background: var(--nc-success); }
+.ncAutomationCard.isPaused .ncAutomationStatusRail { background: #98a2b3; }
+.ncAutomationMain { min-width: 0; padding: 17px 18px; }
+.ncAutomationTitleRow { align-items: flex-start; display: flex; gap: 12px; justify-content: space-between; }
+.ncAutomationTitleRow > div { align-items: center; display: flex; flex-wrap: wrap; gap: 9px; }
+.ncAutomationTitleRow h4 { font-size: 15px; margin: 0; }
+
+.ncStatusBadge { border-radius: 999px; display: inline-flex; font-size: 10px; font-weight: 750; padding: 4px 7px; white-space: nowrap; }
+.ncStatusBadge.isActive, .ncStatusBadge.is-success { background: var(--nc-success-soft); color: var(--nc-success); }
+.ncStatusBadge.isPaused, .ncStatusBadge.is-neutral { background: #f2f4f7; color: #475467; }
+.ncStatusBadge.is-warning { background: var(--nc-warning-soft); color: var(--nc-warning); }
+.ncStatusBadge.is-danger { background: var(--nc-danger-soft); color: var(--nc-danger); }
+.ncStatusBadge.is-info { background: #eff8ff; color: #175cd3; }
+
+.ncAutomationMeta { display: grid; gap: 18px; grid-template-columns: 1.1fr 1.2fr 0.85fr; margin: 16px 0 0; }
+.ncAutomationMeta div { min-width: 0; }
+.ncAutomationMeta dt { color: var(--nc-muted); font-size: 10px; font-weight: 650; letter-spacing: 0.04em; margin-bottom: 3px; text-transform: uppercase; }
+.ncAutomationMeta dd { color: #344054; font-size: 12px; line-height: 1.35; margin: 0; overflow-wrap: anywhere; }
+.ncAutomationMessage { color: var(--nc-muted); display: flex; font-size: 11px; gap: 6px; margin: 13px 0 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ncAutomationMessage span { align-self: center; flex: 0 0 auto; margin: 0; }
+.ncAutomationActions { align-items: center; border-left: 1px solid var(--nc-border); display: flex; flex-direction: column; gap: 7px; justify-content: center; min-width: 112px; padding: 14px; }
+.ncAutomationActions button { width: 100%; }
+
+.ncLoadingState,
+.ncEmptyState { align-items: center; background: #fff; border: 1px dashed var(--nc-border-strong); border-radius: 14px; color: var(--nc-muted); display: flex; flex-direction: column; font-size: 13px; justify-content: center; min-height: 190px; padding: 30px; text-align: center; }
+.ncEmptyState strong { color: var(--nc-ink); font-size: 15px; }
+.ncEmptyState p { margin: 6px 0 16px; }
+.ncLoader { animation: ncSpin 0.8s linear infinite; border: 2px solid var(--nc-border); border-radius: 50%; border-top-color: var(--nc-accent); height: 24px; margin-bottom: 10px; width: 24px; }
+
+.ncHistoryGrid { display: grid; gap: 16px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.ncHistorySection { min-width: 0; overflow: hidden; }
+.ncHistoryHeading { align-items: center; border-bottom: 1px solid var(--nc-border); display: flex; justify-content: space-between; padding: 16px 18px; }
+.ncHistoryHeading h4 { font-size: 14px; margin: 0; }
+.ncHistoryHeading > span { background: #f2f4f7; border-radius: 999px; color: #475467; font-size: 10px; font-weight: 700; padding: 3px 7px; }
+.ncHistoryList { max-height: 540px; overflow-y: auto; }
+.ncHistoryItem { align-items: center; display: grid; gap: 10px; grid-template-columns: 8px minmax(0, 1fr) auto; padding: 13px 18px; }
+.ncHistoryItem + .ncHistoryItem { border-top: 1px solid #f2f4f7; }
+.ncRunDot { background: #98a2b3; border-radius: 50%; display: block; height: 7px; width: 7px; }
+.ncRunDot.is-success { background: var(--nc-success); }
+.ncRunDot.is-warning { background: var(--nc-warning); }
+.ncRunDot.is-danger { background: var(--nc-danger); }
+.ncRunDot.is-info { background: #1570ef; }
+.ncHistoryItem > div:nth-child(2) { display: grid; gap: 3px; min-width: 0; }
+.ncHistoryItem strong { font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ncHistoryItem span { color: var(--nc-muted); font-size: 10px; }
+.ncHistoryResult { align-items: flex-end; display: grid; gap: 4px; justify-items: end; text-align: right; }
+.ncHistoryResult small { color: var(--nc-muted); font-size: 10px; white-space: nowrap; }
+
+.ncModalBackdrop { align-items: center; background: rgba(16, 24, 40, 0.58); display: flex; inset: 0; justify-content: center; padding: 20px; position: fixed; z-index: 10000; }
+.ncConfirmDialog { background: #fff; border-radius: 18px; box-shadow: 0 24px 48px rgba(16, 24, 40, 0.2); max-height: calc(100vh - 40px); max-width: 560px; overflow-y: auto; padding: 24px; width: 100%; }
+.ncConfirmIcon { align-items: center; background: var(--nc-accent-soft); border-radius: 50%; color: var(--nc-accent); display: flex; font-size: 18px; font-weight: 800; height: 42px; justify-content: center; margin-bottom: 14px; width: 42px; }
+.ncConfirmDialog h3 { font-size: 19px; letter-spacing: -0.02em; margin: 0; }
+.ncConfirmDialog > p { color: var(--nc-muted); font-size: 13px; line-height: 1.5; margin: 7px 0 0; }
+.ncConfirmRecipient { background: #f8f9fc; border-radius: 10px; display: grid; gap: 3px; margin-top: 16px; padding: 11px 13px; }
+.ncConfirmRecipient span { color: var(--nc-muted); font-size: 10px; font-weight: 650; text-transform: uppercase; }
+.ncConfirmRecipient strong { font-size: 13px; }
+.ncConfirmPreviews { display: grid; gap: 10px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.ncConfirmPreviews .ncPreviewCard { box-shadow: none; min-height: 74px; }
+.ncConfirmActions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 20px; }
+
+.ncSrOnly { clip: rect(0, 0, 0, 0); clip-path: inset(50%); height: 1px; overflow: hidden; position: absolute; white-space: nowrap; width: 1px; }
+
+@media (max-width: 1120px) {
+  .ncSendLayout { grid-template-columns: minmax(0, 1fr); }
+  .ncPreviewPanel { display: grid; gap: 12px; grid-template-columns: repeat(2, minmax(0, 1fr)); position: static; }
+  .ncPreviewPanel .ncCardHeading,
+  .ncPreviewPanel .ncInfoNote { grid-column: 1 / -1; }
+  .ncPreviewPanel .ncPreviewCard { margin-top: 0; }
+  .ncThreeColumnFields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .ncThreeColumnFields .isWide { grid-column: 1 / -1; }
+  .ncAutomationMeta { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .ncHistoryGrid { grid-template-columns: minmax(0, 1fr); }
+}
+
+@media (max-width: 760px) {
+  .ncHeader { align-items: stretch; flex-direction: column; gap: 16px; }
+  .ncHeaderStats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)) 46px; }
+  .ncHeaderStats > div { min-width: 0; }
+  .ncTabs { gap: 18px; }
+  .ncComposer,
+  .ncAutomationEditor { padding: 17px; }
+  .ncSegmentedControl,
+  .ncTwoColumnFields,
+  .ncThreeColumnFields,
+  .ncLanguageGrid,
+  .ncConfirmPreviews { grid-template-columns: minmax(0, 1fr); }
+  .ncThreeColumnFields .isWide { grid-column: auto; }
+  .ncPreviewPanel { display: block; }
+  .ncPreviewPanel .ncPreviewCard { margin-top: 12px; }
+  .ncWeekdayPicker { grid-template-columns: repeat(4, minmax(48px, 1fr)); }
+  .ncFormFooter { align-items: stretch; flex-direction: column; }
+  .ncFormFooter .ncPrimaryButton { width: 100%; }
+  .ncButtonGroup { width: 100%; }
+  .ncButtonGroup button { flex: 1; }
+  .ncAutomationCard { grid-template-columns: 4px minmax(0, 1fr); }
+  .ncAutomationActions { border-left: 0; border-top: 1px solid var(--nc-border); flex-direction: row; grid-column: 2; justify-content: flex-end; min-width: 0; }
+  .ncAutomationMeta { grid-template-columns: minmax(0, 1fr); gap: 10px; }
+  .ncAutomationTitleRow { align-items: flex-start; flex-direction: column; }
+  .ncHistoryItem { align-items: flex-start; grid-template-columns: 8px minmax(0, 1fr); }
+  .ncHistoryResult { align-items: flex-start; grid-column: 2; justify-items: start; text-align: left; }
+  .ncConfirmActions { flex-direction: column-reverse; }
+  .ncConfirmActions button { width: 100%; }
+}
+
+@media (max-width: 440px) {
+  .ncHeaderStats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .ncHeaderStats .ncIconButton { grid-column: 1 / -1; min-height: 42px; }
+  .ncWeekdayPicker { grid-template-columns: repeat(3, minmax(48px, 1fr)); }
+  .ncAutomationActions { flex-wrap: wrap; }
+  .ncAutomationActions button { flex: 1; min-width: 86px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .notificationCenter *,
+  .notificationCenter *::before,
+  .notificationCenter *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+}
