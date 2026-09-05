@@ -134,9 +134,11 @@ export function getNotificationSendEndpoint(env = process.env) {
   const configuredUrl = String(
     env.PUBLIC_APP_URL || env.APP_BASE_URL || env.SITE_URL || '',
   ).trim()
-  const vercelUrl = String(env.VERCEL_URL || '').trim()
+  const productionUrl = String(env.VERCEL_PROJECT_PRODUCTION_URL || '').trim()
   const baseUrl = configuredUrl ||
-    (vercelUrl ? `https://${vercelUrl}` : 'https://barkod-rapor-web.vercel.app')
+    (productionUrl
+      ? `https://${productionUrl}`
+      : 'https://barkod-rapor-web.vercel.app')
 
   let parsedUrl
 
@@ -157,6 +159,26 @@ export function getNotificationSendEndpoint(env = process.env) {
   }
 
   return parsedUrl.toString()
+}
+
+function getServiceErrorMessage(value, fallback) {
+  if (typeof value === 'string' && value.trim()) return value.trim()
+
+  if (value && typeof value === 'object') {
+    const nestedMessage = value.message || value.error || value.code
+    if (typeof nestedMessage === 'string' && nestedMessage.trim()) {
+      return nestedMessage.trim()
+    }
+
+    try {
+      const serialized = JSON.stringify(value)
+      if (serialized && serialized !== '{}') return serialized
+    } catch {
+      // Fall through to the safe message below.
+    }
+  }
+
+  return fallback
 }
 
 async function assertActiveTargetUsers(supabaseAdmin, targetUserIds) {
@@ -433,19 +455,36 @@ async function dispatchAutomation(
       }),
     })
     let responsePayload = {}
+    let responseIsJson = false
 
     try {
       responsePayload = await response.json()
+      responseIsJson = true
     } catch {
       responsePayload = {}
     }
 
     const summary = getSafeDeliverySummary(responsePayload)
+    const responseHasSummary = responseIsJson &&
+      ['total', 'sent', 'failed'].every((key) =>
+        Number.isFinite(Number(responsePayload?.[key])),
+      )
 
-    if (!response.ok) {
-      const message = String(
-        responsePayload.error || `Bildirim servisi HTTP ${response.status} yanıtı verdi.`,
+    if (!response.ok || !responseHasSummary) {
+      const fallbackMessage = responseIsJson
+        ? `Bildirim servisi HTTP ${response.status} yanıtı verdi.`
+        : 'Bildirim servisi uygulama yerine geçersiz bir sayfa döndürdü.'
+      const message = getServiceErrorMessage(
+        responsePayload.error,
+        fallbackMessage,
       ).slice(0, 500)
+
+      console.error('Bildirim servisi çağrısı başarısız.', {
+        status: response.status,
+        responseIsJson,
+        responseHasSummary,
+        message,
+      })
 
       await finishAutomationRun(supabaseAdmin, run.id, {
         status: 'failed',
@@ -457,6 +496,7 @@ async function dispatchAutomation(
         automationId: automation.id,
         name: automation.name,
         status: 'failed',
+        error: message,
         ...summary,
       }
     }

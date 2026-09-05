@@ -218,6 +218,88 @@ test('cron authorization compares the bearer secret and send URL stays on the co
     getNotificationSendEndpoint(env),
     'https://example.test/api/send-notification',
   )
+  assert.equal(
+    getNotificationSendEndpoint({
+      VERCEL_URL: 'protected-deployment.example.test',
+      VERCEL_PROJECT_PRODUCTION_URL: 'public-production.example.test',
+    }),
+    'https://public-production.example.test/api/send-notification',
+  )
+  assert.equal(
+    getNotificationSendEndpoint({
+      VERCEL_URL: 'protected-deployment.example.test',
+    }),
+    'https://barkod-rapor-web.vercel.app/api/send-notification',
+  )
+})
+
+test('dispatcher rejects a protected deployment login page instead of reporting success', async () => {
+  const databaseCalls = []
+  const automation = makeCustomAutomation({ days_of_week: [4] })
+  const supabaseAdmin = {
+    from(table) {
+      if (table === 'notification_automations') {
+        return {
+          select() {
+            return {
+              eq() {
+                return Promise.resolve({ data: [automation], error: null })
+              },
+            }
+          },
+        }
+      }
+
+      if (table === 'notification_automation_runs') {
+        return {
+          insert() {
+            return {
+              select() {
+                return {
+                  single() {
+                    return Promise.resolve({ data: { id: RUN_ID }, error: null })
+                  },
+                }
+              },
+            }
+          },
+          update(record) {
+            databaseCalls.push(record)
+            return {
+              eq() {
+                return Promise.resolve({ error: null })
+              },
+            }
+          },
+        }
+      }
+
+      throw new Error(`Unexpected table: ${table}`)
+    },
+  }
+
+  const result = await dispatchDueAutomations(supabaseAdmin, {
+    now: new Date('2026-09-03T04:30:15.000Z'),
+    env: {
+      NOTIFICATION_ADMIN_SECRET: 'notification-secret-value',
+      VERCEL_URL: 'protected-deployment.example.test',
+      VERCEL_PROJECT_PRODUCTION_URL: 'public-production.example.test',
+    },
+    fetchImpl: async () => ({
+      ok: true,
+      status: 200,
+      async json() {
+        throw new SyntaxError('HTML is not JSON')
+      },
+    }),
+  })
+
+  assert.equal(result.completed, 0)
+  assert.equal(result.failed, 1)
+  assert.equal(result.results[0].status, 'failed')
+  assert.match(result.results[0].error, /geçersiz bir sayfa/i)
+  assert.equal(databaseCalls.at(-1).status, 'failed')
+  assert.match(databaseCalls.at(-1).error, /geçersiz bir sayfa/i)
 })
 
 test('due dispatcher sends all selected user IDs without putting its secret in the body', async () => {

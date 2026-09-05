@@ -105,7 +105,7 @@ export const DAILY_MOTIVATION_MESSAGES = Object.freeze([
 ])
 
 export function formatDailyMotivationBody(message, language) {
-  return `${message[language]}\n— ${message.author}`
+  return `“${message[language]}”\n— ${message.author}`
 }
 
 export function getCairoCalendarDate(date = new Date()) {
