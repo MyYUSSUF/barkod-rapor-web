@@ -17,6 +17,7 @@
     "ios:open": "cap open ios",
     "lint": "eslint .",
     "test": "node --test",
+    "test:env": "node scripts/check-test-environment.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

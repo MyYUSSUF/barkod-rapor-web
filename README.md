@@ -73,6 +73,22 @@ npm.cmd run build
 npm.cmd run lint
 ```
 
+## Yalıtılmış Supabase testi
+
+Yerel Supabase CLI ve Docker kurulduktan sonra `.env.test.example` dosyasını
+`.env.test` olarak kopyalayıp yalnız yerel değerleri girin. Aşağıdaki kontrol,
+normal veya üretim Supabase değişkenleri yüklüyse ve hedef yerel HTTP adresi
+değilse durur; veritabanına bağlanmadan önce çalıştırın.
+
+```powershell
+Copy-Item .env.test.example .env.test
+node --env-file=.env.test scripts/check-test-environment.mjs
+```
+
+Bu kontrol başarılı olsa bile yerel Supabase servisinin çalıştığını göstermez.
+Servisi başlatmak ve migration/geri yükleme denemesi yapmak ayrıca Supabase CLI
+ve Docker gerektirir.
+
 ## Android / Google Play
 
 Android uygulamasi Capacitor ile `android/` klasorunde hazirlanir.

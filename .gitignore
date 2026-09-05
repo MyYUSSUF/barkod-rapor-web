@@ -3,6 +3,7 @@ dist
 .env*
 _env*.local
 !.env.example
+!.env.test.example
 !.env.ios
 !.env.ios-debug
 .DS_Store
