@@ -362,13 +362,18 @@ async function claimAutomationRun(supabaseAdmin, automationId, scheduledFor) {
 }
 
 function getSafeDeliverySummary(payload = {}) {
+  const getCount = (value) => {
+    const count = Number(value)
+    return Number.isFinite(count) && count >= 0 ? Math.trunc(count) : 0
+  }
+
   return {
-    total: Number(payload.total) || 0,
-    sent: Number(payload.sent) || 0,
-    failed: Number(payload.failed) || 0,
-    webSent: Number(payload.webSent) || 0,
-    nativeSent: Number(payload.nativeSent) || 0,
-    deleted: Number(payload.deleted) || 0,
+    total: getCount(payload.total),
+    sent: getCount(payload.sent),
+    failed: getCount(payload.failed),
+    webSent: getCount(payload.webSent),
+    nativeSent: getCount(payload.nativeSent),
+    deleted: getCount(payload.deleted),
   }
 }
 
@@ -467,7 +472,9 @@ async function dispatchAutomation(
     const summary = getSafeDeliverySummary(responsePayload)
     const responseHasSummary = responseIsJson &&
       ['total', 'sent', 'failed'].every((key) =>
-        Number.isFinite(Number(responsePayload?.[key])),
+        typeof responsePayload?.[key] === 'number' &&
+        Number.isFinite(responsePayload[key]) &&
+        responsePayload[key] >= 0,
       )
 
     if (!response.ok || !responseHasSummary) {
@@ -513,9 +520,14 @@ async function dispatchAutomation(
       ...summary,
     }
   } catch (error) {
+    const message = getServiceErrorMessage(
+      error,
+      'Bildirim otomasyonu çalıştırılamadı.',
+    ).slice(0, 500)
+
     await finishAutomationRun(supabaseAdmin, run.id, {
       status: 'failed',
-      errorMessage: error.message || 'Bildirim otomasyonu çalıştırılamadı.',
+      errorMessage: message,
     })
 
     return {
@@ -525,6 +537,7 @@ async function dispatchAutomation(
       total: 0,
       sent: 0,
       failed: 0,
+      error: message,
     }
   }
 }
