@@ -16,7 +16,7 @@ başına yayın izni vermez.
 ## Android
 
 - [ ] Ortak değişikliğin `platform/android` başlangıç commit'ine kontrollü aktarıldığı doğrulandı.
-- [ ] Android modu ile build/sync geçti; native dosya ve imzalama malzemeleri izlenmiyor.
+- [ ] Android modu ile build/sync geçti; native kaynak dosyaları sürüm kontrolündedir, gizli imzalama malzemeleri ise izlenmez.
 - [ ] Gerçek cihazda giriş, barkod, rapor/PDF, bağlantı davranışı ve etkilenmiş bildirim akışı denendi.
 - [ ] versionCode/versionName, Play Console'daki mevcut sürüm ve hedef kanal doğrulandı.
 - [ ] AAB imzalı olarak üretildi; yükleme veya yayın için ayrı kullanıcı onayı var.
