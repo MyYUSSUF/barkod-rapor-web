@@ -1,6 +1,11 @@
 import assert from 'node:assert/strict'
-import { readFile } from 'node:fs/promises'
+import { chmod, mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { existsSync } from 'node:fs'
+import { join } from 'node:path'
+import { spawnSync } from 'node:child_process'
 import test from 'node:test'
+import { tmpdir } from 'node:os'
+import { fileURLToPath } from 'node:url'
 
 const projectRoot = new URL('../', import.meta.url)
 
@@ -57,4 +62,109 @@ test('native push migration permits Android and both APNs environments', async (
     /check \(platform in \('android', 'ios', 'ios-sandbox'\)\)/,
   )
   assert.match(migration, /validate constraint native_push_subscriptions_platform_check/)
+})
+
+test('Xcode Cloud post-clone script and shared scheme are safe and target App', async () => {
+  const [script, scheme, guide] = await Promise.all([
+    readProjectFile('ios/App/ci_scripts/ci_post_clone.sh'),
+    readProjectFile('ios/App/App.xcodeproj/xcshareddata/xcschemes/App.xcscheme'),
+    readProjectFile('docs/ios-xcode-cloud.md'),
+  ])
+
+  assert.match(script, /CI_PRIMARY_REPOSITORY_PATH/)
+  assert.match(script, /npm ci/)
+  assert.match(script, /npm run build:ios/)
+  assert.match(script, /\.\/node_modules\/\.bin\/cap sync ios/)
+  assert.match(script, /VITE_SUPABASE_URL/)
+  assert.doesNotMatch(script, /SUPABASE_SERVICE_ROLE_KEY/)
+  assert.match(scheme, /BlueprintIdentifier = "504EC3031FED79650016851F"/)
+  assert.match(scheme, /BlueprintName = "App"/)
+  assert.match(guide, /manuel branch tetiklemeli/)
+  assert.match(guide, /TestFlight veya App Store dağıtımı/)
+})
+
+test('Xcode Cloud script rejects bad inputs and propagates command failures', async (t) => {
+  const bashPath = process.platform === 'win32'
+    ? join(process.env.ProgramFiles || 'C:\\Program Files', 'Git', 'bin', 'bash.exe')
+    : 'bash'
+  const bash = spawnSync(bashPath, ['--version'])
+  if (bash.error || bash.status !== 0) {
+    t.skip('bash bulunamadı; shell mock testi atlandı')
+    return
+  }
+
+  const root = await mkdtemp(join(tmpdir(), 'ios-cloud-script-'))
+  t.after(async () => rm(root, { recursive: true, force: true }))
+  const bin = join(root, 'bin')
+  await mkdir(bin)
+  await mkdir(join(root, 'ios', 'App', 'App.xcodeproj'), { recursive: true })
+  await mkdir(join(root, 'node_modules', '.bin'), { recursive: true })
+  await writeFile(join(root, 'package.json'), '{"name": "barkod-rapor-web"}')
+  await writeFile(join(root, 'package-lock.json'), '{}')
+  const realNode = process.platform === 'win32'
+    ? process.execPath.replace(/^([A-Za-z]):/, (_, drive) => `/${drive.toLowerCase()}`).replace(/\\/g, '/')
+    : process.execPath
+  await writeFile(join(bin, 'node'), '#!/bin/sh\nif [ "$1" = "-p" ]; then echo 24; exit 0; fi\nexec "$MOCK_REAL_NODE" "$@"\n')
+  await writeFile(join(bin, 'brew'), '#!/bin/sh\necho unexpected-brew >> "$MOCK_LOG"\nexit 91\n')
+  await writeFile(join(bin, 'npm'), '#!/bin/sh\necho npm >> "$MOCK_LOG"\nexit "${MOCK_NPM_EXIT:-0}"\n')
+  await writeFile(join(root, 'node_modules', '.bin', 'cap'), '#!/bin/sh\necho cap >> "$MOCK_LOG"\nexit 0\n')
+  await Promise.all([
+    chmod(join(bin, 'node'), 0o755),
+    chmod(join(bin, 'brew'), 0o755),
+    chmod(join(bin, 'npm'), 0o755),
+    chmod(join(root, 'node_modules', '.bin', 'cap'), 0o755),
+  ])
+
+  const script = fileURLToPath(new URL('../ios/App/ci_scripts/ci_post_clone.sh', import.meta.url))
+  const env = {
+    ...process.env,
+    PATH: `${bin}${process.platform === 'win32' ? ';' : ':'}${process.env.PATH}`,
+    CI_PRIMARY_REPOSITORY_PATH: root,
+    VITE_SUPABASE_URL: 'https://example.supabase.co',
+    VITE_SUPABASE_ANON_KEY: 'sb_publishable_safe-test-key',
+    MOCK_LOG: join(root, 'commands.log'),
+    MOCK_REAL_NODE: realNode,
+  }
+  const run = (overrides = {}) => spawnSync(bashPath, [script], { env: { ...env, ...overrides }, encoding: 'utf8' })
+  const missingEnv = run({ VITE_SUPABASE_URL: '' })
+  assert.notEqual(missingEnv.status, 0)
+  assert.match(missingEnv.stderr, /ortam değişkenleri eksik/)
+
+  const badRepo = spawnSync(bashPath, [script], { env: { ...env, CI_PRIMARY_REPOSITORY_PATH: join(root, 'missing') }, encoding: 'utf8' })
+  assert.notEqual(badRepo.status, 0)
+  assert.match(badRepo.stderr, /geçersiz repo kökü/)
+
+  const secret = run({ VITE_SUPABASE_ANON_KEY: 'sb_secret_do-not-print' })
+  assert.notEqual(secret.status, 0)
+  assert.doesNotMatch(`${secret.stdout}${secret.stderr}`, /sb_secret_do-not-print/)
+
+  const serviceRoleJwt = run({ VITE_SUPABASE_ANON_KEY: 'eyJhbGciOiJub25lIn0.eyJyb2xlIjoic2VydmljZV9yb2xlIn0.' })
+  assert.notEqual(serviceRoleJwt.status, 0)
+  assert.doesNotMatch(`${serviceRoleJwt.stdout}${serviceRoleJwt.stderr}`, /eyJhbGciOiJub25l/)
+
+  const anonJwt = run({ VITE_SUPABASE_ANON_KEY: 'eyJhbGciOiJub25lIn0.eyJyb2xlIjoiYW5vbiJ9.' })
+  assert.equal(anonJwt.status, 0)
+  await rm(join(root, 'commands.log'), { force: true })
+
+  const failedNpm = run({ MOCK_NPM_EXIT: '7' })
+  assert.equal(failedNpm.status, 7)
+  assert.equal(existsSync(join(root, 'commands.log')), true)
+  const log = await readFile(join(root, 'commands.log'), 'utf8')
+  assert.match(log, /^npm$/m)
+  assert.doesNotMatch(log, /cap/)
+  await rm(join(root, 'commands.log'), { force: true })
+
+  const happy = run()
+  assert.equal(happy.status, 0)
+  const happyLog = await readFile(join(root, 'commands.log'), 'utf8')
+  assert.match(happyLog, /^npm$/m)
+  assert.match(happyLog, /^cap$/m)
+
+  const badBin = join(root, 'bad-bin')
+  await mkdir(badBin)
+  await writeFile(join(badBin, 'node'), '#!/bin/sh\necho 23\n')
+  await writeFile(join(badBin, 'brew'), '#!/bin/sh\nexit 9\n')
+  await Promise.all([chmod(join(badBin, 'node'), 0o755), chmod(join(badBin, 'brew'), 0o755)])
+  const incompatibleNode = run({ PATH: `${badBin}${process.platform === 'win32' ? ';' : ':'}${env.PATH}` })
+  assert.equal(incompatibleNode.status, 9)
 })
