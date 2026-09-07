@@ -1439,6 +1439,40 @@ function App() {
   const [logoutInProgress, setLogoutInProgress] = useState(false)
   const [nativeNotificationPermission, setNativeNotificationPermission] =
     useState('unknown')
+  const [openedNotification, setOpenedNotification] = useState(null)
+
+  useEffect(() => {
+    const handleWebNotificationClick = (event) => {
+      if (event.data?.type !== 'ELVAN_NOTIFICATION_CLICK') return
+      const notification = event.data.notification || {}
+      setOpenedNotification({
+        title: notification.title || 'Elvan Barkod Rapor',
+        body: notification.body || '',
+      })
+    }
+
+    navigator.serviceWorker?.addEventListener('message', handleWebNotificationClick)
+
+    let disposed = false
+    let actionListener
+    PushNotifications.addListener('pushNotificationActionPerformed', ({ notification }) => {
+      if (disposed) return
+      const data = notification?.data || {}
+      setOpenedNotification({
+        title: notification?.title || data.title || 'Elvan Barkod Rapor',
+        body: notification?.body || data.body || '',
+      })
+    }).then((listener) => {
+      actionListener = listener
+      if (disposed) listener.remove()
+    }).catch(() => {})
+
+    return () => {
+      disposed = true
+      navigator.serviceWorker?.removeEventListener('message', handleWebNotificationClick)
+      actionListener?.remove()
+    }
+  }, [])
 
   const [adminNotificationTitle, setAdminNotificationTitle] = useState('Elvan Barkod Rapor')
   const [adminNotificationBody, setAdminNotificationBody] = useState('')
@@ -4565,6 +4599,23 @@ function App() {
 
   const renderGlobalDialogs = () => (
     <>
+      {openedNotification && (
+        <div className="selectionDialogBackdrop notificationOpenedBackdrop">
+          <section
+            className="selectionDialogPanel notificationOpenedPanel"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="openedNotificationTitle"
+          >
+            <span className="notificationOpenedIcon" aria-hidden="true">🔔</span>
+            <strong id="openedNotificationTitle">{openedNotification.title}</strong>
+            <p>{openedNotification.body}</p>
+            <button type="button" onClick={() => setOpenedNotification(null)}>
+              {t.close}
+            </button>
+          </section>
+        </div>
+      )}
       {appUpdateCheckPending ? (
         <AppUpdateCheckGate texts={t} />
       ) : (

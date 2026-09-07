@@ -627,6 +627,36 @@ h1 {
   margin: 0;
 }
 
+.notificationOpenedBackdrop {
+  z-index: 1200;
+}
+
+.notificationOpenedPanel {
+  text-align: center;
+  max-width: min(420px, calc(100vw - 32px));
+}
+
+.notificationOpenedPanel strong {
+  display: block;
+  font-size: 1.1rem;
+}
+
+.notificationOpenedPanel p {
+  margin: 12px 0 20px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.notificationOpenedPanel button {
+  min-width: 120px;
+}
+
+.notificationOpenedIcon {
+  display: block;
+  font-size: 2rem;
+  margin-bottom: 8px;
+}
+
 [dir="rtl"] .notificationPermissionNotice {
   text-align: right;
 }

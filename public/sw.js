@@ -51,6 +51,14 @@ self.addEventListener('notificationclick', (event) => {
       for (const client of clients) {
         if ('focus' in client) {
           client.focus()
+          client.postMessage({
+            type: 'ELVAN_NOTIFICATION_CLICK',
+            notification: {
+              title: event.notification.title,
+              body: event.notification.body,
+              data: event.notification.data || {},
+            },
+          })
           return
         }
       }
