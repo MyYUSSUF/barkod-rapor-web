@@ -924,10 +924,11 @@ async function verifyAdminRequest(req, secret) {
 }
 
 function makeSafeError(sendError) {
+  const code = sendError?.code || sendError?.statusCode || null
   return {
     statusCode: sendError.statusCode || null,
-    message: sendError.message || 'Bilinmeyen gönderim hatası',
-    body: sendError.body ? String(sendError.body).slice(0, 500) : null,
+    code,
+    message: code ? `Bildirim sağlayıcısı hatası (${code}).` : 'Bildirim sağlayıcısı hatası.',
   }
 }
 
@@ -945,10 +946,11 @@ async function recordNotificationDelivery(
     total,
     sent,
     failed,
+    recipientDeliveries = [],
   },
 ) {
   try {
-    const { error } = await supabaseAdmin
+    const { data, error } = await supabaseAdmin
       .from('notification_delivery_logs')
       .insert({
         source,
@@ -964,12 +966,31 @@ async function recordNotificationDelivery(
         sent,
         failed,
       })
+      .select('id')
+      .single()
 
     if (error) {
       console.error('Bildirim teslim kaydı oluşturulamadı.', {
         code: error.code || null,
       })
+      return null
     }
+    const deliveryLogId = data?.id || null
+    if (recipientDeliveries.length > 0) {
+      const rows = recipientDeliveries.map((item) => ({
+        ...item,
+        delivery_log_id: deliveryLogId,
+        automation_id: automationId || null,
+        automation_run_id: automationRunId || null,
+      }))
+      const { error: recipientError } = await supabaseAdmin
+        .from('notification_recipient_deliveries')
+        .insert(rows)
+      if (recipientError) {
+        console.error('Bildirim alıcı kayıtları oluşturulamadı.', { code: recipientError.code || null })
+      }
+    }
+    return deliveryLogId
   } catch {
     // Bildirim başarıyla gönderildiyse geçmiş kaydı gönderimi başarısız yapmamalı.
   }
@@ -1249,6 +1270,23 @@ export default async function handler(req, res) {
     const deletedWebIds = []
     const deletedNativeIds = []
     const failedDetails = []
+    const recipientDeliveries = []
+
+    const addRecipientDelivery = (item, provider, status, details = {}) => {
+      if (!item?.id || !item?.user_id) return
+      recipientDeliveries.push({
+        subscription_id: item.id,
+        user_id: item.user_id,
+        channel: provider === 'web-push' ? 'web' : provider === 'fcm' ? 'android' : provider === 'apns-production' ? 'ios' : 'ios-sandbox',
+        language: item.notification_language === 'en' ? 'en' : 'tr',
+        provider,
+        status,
+        provider_status_code: details.statusCode || null,
+        provider_message_id: details.messageId || null,
+        error_code: details.errorCode || null,
+        error_message: details.errorMessage || null,
+      })
+    }
 
     if ((webSubscriptions?.length || 0) > 0) {
       if (!isNotBlank(vapidPublicKey) || !isNotBlank(vapidPrivateKey)) {
@@ -1287,6 +1325,7 @@ export default async function handler(req, res) {
 
         webResults.forEach((result) => {
           if (result.ok) {
+            addRecipientDelivery(result.item, 'web-push', 'sent')
             sent += 1
             webSent += 1
             if (scheduledMotivation) scheduledSent += 1
@@ -1294,6 +1333,7 @@ export default async function handler(req, res) {
           }
 
           failed += 1
+          addRecipientDelivery(result.item, 'web-push', 'failed', { statusCode: result.sendError?.statusCode, errorCode: result.sendError?.code, errorMessage: makeSafeError(result.sendError).message })
           failedDetails.push({
             id: result.item.id,
             provider: 'web-push',
@@ -1378,6 +1418,7 @@ export default async function handler(req, res) {
 
         nativeResults.forEach((result) => {
           if (result.ok) {
+            addRecipientDelivery(result.item, 'fcm', 'sent', { statusCode: result.statusCode })
             sent += 1
             nativeSent += 1
             if (scheduledMotivation) scheduledSent += 1
@@ -1385,6 +1426,7 @@ export default async function handler(req, res) {
           }
 
           failed += 1
+          addRecipientDelivery(result.item, 'fcm', 'failed', { statusCode: result.statusCode, errorCode: result.errorCode, errorMessage: result.message })
           failedDetails.push({
             id: result.item.id,
             provider: 'fcm',
@@ -1468,6 +1510,7 @@ export default async function handler(req, res) {
 
         apnsResults.forEach((result) => {
           if (result.ok) {
+            addRecipientDelivery(result.item, providerName, 'sent', { statusCode: result.statusCode, messageId: result.messageId })
             sent += 1
             nativeSent += 1
             if (scheduledMotivation) scheduledSent += 1
@@ -1475,6 +1518,7 @@ export default async function handler(req, res) {
           }
 
           failed += 1
+          addRecipientDelivery(result.item, providerName, 'failed', { statusCode: result.statusCode, errorCode: result.reason, errorMessage: result.message })
           failedDetails.push({
             id: result.item.id,
             provider: providerName,
@@ -1583,6 +1627,7 @@ export default async function handler(req, res) {
       total: responsePayload.total,
       sent: responsePayload.sent,
       failed: responsePayload.failed,
+      recipientDeliveries,
     })
 
     if (responseStatus !== 200) {

@@ -4365,16 +4365,7 @@ function App() {
       if (writeLogoutLog) {
         preparationTasks.push(
           (async () => {
-            const { error } = await supabase.from('login_logs').insert({
-              user_id: expectedUserId,
-              event_type: 'logout',
-              device_name: getDeviceName(),
-              app_version: APP_LOG_VERSION,
-            })
-
-            if (error) {
-              throw new Error(error.message)
-            }
+            await writeAuditLog({ eventType: 'logout', deviceName: getDeviceName(), appVersion: APP_LOG_VERSION })
           })(),
         )
       }
@@ -4502,12 +4493,7 @@ function App() {
         return
       }
 
-      await supabase.from('login_logs').insert({
-        user_id: userId,
-        event_type: 'login',
-        device_name: getDeviceName(),
-        app_version: APP_LOG_VERSION,
-      })
+      await writeAuditLog({ eventType: 'login', deviceName: getDeviceName(), appVersion: APP_LOG_VERSION })
 
       const notificationSession = beginNotificationSession(userId)
       setUserProfile(profileData)
@@ -4777,16 +4763,9 @@ function App() {
         return
       }
 
-      const { error: logError } = await supabase.from('report_logs').insert({
-        user_id: userId,
-        barcode: requiresDateRange ? 'Tarihli' : (cleanBarcode || 'Barkodsuz'),
-        report_code: report.code,
-        report_name: reportName,
-        device_name: getDeviceName(),
-        app_version: APP_LOG_VERSION,
-      })
-
-      if (logError) {
+      try {
+        await writeAuditLog({ eventType: 'report', barcode: requiresDateRange ? 'Tarihli' : (cleanBarcode || 'Barkodsuz'), reportCode: report.code, reportName, deviceName: getDeviceName(), appVersion: APP_LOG_VERSION })
+      } catch (logError) {
         showUserMessage(t.reportLogFailed + logError.message, 'error')
         setLoading(false)
         setSelectedReportCode('')
@@ -5042,6 +5021,20 @@ function App() {
     if (status === 'approved') return 'Onaylı'
     if (status === 'pending') return 'Onay Bekliyor'
     return 'İzin Kaldırıldı'
+  }
+
+  const writeAuditLog = async (payload) => {
+    const accessToken = await getAccessToken()
+    if (!accessToken) throw new Error(t.sessionMissing)
+    const response = await fetch(`${API_BASE_URL}/api/audit-log`, {
+      method: 'POST',
+      headers: makeAuthorizedHeaders(accessToken, { 'Content-Type': 'application/json' }),
+      body: JSON.stringify(payload),
+    })
+    if (!response.ok) {
+      const result = await response.json().catch(() => ({}))
+      throw new Error(result.error || 'Audit kaydı yazılamadı.')
+    }
   }
   const getReadableDeviceName = (deviceName) => {
     const value = String(deviceName || '').trim()
