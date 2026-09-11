@@ -20,8 +20,7 @@ function createAdminClient() {
   })
 }
 
-export async function approvePendingDevice(userId, deviceHash, deviceName = '') {
-  const supabaseAdmin = createAdminClient()
+export async function approvePendingDevice(userId, deviceHash, deviceName = '', supabaseAdmin = createAdminClient()) {
 
   if (!supabaseAdmin) {
     return false
@@ -57,16 +56,20 @@ export async function approvePendingDevice(userId, deviceHash, deviceName = '') 
       updatePayload.approved_by = null
     }
 
-    const { error: updateError } = await supabaseAdmin
+    const { data: updatedDevice, error: updateError } = await supabaseAdmin
       .from('user_devices')
       .update(updatePayload)
       .eq('id', existingDevice.id)
+      // Ön kontrolden sonra yönetici izni kaldırdıysa bu yazma onu geri açamaz.
+      .neq('status', 'revoked')
+      .select('id')
+      .maybeSingle()
 
     if (updateError) {
       throw new Error(`Cihaz kaydı güncellenemedi: ${updateError.message}`)
     }
 
-    return true
+    return Boolean(updatedDevice?.id)
   }
 
   const { error: insertError } = await supabaseAdmin

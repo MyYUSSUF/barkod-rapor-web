@@ -116,30 +116,43 @@ function normalizeDeviceResult(data) {
 }
 
 export function resolveDeviceAccessStatus(status) {
-  return String(status || '').trim() === 'revoked' ? 'revoked' : 'approved'
+  const value = String(status || '').trim()
+  if (value === 'revoked') return 'revoked'
+  return ['missing', 'pending', 'approved', ''].includes(value) ? 'approved' : 'unavailable'
 }
 
-async function allowDeviceWithoutApproval({
+export async function allowDeviceWithoutApproval({
   userId,
   deviceHash,
   deviceName,
   status,
-}) {
+}, approveDevice = approvePendingDevice) {
   const accessStatus = resolveDeviceAccessStatus(status)
 
-  if (accessStatus === 'revoked') {
+  if (accessStatus !== 'approved') {
     return accessStatus
   }
 
   if (status !== 'approved') {
     try {
-      await approvePendingDevice(userId, deviceHash, deviceName)
-    } catch (approvalError) {
-      console.error('Cihaz kaydı otomatik onaylanamadı:', approvalError)
+      if (await approveDevice(userId, deviceHash, deviceName) !== true) return 'unavailable'
+    } catch {
+      console.error('Cihaz kaydı otomatik onaylanamadı.')
+      return 'unavailable'
     }
   }
 
   return accessStatus
+}
+
+function unavailableDeviceResult() {
+  return {
+    ok: false,
+    statusCode: 503,
+    deviceStatus: 'unavailable',
+    deviceApproved: false,
+    error: 'Cihaz erişimi doğrulanamadı. Lütfen tekrar deneyin.',
+  }
 }
 
 async function verifyUserRequest(req) {
@@ -195,8 +208,8 @@ async function verifyUserRequest(req) {
   }
 }
 
-export async function requestDeviceAccess(req, deviceName = '') {
-  const authResult = await verifyUserRequest(req)
+export async function requestDeviceAccess(req, deviceName = '', { verifyUser = verifyUserRequest, approveDevice = approvePendingDevice } = {}) {
+  const authResult = await verifyUser(req)
 
   if (!authResult.ok) {
     return authResult
@@ -204,7 +217,7 @@ export async function requestDeviceAccess(req, deviceName = '') {
 
   const deviceToken = getDeviceToken(req)
 
-  if (deviceToken.length < 32) {
+  if (deviceToken.length < 32 || deviceToken.length > 512) {
     return {
       ok: false,
       statusCode: 400,
@@ -220,17 +233,19 @@ export async function requestDeviceAccess(req, deviceName = '') {
   })
 
   if (error) {
-    throw new Error(`Cihaz kaydı yapılamadı: ${error.message}`)
+    return unavailableDeviceResult()
   }
 
   const result = normalizeDeviceResult(data)
-  let status = result.status || 'pending'
+  let status = result.status || 'unavailable'
   status = await allowDeviceWithoutApproval({
     userId: authResult.userId,
     deviceHash,
     deviceName,
     status,
-  })
+  }, approveDevice)
+
+  if (status === 'unavailable') return unavailableDeviceResult()
 
   return {
     ...authResult,
@@ -240,8 +255,8 @@ export async function requestDeviceAccess(req, deviceName = '') {
 }
 
 export async function verifyApprovedDeviceRequest(req, options = {}) {
-  const { requireAdmin = false } = options
-  const authResult = await verifyUserRequest(req)
+  const { requireAdmin = false, verifyUser = verifyUserRequest, approveDevice = approvePendingDevice } = options
+  const authResult = await verifyUser(req)
 
   if (!authResult.ok) {
     return authResult
@@ -257,7 +272,7 @@ export async function verifyApprovedDeviceRequest(req, options = {}) {
 
   const deviceToken = getDeviceToken(req)
 
-  if (deviceToken.length < 32) {
+  if (deviceToken.length < 32 || deviceToken.length > 512) {
     return {
       ok: false,
       statusCode: 403,
@@ -271,17 +286,19 @@ export async function verifyApprovedDeviceRequest(req, options = {}) {
   })
 
   if (error) {
-    throw new Error(`Cihaz doğrulanamadı: ${error.message}`)
+    return unavailableDeviceResult()
   }
 
   const result = normalizeDeviceResult(data)
-  let status = result.status || (typeof data === 'string' ? data : 'missing')
+  let status = result.status || 'unavailable'
   status = await allowDeviceWithoutApproval({
     userId: authResult.userId,
     deviceHash,
     deviceName: getHeader(req, 'user-agent'),
     status,
-  })
+  }, approveDevice)
+
+  if (status === 'unavailable') return unavailableDeviceResult()
 
   if (status !== 'approved') {
     return {

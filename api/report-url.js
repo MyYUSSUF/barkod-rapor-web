@@ -7,15 +7,14 @@ import {
 import { handleCors } from './_cors.js'
 import { getNotificationLanguageForReportLanguage } from './_notification-language.js'
 import { enforceRequestLimit } from './_rate-limit.js'
+import { randomUUID } from 'node:crypto'
+import { ReportInputError, validateReportInput } from './_report-input.js'
+import { ErpRequestError, fetchErpXml, withErpDeadline } from './_erp-request.js'
+import { isAllowedReportUrl } from './report-pdf.js'
 
 const BASE_URL = 'https://repx.elvandyeing.com'
 const ENDPOINT = `${BASE_URL}/RepxService/vxC_RepxWebService.asmx`
 const WSDL_URL = `${ENDPOINT}?WSDL`
-const SHIPMENT_CUSTOMER_CODES = new Set([
-  '61001',
-  '61002',
-  'M000172',
-])
 
 let cachedTargetNs = null
 
@@ -117,16 +116,18 @@ export async function rememberNativeNotificationLanguage(
   }
 
   try {
-    const { data, error } = await authResult.supabase.rpc(
-      'set_native_notification_language',
-      {
-        p_device_hash: authResult.deviceHash,
-        p_notification_language:
-          getNotificationLanguageForReportLanguage(reportLanguage),
-      },
-    )
-
-    return !error && data === true
+    return await withErpDeadline(async (signal) => {
+      const query = authResult.supabase.rpc(
+        'set_native_notification_language',
+        {
+          p_device_hash: authResult.deviceHash,
+          p_notification_language:
+            getNotificationLanguageForReportLanguage(reportLanguage),
+        },
+      )
+      const { data, error } = await (query.abortSignal ? query.abortSignal(signal) : query)
+      return !error && data === true
+    }, 1000)
   } catch {
     // Language discovery is best effort and must never block a report.
     return false
@@ -169,18 +170,12 @@ function convertInternalUrlToPublicIfNeeded(url) {
     .replace('https://10.64.46.5', BASE_URL)
 }
 
-async function ensureWsdlInfoLoaded() {
+async function ensureWsdlInfoLoaded(signal, fetchImpl) {
   if (isNotBlank(cachedTargetNs)) {
     return
   }
 
-  const response = await fetch(WSDL_URL)
-
-  if (!response.ok) {
-    throw new Error(`WSDL okunamadı. HTTP ${response.status}`)
-  }
-
-  const wsdl = await response.text()
+  const wsdl = await fetchErpXml(WSDL_URL, { signal }, { fetchImpl })
   const targetNs = matchFirst(wsdl, 'targetNamespace\\s*=\\s*"([^"]+)"')
 
   if (isNotBlank(targetNs)) {
@@ -188,8 +183,8 @@ async function ensureWsdlInfoLoaded() {
   }
 }
 
-async function getReportPdfUrl(reportCode, options = {}) {
-  await ensureWsdlInfoLoaded()
+export async function getReportPdfUrl(reportCode, options = {}, { signal, fetchImpl = fetch } = {}) {
+  await ensureWsdlInfoLoaded(signal, fetchImpl)
 
   const {
     barcode = '',
@@ -213,13 +208,6 @@ async function getReportPdfUrl(reportCode, options = {}) {
   const userCode = getUserCodeForReport(reportCode, customerCode)
   const reportLocale = getReportLocale(reportLanguage)
   const dateFormat = 'dd.mm.yyyy'
-
-  console.log('GetReport request:', {
-    reportCode,
-    parameterMode: reportCode === 'RAR00036' ? 'dateRange' : 'barcode',
-    userCode,
-    languageCode: reportLocale.languageCode,
-  })
 
   const soap =
     '<?xml version="1.0" encoding="utf-8"?>' +
@@ -247,7 +235,7 @@ async function getReportPdfUrl(reportCode, options = {}) {
     '</soap:Body>' +
     '</soap:Envelope>'
 
-  const response = await fetch(ENDPOINT, {
+  const body = await fetchErpXml(ENDPOINT, {
     method: 'POST',
     headers: {
       'Content-Type': 'text/xml; charset=utf-8',
@@ -255,24 +243,19 @@ async function getReportPdfUrl(reportCode, options = {}) {
       'Accept-Encoding': 'identity',
     },
     body: soap,
-  })
-
-  const body = await response.text()
-
-  if (!response.ok) {
-    throw new Error(`SOAP HTTP ${response.status}: ${body.slice(0, 500)}`)
-  }
+    signal,
+  }, { fetchImpl })
 
   const errorMessage = extractTagText(body, 'errorMessage')
 
   if (isNotBlank(errorMessage)) {
-    throw new Error(`ERP errorMessage: ${errorMessage}`)
+    throw new ErpRequestError('ERP_REPORT_ERROR')
   }
 
   let result = extractTagText(body, 'GetReportResult')
 
   if (!isNotBlank(result)) {
-    throw new Error('GetReportResult boş.')
+    throw new ErpRequestError('ERP_EMPTY_RESULT')
   }
 
   result = result.trim()
@@ -288,103 +271,98 @@ async function getReportPdfUrl(reportCode, options = {}) {
   return convertInternalUrlToPublicIfNeeded(BASE_URL + '/' + result)
 }
 
-export default async function handler(req, res) {
-  if (handleCors(req, res)) {
-    return
-  }
-
-  try {
-    if (req.method !== 'POST') {
-      return res.status(405).json({ error: 'Sadece POST isteği desteklenir.' })
-    }
-
-    const authResult = await verifyApprovedDeviceRequest(req)
-
-    if (!authResult.ok) {
-      return res.status(authResult.statusCode || 403).json({
-        error: authResult.error || 'Yetkisiz istek.',
-        deviceStatus: authResult.deviceStatus || '',
-      })
-    }
-
-    const {
-      barcode,
-      reportCode,
-      reportLanguage,
-      startDate,
-      endDate,
-      customerCode,
-    } = req.body || {}
-    const cleanReportCode = String(reportCode || '').trim()
-
-    if (!isNotBlank(cleanReportCode)) {
-      return res.status(400).json({ error: 'Rapor kodu zorunludur.' })
-    }
-
-    const reportDefinition = getReportDefinition(cleanReportCode)
-
-    if (!reportDefinition) {
-      return res.status(400).json({ error: 'Desteklenmeyen rapor kodu.' })
-    }
-
-    if (!canProfileViewReport(authResult.profile, cleanReportCode)) {
-      return res.status(403).json({
-        error: 'Bu rapor için kullanıcı yetkiniz bulunmuyor.',
-      })
-    }
-
-    if (
-      !enforceRequestLimit(res, {
-        scope: 'report-url',
-        key: `${authResult.userId}:${cleanReportCode}`,
-        maxRequests: 15,
-        windowMs: 60_000,
-        minIntervalMs: 1000,
-        errorMessage:
-          'Rapor isteği çok hızlı tekrarlandı. Lütfen kısa bir süre bekleyin.',
-      })
-    ) {
+export function createReportUrlHandler({
+  verifyRequest = verifyApprovedDeviceRequest,
+  requestLimit = enforceRequestLimit,
+  reportUrl = getReportPdfUrl,
+  signToken = createReportAccessToken,
+  rememberLanguage = rememberNativeNotificationLanguage,
+} = {}) {
+  return async function handler(req, res) {
+    if (handleCors(req, res)) {
       return
     }
 
-    if (reportDefinition.requiresBarcode && !isNotBlank(barcode)) {
-      return res.status(400).json({ error: 'Barkod zorunludur.' })
+    const requestId = randomUUID()
+    res.setHeader('Cache-Control', 'no-store')
+    res.setHeader('X-Request-ID', requestId)
+    try {
+      if (req.method !== 'POST') {
+        return res.status(405).json({ error: 'Sadece POST isteği desteklenir.' })
+      }
+
+      const authResult = await verifyRequest(req)
+
+      if (!authResult.ok) {
+        return res.status(authResult.statusCode || 403).json({
+          error: authResult.error || 'Yetkisiz istek.',
+          deviceStatus: authResult.deviceStatus || '',
+        })
+      }
+
+      const input = req.body
+      if (!input || typeof input !== 'object' || Array.isArray(input)) {
+        throw new ReportInputError('Geçerli bir JSON nesnesi gönderilmelidir.')
+      }
+      const cleanReportCode = typeof input.reportCode === 'string' ? input.reportCode.trim() : ''
+
+      if (!isNotBlank(cleanReportCode)) {
+        return res.status(400).json({ error: 'Rapor kodu zorunludur.' })
+      }
+
+      const reportDefinition = getReportDefinition(cleanReportCode)
+
+      if (!reportDefinition) {
+        return res.status(400).json({ error: 'Desteklenmeyen rapor kodu.' })
+      }
+
+      if (!canProfileViewReport(authResult.profile, cleanReportCode)) {
+        return res.status(403).json({
+          error: 'Bu rapor için kullanıcı yetkiniz bulunmuyor.',
+        })
+      }
+
+      if (
+        !requestLimit(res, {
+          scope: 'report-url',
+          key: `${authResult.userId}:${cleanReportCode}`,
+          maxRequests: 15,
+          windowMs: 60_000,
+          minIntervalMs: 1000,
+          errorMessage:
+            'Rapor isteği çok hızlı tekrarlandı. Lütfen kısa bir süre bekleyin.',
+        })
+      ) {
+        return
+      }
+
+      const parameters = validateReportInput(input, reportDefinition)
+      // Dil kaydı başarısız/yavaş olduğunda rapor beklemez; işlem süresi de sınırlıdır.
+      await rememberLanguage(authResult, parameters.reportLanguage)
+      const pdfUrl = await withErpDeadline((signal) => reportUrl(cleanReportCode, parameters, { signal }))
+      if (!isAllowedReportUrl(pdfUrl)) throw new ErpRequestError('ERP_INVALID_RESULT_URL')
+
+      const reportToken = signToken({
+        userId: authResult.userId,
+        reportCode: cleanReportCode,
+        pdfUrl,
+      })
+
+      return res.status(200).json({ pdfUrl, reportToken, requestId })
+    } catch (error) {
+      const invalidInput = error instanceof ReportInputError
+      const upstream = error instanceof ErpRequestError
+      const code = invalidInput ? 'INVALID_REPORT_INPUT' : upstream ? error.code : 'REPORT_REQUEST_FAILED'
+      if (!invalidInput) console.error('Rapor isteği başarısız:', { requestId, code })
+      return res.status(invalidInput ? 400 : upstream ? error.statusCode : 500).json({
+        error: invalidInput ? error.message : error?.statusCode === 504
+          ? 'Rapor servisi zamanında yanıt vermedi. Lütfen tekrar deneyin.'
+          : 'Rapor hazırlanamadı. Lütfen daha sonra tekrar deneyin.',
+        code,
+        requestId,
+      })
     }
-
-    if (
-      reportDefinition.requiresDateRange &&
-      (!isNotBlank(startDate) || !isNotBlank(endDate))
-    ) {
-      return res.status(400).json({ error: 'Başlangıç ve bitiş tarihi zorunludur.' })
-    }
-
-    if (
-      reportDefinition.requiresCustomer &&
-      !SHIPMENT_CUSTOMER_CODES.has(String(customerCode || '').trim())
-    ) {
-      return res.status(400).json({ error: 'Geçerli bir müşteri seçilmelidir.' })
-    }
-
-    await rememberNativeNotificationLanguage(authResult, reportLanguage)
-
-    const pdfUrl = await getReportPdfUrl(cleanReportCode, {
-      barcode: reportDefinition.requiresBarcode ? barcode : '',
-      startDate,
-      endDate,
-      customerCode,
-      reportLanguage,
-    })
-
-    const reportToken = createReportAccessToken({
-      userId: authResult.userId,
-      reportCode: cleanReportCode,
-      pdfUrl,
-    })
-
-    return res.status(200).json({ pdfUrl, reportToken })
-  } catch (error) {
-    return res.status(500).json({
-      error: error.message || 'Rapor linki alınamadı.',
-    })
   }
 }
+
+export default createReportUrlHandler()

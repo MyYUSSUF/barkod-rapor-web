@@ -42,7 +42,7 @@ const REPORT_CATALOG = Object.freeze({
 export function getReportDefinition(reportCode) {
   const cleanReportCode = String(reportCode || '').trim()
 
-  return REPORT_CATALOG[cleanReportCode] || null
+  return Object.hasOwn(REPORT_CATALOG, cleanReportCode) ? REPORT_CATALOG[cleanReportCode] : null
 }
 
 function getSigningSecret() {

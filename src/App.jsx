@@ -43,6 +43,8 @@ import {
   isSessionLifecycleCurrent,
 } from './lib/sessionLifecycle'
 import { blurAndroidImeTarget } from './lib/androidSystemInsets'
+import { readBarcodeHistory, storeBarcodeHistory, removeBarcodeHistory } from './lib/barcodeHistory'
+import { fetchJsonWithTimeout } from './lib/fetchJsonWithTimeout'
 import './App.css'
 import './IndustrialTheme.css'
 import './AdminModern.css'
@@ -57,7 +59,6 @@ const API_BASE_URL =
     ? `http://${window.location.hostname}:3001`
     : window.location.origin)
 
-const HISTORY_KEY = 'barkod_rapor_history'
 const LANGUAGE_KEY = 'barkod_rapor_language'
 const DEVICE_TOKEN_KEY = 'barkod_rapor_device_token_v1'
 const NOTIFICATION_PERMISSION_ASKED_KEY = 'barkod_rapor_notification_permission_asked_v2'
@@ -820,46 +821,6 @@ async function fetchProfileById(userId) {
   }
 }
 
-const loadBarcodeHistory = () => {
-  try {
-    const saved = localStorage.getItem(HISTORY_KEY)
-
-    if (!saved) {
-      return []
-    }
-
-    const parsed = JSON.parse(saved)
-
-    if (!Array.isArray(parsed)) {
-      return []
-    }
-
-    return parsed
-      .map((item) => {
-        if (typeof item === 'string') {
-          return {
-            value: item.trim(),
-            reportCode: '',
-            reportName: '',
-          }
-        }
-
-        if (item && typeof item === 'object') {
-          return {
-            value: String(item.value || item.barcode || '').trim(),
-            reportCode: String(item.reportCode || '').trim(),
-            reportName: String(item.reportName || '').trim(),
-          }
-        }
-
-        return null
-      })
-      .filter((item) => item?.value)
-  } catch {
-    return []
-  }
-}
-
 const adminGridStyle = {
   display: 'grid',
   gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
@@ -1389,6 +1350,9 @@ function App() {
   const webPushRegistrationRef = useRef(null)
   const nativePushTokenRef = useRef('')
   const notificationSessionRef = useRef({ generation: 0, userId: '' })
+  const reportRequestRef = useRef(null)
+  const loginRequestRef = useRef(null)
+  const restoreRequestRef = useRef(null)
   const notificationLanguageRef = useRef('tr')
   const logoutInProgressRef = useRef(false)
   const messageTimeoutRef = useRef(null)
@@ -1414,7 +1378,7 @@ function App() {
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
   const [shipmentCustomerCode, setShipmentCustomerCode] = useState('')
-  const [barcodeHistory, setBarcodeHistory] = useState(loadBarcodeHistory)
+  const [barcodeHistory, setBarcodeHistory] = useState([])
   const [message, setMessage] = useState('')
   const [messageKind, setMessageKind] = useState('error')
   const [scannerOpen, setScannerOpen] = useState(false)
@@ -1761,6 +1725,15 @@ function App() {
     return getOrCreateDeviceToken()
   }
 
+  const cancelReportRequest = () => {
+    const hadReportRequest = Boolean(reportRequestRef.current)
+    reportRequestRef.current?.controller.abort()
+    reportRequestRef.current = null
+    setPdfViewerData(null)
+    if (hadReportRequest) setLoading(false)
+    setSelectedReportCode('')
+  }
+
   const beginNotificationSession = (userId) => {
     const normalizedUserId = String(userId || '').trim()
     const currentSession = notificationSessionRef.current
@@ -1769,6 +1742,7 @@ function App() {
       return currentSession
     }
 
+    cancelReportRequest()
     const nextSession = advanceSessionLifecycle(
       currentSession,
       normalizedUserId,
@@ -1789,6 +1763,7 @@ function App() {
       return false
     }
 
+    cancelReportRequest()
     notificationSessionRef.current = advanceSessionLifecycle(
       currentSession,
       '',
@@ -1866,6 +1841,7 @@ function App() {
     setUsername('')
     setPassword('')
     setBarcode('')
+    setBarcodeHistory([])
     setStartDate('')
     setEndDate('')
     setShipmentCustomerCode('')
@@ -1875,7 +1851,7 @@ function App() {
     setAdminNotificationBody('')
     setAdminNotificationMessage('')
     setAdminMessage('')
-    setScreen('main')
+    setScreen(window.location.pathname === DESKTOP_ADMIN_PATH ? 'desktop-admin' : 'main')
     setPdfViewerData(null)
   }
 
@@ -1910,7 +1886,9 @@ function App() {
       return
     }
 
-    const currentHistory = loadBarcodeHistory()
+    const userId = userProfile?.id
+    if (!userId || notificationSessionRef.current.userId !== userId) return
+    const currentHistory = readBarcodeHistory(localStorage, userId)
     const historyItem = {
       value: cleanValue,
       reportCode: report?.code || '',
@@ -1927,12 +1905,12 @@ function App() {
       }),
     ].slice(0, 10)
 
-    localStorage.setItem(HISTORY_KEY, JSON.stringify(newHistory))
+    storeBarcodeHistory(localStorage, userId, newHistory)
     setBarcodeHistory(newHistory)
   }
 
   const clearBarcodeHistory = () => {
-    localStorage.removeItem(HISTORY_KEY)
+    removeBarcodeHistory(localStorage, userProfile?.id)
     setBarcodeHistory([])
   }
 
@@ -3496,14 +3474,47 @@ function App() {
   }, [checkNativeAppUpdate])
 
   useEffect(() => {
+    if (!isSupabaseConfigured) return undefined
+    const { data } = supabase.auth.onAuthStateChange((_event, session) => {
+      const userId = session?.user?.id || ''
+      if (logoutInProgressRef.current && userId) return
+      if (notificationSessionRef.current.userId === userId) return
+      const previousUserId = notificationSessionRef.current.userId
+      // Başka sekmedeki çıkış/hesap değişimi de bekleyen raporu geçersiz kılar.
+      // Auth callback içinde yeni bir Supabase isteği başlatılmaz.
+      resetUserState()
+      // İlk oturum olayı profil/cihaz kontrolünden önce giriş ekranını açmaz.
+      if (previousUserId || !userId) {
+        restoreRequestRef.current = null
+        setRestoringSession(false)
+      }
+      if (userId) beginNotificationSession(userId)
+    })
+    return () => {
+      data.subscription.unsubscribe()
+      reportRequestRef.current?.controller.abort()
+      reportRequestRef.current = null
+    }
+    // Tek abonelik; callback yalnız ref ve state setter kullanır.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  useEffect(() => {
     const restoreSession = async () => {
+      const request = { lifecycle: null }
+      restoreRequestRef.current = request
+      const isCurrentRestore = () => restoreRequestRef.current === request &&
+        !logoutInProgressRef.current && (!request.lifecycle ||
+          isSessionLifecycleCurrent(notificationSessionRef.current, request.lifecycle))
       if (!isSupabaseConfigured) {
         setRestoringSession(false)
+        restoreRequestRef.current = null
         return
       }
 
       try {
         const { data } = await supabase.auth.getSession()
+        if (!isCurrentRestore()) return
         const session = data?.session
 
         if (!session?.user?.id) {
@@ -3511,58 +3522,68 @@ function App() {
           return
         }
 
-        beginNotificationSession(session.user.id)
+        const restoringLifecycle = beginNotificationSession(session.user.id)
+        request.lifecycle = restoringLifecycle
 
         const { data: profileData, error: profileError } = await fetchProfileById(
           session.user.id
         )
+        if (!isCurrentRestore()) return
 
         if (profileError || !profileData) {
           await cleanupAndSignOutCurrentUser({
             expectedUserId: session.user.id,
+            expectedLifecycle: restoringLifecycle,
             accessToken: session.access_token,
             message: t.profileNotFound,
           })
-          setRestoringSession(false)
           return
         }
 
         if (profileData.is_active === false) {
           await cleanupAndSignOutCurrentUser({
             expectedUserId: session.user.id,
+            expectedLifecycle: restoringLifecycle,
             accessToken: session.access_token,
             message: t.inactiveBlocked,
           })
-          setRestoringSession(false)
           return
         }
 
         const deviceResult = await checkDeviceAccess(session.access_token, {
           register: true,
         })
+        if (!isCurrentRestore()) return
 
         if (!deviceResult.approved && profileData.role !== 'admin') {
           await cleanupAndSignOutCurrentUser({
             expectedUserId: session.user.id,
+            expectedLifecycle: restoringLifecycle,
             accessToken: session.access_token,
             message: getDeviceAccessMessage(deviceResult),
             messageKind: 'warning',
           })
-          setRestoringSession(false)
           return
         }
 
+        const { data: latestSession } = await supabase.auth.getSession()
+        if (!isCurrentRestore() ||
+            !isAuthSessionUser(latestSession?.session, session.user.id)) return
         setUserProfile(profileData)
         setDisplayName(makeDisplayName(profileData, ''))
-        setBarcodeHistory(loadBarcodeHistory())
+        setBarcodeHistory(readBarcodeHistory(localStorage, session.user.id))
       } catch (err) {
-        console.log('Oturum geri yükleme hatası:', err)
+        if (isCurrentRestore()) console.log('Oturum geri yükleme hatası:', err)
+      } finally {
+        if (restoreRequestRef.current === request) {
+          restoreRequestRef.current = null
+          setRestoringSession(false)
+        }
       }
-
-      setRestoringSession(false)
     }
 
     restoreSession()
+    return () => { restoreRequestRef.current = null }
     // Oturum geri yükleme yalnızca uygulama ilk açıldığında çalışmalıdır.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -4330,19 +4351,22 @@ function App() {
 
   async function cleanupAndSignOutCurrentUser({
     expectedUserId,
+    expectedLifecycle,
     accessToken = '',
     message = '',
     messageKind = 'error',
     writeLogoutLog = false,
   }) {
-    if (logoutInProgressRef.current) {
+    if (logoutInProgressRef.current || (expectedLifecycle &&
+        !isSessionLifecycleCurrent(notificationSessionRef.current, expectedLifecycle))) {
       return false
     }
 
     const { data: initialSessionData } = await supabase.auth.getSession()
     const initialSession = initialSessionData?.session
 
-    if (!isAuthSessionUser(initialSession, expectedUserId)) {
+    if (!isAuthSessionUser(initialSession, expectedUserId) || (expectedLifecycle &&
+        !isSessionLifecycleCurrent(notificationSessionRef.current, expectedLifecycle))) {
       return false
     }
 
@@ -4365,7 +4389,7 @@ function App() {
       if (writeLogoutLog) {
         preparationTasks.push(
           (async () => {
-            await writeAuditLog({ eventType: 'logout', deviceName: getDeviceName(), appVersion: APP_LOG_VERSION })
+            await writeAuditLog({ eventType: 'logout', deviceName: getDeviceName(), appVersion: APP_LOG_VERSION }, initialSession.access_token)
           })(),
         )
       }
@@ -4429,6 +4453,13 @@ function App() {
       return
     }
 
+    const request = { lifecycle: null }
+    loginRequestRef.current = request
+    restoreRequestRef.current = null
+    setRestoringSession(false)
+    const isCurrentLogin = () => loginRequestRef.current === request &&
+      !logoutInProgressRef.current && (!request.lifecycle ||
+        isSessionLifecycleCurrent(notificationSessionRef.current, request.lifecycle))
     clearUserMessage()
     setLoading(true)
 
@@ -4437,7 +4468,6 @@ function App() {
 
       if (!cleanUsername || !password) {
         showUserMessage(t.usernamePasswordRequired, 'warning')
-        setLoading(false)
         return
       }
 
@@ -4447,68 +4477,76 @@ function App() {
         email: hiddenEmail,
         password: password,
       })
+      if (!isCurrentLogin()) return
 
       if (authError) {
         showUserMessage(`${t.loginFailed}: ${authError.message}`, 'error')
-        setLoading(false)
         return
       }
 
       const userId = authData.user.id
+      // SIGNED_IN callback'i signInWithPassword dönmeden önce oturumu başlatır.
+      // Sonradan gelen eski auth yanıtı yeni hesabın neslini yeniden başlatamaz.
+      request.lifecycle = getNotificationSession(userId)
+      if (!request.lifecycle || !isCurrentLogin()) return
+
+      const rejectLogin = async (message, messageKind = 'error') => {
+        const { data } = await supabase.auth.getSession()
+        if (!isCurrentLogin() || !isAuthSessionUser(data?.session, userId)) return
+        await supabase.auth.signOut()
+        if (loginRequestRef.current === request && !notificationSessionRef.current.userId) {
+          showUserMessage(message, messageKind)
+        }
+      }
 
       const { data: profileData, error: profileError } =
         await fetchProfileById(userId)
+      if (!isCurrentLogin()) return
 
       if (profileError || !profileData) {
-        await supabase.auth.signOut()
-        showUserMessage(t.profileNotFound, 'error')
-        setLoading(false)
+        await rejectLogin(t.profileNotFound)
         return
       }
 
       if (profileData.is_active === false) {
-        await supabase.auth.signOut()
-        showUserMessage(t.inactiveBlocked, 'error')
-        setLoading(false)
+        await rejectLogin(t.inactiveBlocked)
         return
       }
 
       const accessToken = authData.session?.access_token
 
       if (!accessToken) {
-        await supabase.auth.signOut()
-        showUserMessage(t.sessionMissing, 'error')
-        setLoading(false)
+        await rejectLogin(t.sessionMissing)
         return
       }
 
       const deviceResult = await checkDeviceAccess(accessToken, {
         register: true,
       })
+      if (!isCurrentLogin()) return
 
       if (!deviceResult.approved && profileData.role !== 'admin') {
-        await supabase.auth.signOut()
-        showUserMessage(getDeviceAccessMessage(deviceResult), 'warning')
-        setLoading(false)
+        await rejectLogin(getDeviceAccessMessage(deviceResult), 'warning')
         return
       }
 
-      await writeAuditLog({ eventType: 'login', deviceName: getDeviceName(), appVersion: APP_LOG_VERSION })
+      await writeAuditLog({ eventType: 'login', deviceName: getDeviceName(), appVersion: APP_LOG_VERSION }, accessToken)
+      if (!isCurrentLogin()) return
 
-      const notificationSession = beginNotificationSession(userId)
+      const { data: latestLoginSession } = await supabase.auth.getSession()
+      if (!isCurrentLogin() || !isAuthSessionUser(latestLoginSession?.session, userId)) return
+
+      const notificationSession = request.lifecycle
       setUserProfile(profileData)
       setDisplayName(makeDisplayName(profileData, cleanUsername))
-      setBarcodeHistory(loadBarcodeHistory())
+      setBarcodeHistory(readBarcodeHistory(localStorage, userId))
       clearUserMessage()
 
       const notificationPermission = await requestNotificationPermissionOnce()
 
       if (
         notificationPermission === 'granted' &&
-        isSessionLifecycleCurrent(
-          notificationSessionRef.current,
-          notificationSession,
-        )
+        isCurrentLogin()
       ) {
         await registerPushSubscription(userId, {
           forceRenew: true,
@@ -4517,10 +4555,13 @@ function App() {
         })
       }
     } catch (err) {
-      showUserMessage(t.unexpectedError + err.message, 'error')
+      if (isCurrentLogin()) showUserMessage(t.unexpectedError + err.message, 'error')
+    } finally {
+      if (loginRequestRef.current === request) {
+        loginRequestRef.current = null
+        if (!reportRequestRef.current) setLoading(false)
+      }
     }
-
-    setLoading(false)
   }
 
   const performLogout = async () => {
@@ -4621,6 +4662,8 @@ function App() {
   )
 
   const openReport = async (report) => {
+    const reportSession = notificationSessionRef.current
+    if (!userProfile?.id || reportSession.userId !== userProfile.id || logoutInProgressRef.current) return
     const cleanBarcode = barcode.trim()
     const reportName = getReportName(report)
     const requiresBarcode = report.requiresBarcode !== false
@@ -4691,6 +4734,11 @@ function App() {
       saveBarcodeToHistory(cleanBarcode, report)
     }
 
+    reportRequestRef.current?.controller.abort()
+    const request = { lifecycle: reportSession, controller: new AbortController() }
+    reportRequestRef.current = request
+    const isCurrentRequest = () => reportRequestRef.current === request &&
+      isSessionLifecycleCurrent(notificationSessionRef.current, request.lifecycle)
     stopScanner()
     setLoading(true)
     setSelectedReportCode(report.code)
@@ -4701,6 +4749,9 @@ function App() {
       const userId = sessionData?.session?.user?.id
       const accessToken = sessionData?.session?.access_token
 
+      if (!isCurrentRequest()) return
+      if (userId && userId !== reportSession.userId) return
+
       if (!userId || !accessToken) {
         showUserMessage(t.sessionMissing, 'error')
         setUserProfile(null)
@@ -4709,7 +4760,7 @@ function App() {
         return
       }
 
-      const response = await fetchWithTimeout(`${API_BASE_URL}/api/report-url`, {
+      const { response, result } = await fetchJsonWithTimeout(`${API_BASE_URL}/api/report-url`, {
         method: 'POST',
         headers: makeAuthorizedHeaders(accessToken, {
           'Content-Type': 'application/json',
@@ -4724,18 +4775,12 @@ function App() {
             ? selectedShipmentCustomer.code
             : undefined,
         }),
-      })
+        signal: request.controller.signal,
+      }, REPORT_TIMEOUT_MS)
 
-      const responseText = await response.text()
-      let result = {}
-
-      try {
-        result = JSON.parse(responseText)
-      } catch {
-        result = {
-          error: responseText || 'Unknown error',
-        }
-      }
+      if (!isCurrentRequest()) return
+      const { data: latestReportSession } = await supabase.auth.getSession()
+      if (!isCurrentRequest() || !isAuthSessionUser(latestReportSession?.session, userId)) return
 
       if (!response.ok) {
         showUserMessage(
@@ -4764,13 +4809,18 @@ function App() {
       }
 
       try {
-        await writeAuditLog({ eventType: 'report', barcode: requiresDateRange ? 'Tarihli' : (cleanBarcode || 'Barkodsuz'), reportCode: report.code, reportName, deviceName: getDeviceName(), appVersion: APP_LOG_VERSION })
+        await writeAuditLog({ eventType: 'report', barcode: requiresDateRange ? 'Tarihli' : (cleanBarcode || 'Barkodsuz'), reportCode: report.code, reportName, deviceName: getDeviceName(), appVersion: APP_LOG_VERSION }, accessToken, { signal: request.controller.signal })
       } catch (logError) {
+        if (!isCurrentRequest()) return
         showUserMessage(t.reportLogFailed + logError.message, 'error')
         setLoading(false)
         setSelectedReportCode('')
         return
       }
+
+      if (!isCurrentRequest()) return
+      const { data: viewerSession } = await supabase.auth.getSession()
+      if (!isCurrentRequest() || !isAuthSessionUser(viewerSession?.session, userId)) return
 
       const safeReportName = sanitizePdfFileName(reportName)
       const safeBarcode = sanitizePdfFileName(
@@ -4781,6 +4831,8 @@ function App() {
       const pdfFileName = `${safeReportName}_${safeBarcode}.pdf`
 
       setPdfViewerData({
+        userId,
+        lifecycle: reportSession,
         pdfUrl:
           `${makePdfProxyUrl(pdfUrl, report.code, reportToken)}&filename=${encodeURIComponent(pdfFileName)}`,
         fileName: pdfFileName,
@@ -4798,16 +4850,20 @@ function App() {
 
       clearUserMessage()
     } catch (err) {
+      if (!isCurrentRequest()) return
       const errorText =
         err.name === 'AbortError'
           ? t.reportRequestTimeout
           : `${t.unexpectedError}${err.message}`
 
       showUserMessage(errorText, 'error')
+    } finally {
+      if (isCurrentRequest()) {
+        reportRequestRef.current = null
+        setLoading(false)
+        setSelectedReportCode('')
+      }
     }
-
-    setLoading(false)
-    setSelectedReportCode('')
   }
 
   const handleReportClick = (report) => {
@@ -5023,17 +5079,16 @@ function App() {
     return 'İzin Kaldırıldı'
   }
 
-  const writeAuditLog = async (payload) => {
-    const accessToken = await getAccessToken()
+  const writeAuditLog = async (payload, accessToken, { signal } = {}) => {
     if (!accessToken) throw new Error(t.sessionMissing)
-    const response = await fetch(`${API_BASE_URL}/api/audit-log`, {
+    const { response, result } = await fetchJsonWithTimeout(`${API_BASE_URL}/api/audit-log`, {
       method: 'POST',
       headers: makeAuthorizedHeaders(accessToken, { 'Content-Type': 'application/json' }),
       body: JSON.stringify(payload),
+      signal,
     })
-    if (!response.ok) {
-      const result = await response.json().catch(() => ({}))
-      throw new Error(result.error || 'Audit kaydı yazılamadı.')
+    if (!response.ok || result?.success !== true) {
+      throw new Error(result?.error || 'Audit kaydı yazılamadı.')
     }
   }
   const getReadableDeviceName = (deviceName) => {
@@ -5469,7 +5524,8 @@ function App() {
     return renderAppUpdateNotice()
   }
 
-  if (pdfViewerData) {
+  if (pdfViewerData && userProfile?.id === pdfViewerData.userId &&
+      isSessionLifecycleCurrent(notificationSessionRef.current, pdfViewerData.lifecycle)) {
     return (
       <>
         <Suspense
