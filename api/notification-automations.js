@@ -11,6 +11,10 @@ import {
   serializeAutomation,
 } from './_notification-automation.js'
 import { enforceRequestLimit } from './_rate-limit.js'
+import { readNotificationData, withNotificationTimeout } from './_notification-retry.js'
+import {
+  claimNotificationRun, markNotificationDispatchUnknown, notificationCounts, readNotificationRun,
+} from './_notification-run.js'
 
 const AUTOMATION_SELECT = [
   'id',
@@ -159,26 +163,6 @@ export function getNotificationSendEndpoint(env = process.env) {
   }
 
   return parsedUrl.toString()
-}
-
-function getServiceErrorMessage(value, fallback) {
-  if (typeof value === 'string' && value.trim()) return value.trim()
-
-  if (value && typeof value === 'object') {
-    const nestedMessage = value.message || value.error || value.code
-    if (typeof nestedMessage === 'string' && nestedMessage.trim()) {
-      return nestedMessage.trim()
-    }
-
-    try {
-      const serialized = JSON.stringify(value)
-      if (serialized && serialized !== '{}') return serialized
-    } catch {
-      // Fall through to the safe message below.
-    }
-  }
-
-  return fallback
 }
 
 async function assertActiveTargetUsers(supabaseAdmin, targetUserIds) {
@@ -338,208 +322,64 @@ async function deleteAutomation(supabaseAdmin, body) {
   return data
 }
 
-async function claimAutomationRun(supabaseAdmin, automationId, scheduledFor) {
-  const { data, error } = await supabaseAdmin
-    .from('notification_automation_runs')
-    .insert({
-      automation_id: automationId,
-      scheduled_for: scheduledFor,
-      status: 'started',
-    })
-    .select('id')
-    .single()
-
-  if (error?.code === '23505') return null
-
-  if (error || !data?.id) {
-    throw new NotificationAutomationError(
-      'Otomasyon çalıştırma kaydı oluşturulamadı.',
-      500,
-    )
-  }
-
-  return data
-}
-
-function getSafeDeliverySummary(payload = {}) {
-  const getCount = (value) => {
-    const count = Number(value)
-    return Number.isFinite(count) && count >= 0 ? Math.trunc(count) : 0
-  }
-
-  return {
-    total: getCount(payload.total),
-    sent: getCount(payload.sent),
-    failed: getCount(payload.failed),
-    webSent: getCount(payload.webSent),
-    nativeSent: getCount(payload.nativeSent),
-    deleted: getCount(payload.deleted),
-  }
-}
-
-async function finishAutomationRun(
-  supabaseAdmin,
-  runId,
-  { status, summary = {}, errorMessage = null },
-) {
-  const counts = getSafeDeliverySummary(summary)
-  const { error } = await supabaseAdmin
-    .from('notification_automation_runs')
-    .update({
-      status,
-      total: counts.total,
-      sent: counts.sent,
-      failed: counts.failed,
-      response: counts,
-      error: errorMessage ? String(errorMessage).slice(0, 500) : null,
-      completed_at: new Date().toISOString(),
-    })
-    .eq('id', runId)
-
-  if (error) {
-    console.error('Otomasyon sonucu kaydedilemedi.', {
-      code: error.code || null,
-    })
-  }
-}
-
 async function dispatchAutomation(
-  supabaseAdmin,
-  automation,
-  scheduledFor,
-  { env, fetchImpl },
+  supabaseAdmin, automation, scheduledFor, { env, fetchImpl, now, dispatchTimeoutMs },
 ) {
-  const run = await claimAutomationRun(
-    supabaseAdmin,
-    automation.id,
-    scheduledFor,
-  )
-
-  if (!run) {
-    return {
-      automationId: automation.id,
-      name: automation.name,
-      status: 'skipped',
-      reason: 'already_claimed',
+  const base = { automationId: automation.id, name: automation.name }
+  let run
+  try {
+    run = await claimNotificationRun(supabaseAdmin, automation.id, scheduledFor, now)
+    if (!run) return { ...base, status: 'skipped', reason: 'already_claimed' }
+    if (!isNotBlank(env.NOTIFICATION_ADMIN_SECRET)) {
+      throw new NotificationAutomationError('Bildirim gönderim güvenlik ayarı eksik.', 503)
     }
+    const notification = getAutomationNotificationPayload(automation, new Date(scheduledFor))
+    await withNotificationTimeout(async (signal) => {
+      const response = await fetchImpl(getNotificationSendEndpoint(env), {
+        method: 'POST', signal,
+        headers: {
+          Authorization: `Bearer ${env.NOTIFICATION_ADMIN_SECRET}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          title: notification.title, body: notification.body, url: notification.url,
+          localizedMessages: notification.localizedMessages,
+          audienceType: automation.audience_type,
+          targetUserIds: automation.targetUserIds, targetUserId: automation.target_user_id,
+          singleDevice: automation.audience_type === 'user' && automation.delivery_scope === 'latest_device',
+          automationId: automation.id, automationRunId: run.id,
+          automationAttemptToken: run.token,
+        }),
+      })
+      // Consume the body within the deadline, but trust the durable outcome, not HTTP 200.
+      await response.json()
+    }, dispatchTimeoutMs, 'DISPATCH_UNCONFIRMED')
+  } catch (error) {
+    console.error('Bildirim otomasyonu tamamlanamadı.', {
+      stage: run ? 'dispatch' : 'claim', code: error.code || 'DISPATCH_ERROR',
+    })
   }
+  if (!run) return { ...base, status: 'failed', error: 'Çalıştırma kaydı oluşturulamadı.' }
 
   try {
-    const notificationAdminSecret = env.NOTIFICATION_ADMIN_SECRET
-
-    if (!isNotBlank(notificationAdminSecret)) {
-      throw new NotificationAutomationError(
-        'Bildirim gönderim güvenlik ayarı eksik.',
-        503,
-      )
-    }
-
-    const notification = getAutomationNotificationPayload(
-      automation,
-      new Date(scheduledFor),
-    )
-    const response = await fetchImpl(getNotificationSendEndpoint(env), {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${notificationAdminSecret}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        title: notification.title,
-        body: notification.body,
-        url: notification.url,
-        localizedMessages: notification.localizedMessages,
-        audienceType: automation.audience_type,
-        targetUserIds: automation.targetUserIds,
-        targetUserId: automation.target_user_id,
-        singleDevice:
-          automation.audience_type === 'user' &&
-          automation.delivery_scope === 'latest_device',
-        automationId: automation.id,
-        automationRunId: run.id,
-      }),
-    })
-    let responsePayload = {}
-    let responseIsJson = false
-
-    try {
-      responsePayload = await response.json()
-      responseIsJson = true
-    } catch {
-      responsePayload = {}
-    }
-
-    const summary = getSafeDeliverySummary(responsePayload)
-    const responseHasSummary = responseIsJson &&
-      ['total', 'sent', 'failed'].every((key) =>
-        typeof responsePayload?.[key] === 'number' &&
-        Number.isFinite(responsePayload[key]) &&
-        responsePayload[key] >= 0,
-      )
-
-    if (!response.ok || !responseHasSummary) {
-      const fallbackMessage = responseIsJson
-        ? `Bildirim servisi HTTP ${response.status} yanıtı verdi.`
-        : 'Bildirim servisi uygulama yerine geçersiz bir sayfa döndürdü.'
-      const message = getServiceErrorMessage(
-        responsePayload.error,
-        fallbackMessage,
-      ).slice(0, 500)
-
-      console.error('Bildirim servisi çağrısı başarısız.', {
-        status: response.status,
-        responseIsJson,
-        responseHasSummary,
-        message,
-      })
-
-      await finishAutomationRun(supabaseAdmin, run.id, {
-        status: 'failed',
-        summary,
-        errorMessage: message,
-      })
-
-      return {
-        automationId: automation.id,
-        name: automation.name,
-        status: 'failed',
-        error: message,
-        ...summary,
+    const row = await readNotificationRun(supabaseAdmin, run.id)
+    if (row?.response?.token === run.token && row.response.protocol === 1) {
+      if (row.response.phase === 'finished' && ['completed', 'failed'].includes(row.status)) {
+        return { ...base, status: row.status, ...notificationCounts(row.response), attempt: run.attempt,
+          recipientRecordsComplete: row.response.recipientRecordsComplete === true }
+      }
+      if (row.status === 'failed' && row.response.phase === 'preflight_failed') {
+        return { ...base, status: 'failed', ...notificationCounts(row),
+          error: row.error, retryable: row.response.retryable === true,
+          attempt: run.attempt }
       }
     }
-
-    await finishAutomationRun(supabaseAdmin, run.id, {
-      status: 'completed',
-      summary,
-    })
-
-    return {
-      automationId: automation.id,
-      name: automation.name,
-      status: 'completed',
-      ...summary,
-    }
+    await markNotificationDispatchUnknown(supabaseAdmin, run)
   } catch (error) {
-    const message = getServiceErrorMessage(
-      error,
-      'Bildirim otomasyonu çalıştırılamadı.',
-    ).slice(0, 500)
-
-    await finishAutomationRun(supabaseAdmin, run.id, {
-      status: 'failed',
-      errorMessage: message,
-    })
-
-    return {
-      automationId: automation.id,
-      name: automation.name,
-      status: 'failed',
-      total: 0,
-      sent: 0,
-      failed: 0,
-      error: message,
-    }
+    console.error('Bildirim sonucu doğrulanamadı.', { stage: 'run_result', code: error.code || 'RESULT_UNAVAILABLE' })
   }
+  return { ...base, status: 'failed', error: 'Gönderim sonucu doğrulanamadı; otomatik tekrar yapılmadı.',
+    outcome: 'unknown', attempt: run.attempt }
 }
 
 export async function dispatchDueAutomations(
@@ -549,20 +389,18 @@ export async function dispatchDueAutomations(
     fetchImpl = globalThis.fetch,
     now = new Date(),
     lookbackMinutes = 5,
+    dispatchTimeoutMs = 90_000,
   } = {},
 ) {
   if (typeof fetchImpl !== 'function') {
     throw new NotificationAutomationError('Bildirim gönderim servisi kullanılamıyor.', 503)
   }
 
-  const { data, error } = await supabaseAdmin
+  const { data } = await readNotificationData((signal) => supabaseAdmin
     .from('notification_automations')
     .select(AUTOMATION_SELECT)
     .eq('is_active', true)
-
-  if (error) {
-    throw new NotificationAutomationError('Aktif otomasyonlar alınamadı.', 500)
-  }
+    .abortSignal(signal))
 
   const dueAutomations = (data || [])
     .map((automation) => ({
@@ -583,7 +421,7 @@ export async function dispatchDueAutomations(
         supabaseAdmin,
         item.automation,
         item.scheduledFor,
-        { env, fetchImpl },
+        { env, fetchImpl, now, dispatchTimeoutMs },
       ),
     )
   }

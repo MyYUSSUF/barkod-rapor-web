@@ -23,6 +23,10 @@ import {
   sendFcmHttpRequest,
 } from './_fcm-http-v1.js'
 import { enforceRequestLimit } from './_rate-limit.js'
+import { readNotificationData, withNotificationTimeout } from './_notification-retry.js'
+import {
+  beginNotificationRun, failNotificationRun, finishNotificationRun, markNotificationSending,
+} from './_notification-run.js'
 
 const FCM_SEND_CONCURRENCY = 10
 const APNS_SEND_CONCURRENCY = 10
@@ -460,11 +464,9 @@ export async function fetchAllPages(fetchPage, options = {}) {
       : Math.min(pageSize, expectedCount - rows.length)
     const from = rows.length
     const to = from + Math.max(1, remainingExpected) - 1
-    const { data, error, count } = await fetchPage(from, to)
-
-    if (error) {
-      throw new NotificationBackendError(error.message || `${label} okunamadı.`)
-    }
+    const { data, count } = await readNotificationData(
+      (signal) => fetchPage(from, to, signal), options.readOptions,
+    )
 
     if (expectedCount === null && Number.isInteger(count)) {
       expectedCount = count
@@ -511,7 +513,7 @@ function fetchTablePages(supabaseAdmin, {
   applyFilters,
 }) {
   return fetchAllPages(
-    (from, to) => {
+    (from, to, signal) => {
       let query = supabaseAdmin
         .from(table)
         .select(columns, { count: 'exact' })
@@ -520,7 +522,7 @@ function fetchTablePages(supabaseAdmin, {
         query = applyFilters(query)
       }
 
-      return query.order('id', { ascending: true }).range(from, to)
+      return query.order('id', { ascending: true }).range(from, to).abortSignal(signal)
     },
     { label, maxRows },
   )
@@ -676,7 +678,9 @@ async function fetchSubscriptionRows(supabaseAdmin, {
         ...Object.fromEntries(missingColumns.map((column) => [column, null])),
       }))
     } catch (error) {
-      const message = String(error?.message || error || '')
+      const original = error?.cause || error
+      if (!['42703', 'PGRST204'].includes(String(original?.code))) throw error
+      const message = String(original?.message || '')
       const missingColumn = selectedOptionalColumns.find((column) =>
         message.includes(column),
       )
@@ -744,7 +748,7 @@ export function limitNotificationTargetsToLatest(targets = {}) {
   }
 }
 
-async function loadNotificationTargets(
+export async function loadNotificationTargets(
   supabaseAdmin,
   { targetUserIds = [], singleDevice = false } = {},
 ) {
@@ -932,7 +936,7 @@ function makeSafeError(sendError) {
   }
 }
 
-async function recordNotificationDelivery(
+export async function recordNotificationDelivery(
   supabaseAdmin,
   {
     source,
@@ -950,7 +954,7 @@ async function recordNotificationDelivery(
   },
 ) {
   try {
-    const { data, error } = await supabaseAdmin
+    const { data, error } = await withNotificationTimeout((signal) => supabaseAdmin
       .from('notification_delivery_logs')
       .insert({
         source,
@@ -967,13 +971,13 @@ async function recordNotificationDelivery(
         failed,
       })
       .select('id')
-      .single()
+      .abortSignal(signal).single(), 5000, 'DELIVERY_RECORD_UNCERTAIN')
 
     if (error) {
       console.error('Bildirim teslim kaydı oluşturulamadı.', {
         code: error.code || null,
       })
-      return null
+      return { deliveryLogId: null, recipientRecordsComplete: false }
     }
     const deliveryLogId = data?.id || null
     if (recipientDeliveries.length > 0) {
@@ -983,48 +987,33 @@ async function recordNotificationDelivery(
         automation_id: automationId || null,
         automation_run_id: automationRunId || null,
       }))
-      const { error: recipientError } = await supabaseAdmin
+      const { error: recipientError } = await withNotificationTimeout((signal) => supabaseAdmin
         .from('notification_recipient_deliveries')
-        .insert(rows)
+        .insert(rows).abortSignal(signal), 5000, 'DELIVERY_RECORD_UNCERTAIN')
       if (recipientError) {
         console.error('Bildirim alıcı kayıtları oluşturulamadı.', { code: recipientError.code || null })
+        return { deliveryLogId, recipientRecordsComplete: false }
       }
     }
-    return deliveryLogId
+    return { deliveryLogId, recipientRecordsComplete: Boolean(deliveryLogId) }
   } catch {
-    // Bildirim başarıyla gönderildiyse geçmiş kaydı gönderimi başarısız yapmamalı.
+    // A log outage must not trigger another provider send. The run retains a fallback.
+    return { deliveryLogId: null, recipientRecordsComplete: false }
   }
 }
 
-async function verifyClaimedAutomationRun(
-  supabaseAdmin,
-  { automationId, automationRunId },
-) {
-  if (!automationId || !automationRunId) return
-
-  const { data, error } = await supabaseAdmin
-    .from('notification_automation_runs')
-    .select('id, status')
-    .eq('id', automationRunId)
-    .eq('automation_id', automationId)
-    .maybeSingle()
-
-  if (error) {
-    throw new NotificationBackendError(
-      'Otomasyon çalıştırma kaydı doğrulanamadı.',
-      500,
-    )
-  }
-
-  if (!data || data.status !== 'started') {
-    throw new NotificationBackendError(
-      'Otomasyon çalıştırma kaydı geçerli değil.',
-      409,
-    )
-  }
-}
-
-export default async function handler(req, res) {
+async function handleNotification(req, res, {
+  createAdminClient = createSupabaseAdminClient,
+  verifyRequest = verifyAdminRequest,
+  loadTargets = loadNotificationTargets,
+  recordDelivery = recordNotificationDelivery,
+  webPushClient = webPush,
+  getFirebaseToken = getFirebaseAccessToken,
+  preflightTimeoutMs = 20_000,
+}) {
+  let automationRun = null
+  let automationDb = null
+  let stage = 'authorization'
   let scheduledMotivation = null
   let scheduledSupabaseAdmin = null
   let scheduledRunClaimed = false
@@ -1069,11 +1058,11 @@ export default async function handler(req, res) {
     const vapidPrivateKey = getVapidPrivateKey()
     const vapidSubject = getVapidSubject()
 
-    const supabaseAdmin = createSupabaseAdminClient()
+    const supabaseAdmin = createAdminClient()
     scheduledSupabaseAdmin = isCronRequest ? supabaseAdmin : null
     const authResult = isCronRequest
       ? { ok: true, method: 'scheduled_motivation', userId: null }
-      : await verifyAdminRequest(req, secret)
+      : await verifyRequest(req, secret)
 
     if (!authResult.ok) {
       return res.status(authResult.statusCode || 401).json({
@@ -1124,10 +1113,14 @@ export default async function handler(req, res) {
       )
     }
 
-    await verifyClaimedAutomationRun(supabaseAdmin, {
+    automationDb = supabaseAdmin
+    stage = 'claim'
+    automationRun = await beginNotificationRun(supabaseAdmin, {
       automationId,
       automationRunId,
+      automationAttemptToken: requestData.automationAttemptToken,
     })
+    stage = 'preflight'
 
     if (
       // A dispatcher request is already protected by its unique database run
@@ -1208,10 +1201,10 @@ export default async function handler(req, res) {
       nativeSubscriptions,
       skipped,
       storedTotal,
-    } = await loadNotificationTargets(supabaseAdmin, {
+    } = await withNotificationTimeout(() => loadTargets(supabaseAdmin, {
       targetUserIds,
       singleDevice,
-    })
+    }), preflightTimeoutMs)
     const androidSubscriptions = nativeSubscriptions.filter(
       (item) => !item.platform || item.platform === 'android',
     )
@@ -1231,7 +1224,7 @@ export default async function handler(req, res) {
         })
       }
 
-      await recordNotificationDelivery(supabaseAdmin, {
+      const deliveryRecord = await recordDelivery(supabaseAdmin, {
         source: scheduledMotivation
           ? 'daily_motivation'
           : automationId ? 'automation' : 'manual',
@@ -1248,6 +1241,7 @@ export default async function handler(req, res) {
         failed: 0,
       })
 
+      await finishNotificationRun(supabaseAdmin, automationRun, { total: 0, sent: 0, failed: 0 }, deliveryRecord)
       return res.status(200).json({
         total: 0,
         sent: 0,
@@ -1260,9 +1254,13 @@ export default async function handler(req, res) {
         targetUserIds,
         singleDevice,
         message: 'Uygun kayıtlı bildirim cihazı yok.',
+        recipientRecordsComplete: deliveryRecord?.recipientRecordsComplete === true,
       })
     }
 
+    // No provider call is allowed until the durable, attempt-specific gate succeeds.
+    await markNotificationSending(supabaseAdmin, automationRun, totalSubscriptions)
+    stage = 'sending'
     let sent = 0
     let failed = 0
     let webSent = 0
@@ -1278,19 +1276,20 @@ export default async function handler(req, res) {
         subscription_id: item.id,
         user_id: item.user_id,
         channel: provider === 'web-push' ? 'web' : provider === 'fcm' ? 'android' : provider === 'apns-production' ? 'ios' : 'ios-sandbox',
-        language: item.notification_language === 'en' ? 'en' : 'tr',
+        language: getNotificationLanguage(item.notification_language),
         provider,
         status,
         provider_status_code: details.statusCode || null,
         provider_message_id: details.messageId || null,
-        error_code: details.errorCode || null,
-        error_message: details.errorMessage || null,
+        error_code: details.errorCode ? String(details.errorCode).slice(0, 100) : null,
+        error_message: status === 'failed' ? 'Sağlayıcı kabulü doğrulanamadı.' : null,
       })
     }
 
     if ((webSubscriptions?.length || 0) > 0) {
       if (!isNotBlank(vapidPublicKey) || !isNotBlank(vapidPrivateKey)) {
         failed += webSubscriptions.length
+        webSubscriptions.forEach((item) => addRecipientDelivery(item, 'web-push', 'failed', { errorCode: 'PROVIDER_CONFIGURATION' }))
         failedDetails.push({
           provider: 'web-push',
           affected: webSubscriptions.length,
@@ -1299,17 +1298,18 @@ export default async function handler(req, res) {
           },
         })
       } else {
-        webPush.setVapidDetails(vapidSubject, vapidPublicKey, vapidPrivateKey)
+        webPushClient.setVapidDetails(vapidSubject, vapidPublicKey, vapidPrivateKey)
 
         const webResults = await mapWithConcurrency(
           webSubscriptions,
           WEB_PUSH_SEND_CONCURRENCY,
           async (item) => {
             try {
-              await webPush.sendNotification(
+              await withNotificationTimeout(() => webPushClient.sendNotification(
                 item.subscription,
                 JSON.stringify(getPayloadForTarget(item)),
-              )
+                { timeout: 10_000 },
+              ), 11_000, 'PROVIDER_TIMEOUT')
               return { item, ok: true }
             } catch (sendError) {
               return {
@@ -1351,9 +1351,9 @@ export default async function handler(req, res) {
 
     if (androidSubscriptions.length > 0) {
       try {
-        const { accessToken, projectId } = await getFirebaseAccessToken(
+        const { accessToken, projectId } = await withNotificationTimeout(() => getFirebaseToken(
           process.env.FIREBASE_SERVICE_ACCOUNT_JSON,
-        )
+        ), 10_000, 'PROVIDER_AUTH_TIMEOUT')
         const nativeResults = await mapWithConcurrency(
           androidSubscriptions,
           FCM_SEND_CONCURRENCY,
@@ -1445,6 +1445,7 @@ export default async function handler(req, res) {
         })
       } catch (firebaseError) {
         failed += androidSubscriptions.length
+        androidSubscriptions.forEach((item) => addRecipientDelivery(item, 'fcm', 'failed', { errorCode: 'PROVIDER_CONFIGURATION' }))
         failedDetails.push({
           provider: 'fcm',
           affected: androidSubscriptions.length,
@@ -1537,6 +1538,7 @@ export default async function handler(req, res) {
         })
       } catch (apnsError) {
         failed += subscriptions.length
+        subscriptions.forEach((item) => addRecipientDelivery(item, providerName, 'failed', { errorCode: 'PROVIDER_CONFIGURATION' }))
         failedDetails.push({
           provider: providerName,
           affected: subscriptions.length,
@@ -1550,13 +1552,16 @@ export default async function handler(req, res) {
     await sendApnsGroup(iosSubscriptions, 'production')
     await sendApnsGroup(iosSandboxSubscriptions, 'sandbox')
 
+    const boundedCleanup = (options) => withNotificationTimeout(
+      () => cleanupInvalidSubscriptionIds(supabaseAdmin, options), 4000, 'CLEANUP_UNCONFIRMED',
+    ).catch(() => ({ requested: options.ids.length, deleted: 0, failed: options.ids.length, errors: [] }))
     const [webCleanup, nativeCleanup] = await Promise.all([
-      cleanupInvalidSubscriptionIds(supabaseAdmin, {
+      boundedCleanup({
         table: 'push_subscriptions',
         ids: deletedWebIds,
         provider: 'web-push',
       }),
-      cleanupInvalidSubscriptionIds(supabaseAdmin, {
+      boundedCleanup({
         table: 'native_push_subscriptions',
         ids: deletedNativeIds,
         provider: 'native-push',
@@ -1612,7 +1617,8 @@ export default async function handler(req, res) {
       })
     }
 
-    await recordNotificationDelivery(supabaseAdmin, {
+    stage = 'delivery_record'
+    const deliveryRecord = await recordDelivery(supabaseAdmin, {
       source: scheduledMotivation
         ? 'daily_motivation'
         : automationId ? 'automation' : 'manual',
@@ -1629,6 +1635,12 @@ export default async function handler(req, res) {
       failed: responsePayload.failed,
       recipientDeliveries,
     })
+    await finishNotificationRun(supabaseAdmin, automationRun, responsePayload, {
+      ...deliveryRecord,
+      // Retain only safe recipient outcomes if the dedicated audit write was unavailable.
+      ...(deliveryRecord?.recipientRecordsComplete ? {} : { recipientResults: recipientDeliveries }),
+    })
+    responsePayload.recipientRecordsComplete = deliveryRecord?.recipientRecordsComplete === true
 
     if (responseStatus !== 200) {
       responsePayload.error = 'Bildirim hiçbir uygun cihaza teslim edilemedi.'
@@ -1636,6 +1648,14 @@ export default async function handler(req, res) {
 
     return res.status(responseStatus).json(responsePayload)
   } catch (error) {
+    console.error('Bildirim işlemi tamamlanamadı.', { stage, code: error.code || 'NOTIFICATION_ERROR' })
+    if (automationRun && automationDb && ['preflight', 'sending'].includes(automationRun.phase)) {
+      try {
+        await failNotificationRun(automationDb, automationRun, error)
+      } catch (recordError) {
+        console.error('Bildirim hata kaydı doğrulanamadı.', { stage: 'run_result', code: recordError.code || 'RESULT_UNAVAILABLE' })
+      }
+    }
     if (
       scheduledRunClaimed &&
       scheduledMotivation &&
@@ -1654,7 +1674,14 @@ export default async function handler(req, res) {
     }
 
     return res.status(error.statusCode || 500).json({
-      error: error.message || 'Bildirim gönderilemedi.',
+      error: Number(error.statusCode) < 500 ? error.message : 'Bildirim işlemi tamamlanamadı.',
+      stage,
     })
   }
 }
+
+export function createNotificationHandler(options = {}) {
+  return (req, res) => handleNotification(req, res, options)
+}
+
+export default createNotificationHandler()

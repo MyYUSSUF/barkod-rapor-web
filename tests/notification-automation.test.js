@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import { notificationMemoryDb } from './helpers/notification-memory-db.js'
+import { claimNotificationRun, beginNotificationRun, markNotificationSending, finishNotificationRun } from '../api/_notification-run.js'
 
 import {
   findDueAutomationOccurrence,
@@ -18,7 +20,6 @@ import {
 } from '../api/notification-automations.js'
 
 const AUTOMATION_ID = 'c02e2629-18e0-4e2f-b38b-cc4fa0044bb6'
-const RUN_ID = '01d6c5c5-cbfd-4eb5-a10d-df3bedbdb2a7'
 const SECOND_USER_ID = '0c9c2753-7304-4d77-941d-2be58ccfb05a'
 
 function makeCustomAutomation(overrides = {}) {
@@ -234,224 +235,61 @@ test('cron authorization compares the bearer secret and send URL stays on the co
 })
 
 test('dispatcher rejects a protected deployment login page instead of reporting success', async () => {
-  const databaseCalls = []
-  const automation = makeCustomAutomation({ days_of_week: [4] })
-  const supabaseAdmin = {
-    from(table) {
-      if (table === 'notification_automations') {
-        return {
-          select() {
-            return {
-              eq() {
-                return Promise.resolve({ data: [automation], error: null })
-              },
-            }
-          },
-        }
-      }
-
-      if (table === 'notification_automation_runs') {
-        return {
-          insert() {
-            return {
-              select() {
-                return {
-                  single() {
-                    return Promise.resolve({ data: { id: RUN_ID }, error: null })
-                  },
-                }
-              },
-            }
-          },
-          update(record) {
-            databaseCalls.push(record)
-            return {
-              eq() {
-                return Promise.resolve({ error: null })
-              },
-            }
-          },
-        }
-      }
-
-      throw new Error(`Unexpected table: ${table}`)
-    },
-  }
-
-  const result = await dispatchDueAutomations(supabaseAdmin, {
+  const db = notificationMemoryDb([makeCustomAutomation({ days_of_week: [4] })])
+  const result = await dispatchDueAutomations(db, {
     now: new Date('2026-09-03T04:30:15.000Z'),
-    env: {
-      NOTIFICATION_ADMIN_SECRET: 'notification-secret-value',
-      VERCEL_URL: 'protected-deployment.example.test',
-      VERCEL_PROJECT_PRODUCTION_URL: 'public-production.example.test',
-    },
-    fetchImpl: async () => ({
-      ok: true,
-      status: 200,
-      async json() {
-        throw new SyntaxError('HTML is not JSON')
-      },
-    }),
+    env: { NOTIFICATION_ADMIN_SECRET: 'synthetic-test-secret' },
+    fetchImpl: async () => ({ ok: true, status: 200, json: async () => { throw new SyntaxError('HTML is not JSON') } }),
   })
-
   assert.equal(result.completed, 0)
   assert.equal(result.failed, 1)
-  assert.equal(result.results[0].status, 'failed')
-  assert.match(result.results[0].error, /geçersiz bir sayfa/i)
-  assert.equal(databaseCalls.at(-1).status, 'failed')
-  assert.match(databaseCalls.at(-1).error, /geçersiz bir sayfa/i)
+  assert.equal(result.results[0].outcome, 'unknown')
+  assert.equal([...db.rows.values()][0].status, 'failed')
 })
 
 test('due dispatcher sends all selected user IDs without putting its secret in the body', async () => {
-  const databaseCalls = []
+  const db = notificationMemoryDb([makeCustomAutomation({
+    days_of_week: [4], audience_type: 'user', target_user_id: AUTOMATION_ID,
+    target_user_ids: [AUTOMATION_ID, SECOND_USER_ID], delivery_scope: 'latest_device',
+  })])
   const fetchCalls = []
-  const automation = makeCustomAutomation({
-    days_of_week: [4],
-    audience_type: 'user',
-    target_user_id: AUTOMATION_ID,
-    target_user_ids: [AUTOMATION_ID, SECOND_USER_ID],
-    delivery_scope: 'latest_device',
-  })
-  const supabaseAdmin = {
-    from(table) {
-      if (table === 'notification_automations') {
-        return {
-          select() {
-            return {
-              eq(column, value) {
-                databaseCalls.push({ table, operation: 'select', column, value })
-                return Promise.resolve({ data: [automation], error: null })
-              },
-            }
-          },
-        }
-      }
-
-      if (table === 'notification_automation_runs') {
-        return {
-          insert(record) {
-            databaseCalls.push({ table, operation: 'insert', record })
-            return {
-              select() {
-                return {
-                  single() {
-                    return Promise.resolve({ data: { id: RUN_ID }, error: null })
-                  },
-                }
-              },
-            }
-          },
-          update(record) {
-            databaseCalls.push({ table, operation: 'update', record })
-            return {
-              eq(column, value) {
-                databaseCalls.push({ table, operation: 'eq', column, value })
-                return Promise.resolve({ error: null })
-              },
-            }
-          },
-        }
-      }
-
-      throw new Error(`Unexpected table: ${table}`)
-    },
-  }
-  const fetchImpl = async (url, options) => {
-    fetchCalls.push({ url, options, body: JSON.parse(options.body) })
-    return {
-      ok: true,
-      status: 200,
-      async json() {
-        return { total: 3, sent: 3, failed: 0, nativeSent: 3 }
-      },
-    }
-  }
-  const result = await dispatchDueAutomations(supabaseAdmin, {
+  const result = await dispatchDueAutomations(db, {
     now: new Date('2026-09-03T04:30:15.000Z'),
-    env: {
-      NOTIFICATION_ADMIN_SECRET: 'notification-secret-value',
-      PUBLIC_APP_URL: 'https://example.test',
+    env: { NOTIFICATION_ADMIN_SECRET: 'synthetic-test-secret', PUBLIC_APP_URL: 'https://example.test' },
+    fetchImpl: async (url, options) => {
+      const body = JSON.parse(options.body)
+      fetchCalls.push({ url, options, body })
+      const run = await beginNotificationRun(db, body)
+      await markNotificationSending(db, run, 3)
+      await finishNotificationRun(db, run, { total: 3, sent: 3, failed: 0, nativeSent: 3 })
+      return { ok: true, status: 200, json: async () => ({ total: 3, sent: 3, failed: 0 }) }
     },
-    fetchImpl,
   })
-
   assert.equal(result.due, 1)
   assert.equal(result.completed, 1)
   assert.equal(result.failed, 0)
   assert.equal(fetchCalls.length, 1)
-  assert.equal(
-    fetchCalls[0].options.headers.Authorization,
-    'Bearer notification-secret-value',
-  )
+  assert.equal(fetchCalls[0].options.headers.Authorization, 'Bearer synthetic-test-secret')
   assert.equal('secret' in fetchCalls[0].body, false)
   assert.equal(fetchCalls[0].body.automationId, AUTOMATION_ID)
-  assert.equal(fetchCalls[0].body.automationRunId, RUN_ID)
+  assert.equal(fetchCalls[0].body.automationRunId, [...db.rows.keys()][0])
   assert.equal(fetchCalls[0].body.audienceType, 'user')
-  assert.deepEqual(fetchCalls[0].body.targetUserIds, [
-    AUTOMATION_ID,
-    SECOND_USER_ID,
-  ])
+  assert.deepEqual(fetchCalls[0].body.targetUserIds, [AUTOMATION_ID, SECOND_USER_ID])
   assert.equal(fetchCalls[0].body.targetUserId, AUTOMATION_ID)
   assert.equal(fetchCalls[0].body.singleDevice, true)
   assert.equal(fetchCalls[0].body.localizedMessages.tr.title, 'Günaydın')
-  assert.equal(
-    databaseCalls.filter((call) => call.operation === 'insert').length,
-    1,
-  )
-  assert.equal(
-    databaseCalls.find((call) => call.operation === 'update').record.status,
-    'completed',
-  )
+  assert.equal([...db.rows.values()][0].status, 'completed')
 })
 
 test('duplicate scheduled occurrence is skipped before any notification is sent', async () => {
+  const db = notificationMemoryDb([makeCustomAutomation({ days_of_week: [4] })])
+  await claimNotificationRun(db, AUTOMATION_ID, '2026-09-03T04:30:00.000Z')
   let fetchCount = 0
-  const automation = makeCustomAutomation({ days_of_week: [4] })
-  const supabaseAdmin = {
-    from(table) {
-      if (table === 'notification_automations') {
-        return {
-          select() {
-            return {
-              eq() {
-                return Promise.resolve({ data: [automation], error: null })
-              },
-            }
-          },
-        }
-      }
-
-      if (table === 'notification_automation_runs') {
-        return {
-          insert() {
-            return {
-              select() {
-                return {
-                  single() {
-                    return Promise.resolve({
-                      data: null,
-                      error: { code: '23505' },
-                    })
-                  },
-                }
-              },
-            }
-          },
-        }
-      }
-
-      throw new Error(`Unexpected table: ${table}`)
-    },
-  }
-  const result = await dispatchDueAutomations(supabaseAdmin, {
+  const result = await dispatchDueAutomations(db, {
     now: new Date('2026-09-03T04:30:15.000Z'),
-    env: { NOTIFICATION_ADMIN_SECRET: 'notification-secret-value' },
-    fetchImpl: async () => {
-      fetchCount += 1
-      throw new Error('should not run')
-    },
+    env: { NOTIFICATION_ADMIN_SECRET: 'synthetic-test-secret' },
+    fetchImpl: async () => { fetchCount += 1; throw Error('must not send') },
   })
-
   assert.equal(result.due, 1)
   assert.equal(result.skipped, 1)
   assert.equal(fetchCount, 0)

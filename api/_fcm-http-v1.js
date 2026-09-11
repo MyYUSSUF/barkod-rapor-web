@@ -1,4 +1,5 @@
 import { JWT } from 'google-auth-library'
+import { withNotificationTimeout } from './_notification-retry.js'
 
 const FCM_SCOPE = 'https://www.googleapis.com/auth/firebase.messaging'
 const FCM_ERROR_TYPE =
@@ -113,19 +114,23 @@ export async function sendFcmHttpRequest({
   projectId,
   message,
   fetchImpl = fetch,
+  timeoutMs = 10_000,
 }) {
   const endpoint = `https://fcm.googleapis.com/v1/projects/${encodeURIComponent(
     projectId,
   )}/messages:send`
-  const response = await fetchImpl(endpoint, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(message),
-  })
-  const responseText = await response.text()
+  const { response, responseText } = await withNotificationTimeout(async (signal) => {
+    const response = await fetchImpl(endpoint, {
+      method: 'POST',
+      signal,
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(message),
+    })
+    return { response, responseText: await response.text() }
+  }, timeoutMs, 'PROVIDER_TIMEOUT')
   let payload = null
 
   if (responseText) {

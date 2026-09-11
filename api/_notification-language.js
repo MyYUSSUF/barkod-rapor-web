@@ -10,6 +10,9 @@ export function parseOptionalNotificationLanguage(value) {
 }
 
 export function getNotificationLanguage(value, fallback = 'tr') {
+  const language = String(value || '').trim().toLowerCase().replaceAll('_', '-').split('-')[0]
+  // App language may be Arabic; notification content is intentionally TR/EN only.
+  if (['ar', 'ara', 'arabic'].includes(language)) return 'en'
   return (
     parseOptionalNotificationLanguage(value) ||
     parseOptionalNotificationLanguage(fallback) ||
