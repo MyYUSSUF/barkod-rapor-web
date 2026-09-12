@@ -5,6 +5,10 @@ import { randomUUID } from 'node:crypto'
 export function notificationMemoryDb(automations = []) {
   const rows = new Map()
   const writes = []
+  // Mirror the production invariant before committing any row in a statement.
+  const countsError = (row) => ['total', 'sent', 'failed'].some((key) =>
+    !Number.isInteger(row[key]) || row[key] < 0) || row.sent + row.failed !== row.total
+    ? { code: '23514', message: 'notification_automation_runs_counts_check' } : null
   const db = {
     rows, writes, failure: null,
     from(table) {
@@ -35,11 +39,17 @@ export function notificationMemoryDb(automations = []) {
                 return { data: null, error: { code: '23505' } }
               }
               const row = { id: randomUUID(), total: 0, sent: 0, failed: 0, ...values }
+              const error = countsError(row)
+              if (error) return { data: null, error }
               rows.set(row.id, row)
               result = [row]
               writes.push(structuredClone(row))
             } else {
               result = [...rows.values()].filter((row) => filters.every((f) => f(row)))
+              if (operation === 'update') {
+                const error = result.map((row) => countsError({ ...row, ...values })).find(Boolean)
+                if (error) return { data: null, error }
+              }
               if (operation === 'update') result.forEach((row) => {
                 Object.assign(row, values)
                 writes.push(structuredClone(row))

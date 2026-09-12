@@ -6,12 +6,15 @@ export const MAX_NOTIFICATION_RUN_ATTEMPTS = 3
 const TOKEN_PATTERN = /^[0-9a-f-]{36}$/i
 
 export class NotificationRunError extends Error {
-  constructor(code, statusCode = 503) {
+  constructor(code, statusCode = 503, databaseError) {
     super(code === 'RUN_CONFLICT'
       ? 'Bildirim çalışması daha önce başlatılmış veya kapatılmış.'
       : 'Bildirim çalışma kaydı doğrulanamadı; gönderim durduruldu.')
     this.code = code
     this.statusCode = statusCode
+    // Preserve only structured error codes, never DB messages/details or row values.
+    const databaseCode = String(databaseError?.code || '')
+    if (/^(?:[0-9A-Z]{5}|PGRST\d{3})$/.test(databaseCode)) this.databaseCode = databaseCode
   }
 }
 
@@ -45,7 +48,7 @@ export async function claimNotificationRun(db, automationId, scheduledFor, now =
     .insert({ automation_id: automationId, scheduled_for: scheduledFor, status: 'started', response })
     .select('id').abortSignal(signal).single(), 5000, 'RUN_WRITE_UNCERTAIN')
   if (!error && data?.id) return { id: data.id, automationId, ...response }
-  if (error?.code !== '23505') throw new NotificationRunError('RUN_WRITE_UNCERTAIN')
+  if (error?.code !== '23505') throw new NotificationRunError('RUN_WRITE_UNCERTAIN', 503, error)
 
   const result = await readNotificationData((signal) => db.from(TABLE)
     .select('id, automation_id, status, response, sent')
@@ -66,7 +69,7 @@ export async function claimNotificationRun(db, automationId, scheduledFor, now =
     .eq('response->>token', previous.token).eq('response->>phase', 'preflight_failed')
     .eq('response->>attempt', String(previous.attempt)).eq('response->>retryable', 'true')
     .select('id').abortSignal(signal).maybeSingle(), 5000, 'RUN_WRITE_UNCERTAIN')
-  if (claimed.error) throw new NotificationRunError('RUN_WRITE_UNCERTAIN')
+  if (claimed.error) throw new NotificationRunError('RUN_WRITE_UNCERTAIN', 503, claimed.error)
   return claimed.data?.id ? { id: old.id, automationId, ...next } : null
 }
 
@@ -88,7 +91,7 @@ async function transition(db, run, nextPhase, {
     if (afterDispatchTimeout) query = query.eq('response->>sendingStarted', 'true')
     return query.select('id').abortSignal(signal).maybeSingle()
   }, 5000, 'RUN_WRITE_UNCERTAIN')
-  if (result.error) throw new NotificationRunError('RUN_WRITE_UNCERTAIN')
+  if (result.error) throw new NotificationRunError('RUN_WRITE_UNCERTAIN', 503, result.error)
   if (!result.data?.id) throw new NotificationRunError('RUN_CONFLICT', 409)
   Object.assign(run, response)
 }
@@ -106,7 +109,9 @@ export async function beginNotificationRun(db, { automationId, automationRunId, 
 }
 
 export async function markNotificationSending(db, run, total) {
-  if (run) await transition(db, run, 'sending', { summary: { total }, extra: { sendingStarted: true } })
+  // The SQL counters describe resolved outcomes (sent + failed = total).
+  // Pending targets must not enter those counters before any provider has run.
+  if (run) await transition(db, run, 'sending', { extra: { sendingStarted: true, plannedTotal: total } })
 }
 
 export async function finishNotificationRun(db, run, summary, extra = {}) {
@@ -150,7 +155,7 @@ export async function markNotificationDispatchUnknown(db, run) {
       .eq('response->>protocol', '1').eq('response->>attempt', String(run.attempt))
       .eq('response->>token', run.token).in('response->>phase', phases)
       .select('id').abortSignal(signal).maybeSingle(), 5000, 'RUN_WRITE_UNCERTAIN')
-    if (result.error) throw new NotificationRunError('RUN_WRITE_UNCERTAIN')
+    if (result.error) throw new NotificationRunError('RUN_WRITE_UNCERTAIN', 503, result.error)
     if (result.data?.id) return
   }
 }

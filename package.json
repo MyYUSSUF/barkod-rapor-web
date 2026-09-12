@@ -41,6 +41,7 @@
     "web-push": "^3.6.7"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "0.5.8",
     "@capacitor/cli": "^8.4.2",
     "@eslint/js": "^10.0.1",
     "@types/react": "^19.2.14",

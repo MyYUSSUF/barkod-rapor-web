@@ -56,6 +56,44 @@ const dispatch = (db, fetchImpl, minute = 0, extra = {}) => dispatchDueAutomatio
   env, fetchImpl, now: new Date(Date.parse(WHEN) + minute * 60_000), ...extra,
 })
 
+test('sending gate keeps pending targets separate from production result counters', async () => {
+  const db = notificationMemoryDb()
+  const run = await begin(db, await claimNotificationRun(db, AUTO, WHEN))
+  await markNotificationSending(db, run, 3)
+  assert.equal(row(db).response.plannedTotal, 3)
+  assert.equal(row(db).response.sendingStarted, true)
+  assert.deepEqual([row(db).total, row(db).sent, row(db).failed], [0, 0, 0])
+  await finishNotificationRun(db, run, { total: 3, sent: 2, failed: 1 })
+  assert.deepEqual([row(db).total, row(db).sent, row(db).failed], [3, 2, 1])
+  for (const write of db.writes) assert.equal(write.sent + write.failed, write.total)
+})
+
+test('production counter CHECK rejects invalid writes atomically in the test database', async () => {
+  const db = notificationMemoryDb()
+  const run = await begin(db, await claimNotificationRun(db, AUTO, WHEN))
+  const before = structuredClone(row(db))
+  for (const values of [{ total: 1, sent: 0, failed: 0 }, { total: -1, sent: -1, failed: 0 }]) {
+    const result = await db.from('notification_automation_runs').update(values).eq('id', run.id).select('id').maybeSingle()
+    assert.equal(result.error.code, '23514')
+    assert.deepEqual(row(db), before)
+  }
+})
+
+test('run errors preserve safe database codes without retaining private error details', async () => {
+  for (const code of ['23514', '42501', 'PGRST204', 'private-error-value']) {
+    const db = notificationMemoryDb()
+    const run = await begin(db, await claimNotificationRun(db, AUTO, WHEN))
+    db.failure = () => ({ error: { code, message: 'private message', details: 'private row', hint: 'private hint' } })
+    await assert.rejects(markNotificationSending(db, run, 1), (error) => {
+      assert.equal(error.code, 'RUN_WRITE_UNCERTAIN')
+      assert.equal(error.databaseCode, code === 'private-error-value' ? undefined : code)
+      assert.doesNotMatch(JSON.stringify(error), /private/)
+      assert.equal(error.cause, undefined)
+      return true
+    })
+  }
+})
+
 test('transient read retries only the failed page, without duplicating rows', async () => {
   let calls = 0
   const result = await fetchAllPages(async (from) => {
@@ -250,6 +288,10 @@ test('PostgREST serializes the real atomic JSON predicates and prefers returned 
   assert.equal(requests[0].url.searchParams.get('response->>phase'), 'eq.preflight')
   assert.equal(requests[0].url.searchParams.get('status'), 'eq.started')
   assert.match(new Headers(requests[0].options.headers).get('prefer'), /return=representation/)
+  const update = JSON.parse(requests[0].options.body)
+  assert.equal(update.response.plannedTotal, 1)
+  assert.equal(update.response.sendingStarted, true)
+  for (const counter of ['total', 'sent', 'failed']) assert.equal(Object.hasOwn(update, counter), false)
 })
 
 test('FCM send timeout includes body reading, aborts, and never retries a provider POST', async () => {

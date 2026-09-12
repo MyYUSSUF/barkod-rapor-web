@@ -357,6 +357,7 @@ async function dispatchAutomation(
   } catch (error) {
     console.error('Bildirim otomasyonu tamamlanamadı.', {
       stage: run ? 'dispatch' : 'claim', code: error.code || 'DISPATCH_ERROR',
+      databaseCode: error.databaseCode || null,
     })
   }
   if (!run) return { ...base, status: 'failed', error: 'Çalıştırma kaydı oluşturulamadı.' }
@@ -376,7 +377,7 @@ async function dispatchAutomation(
     }
     await markNotificationDispatchUnknown(supabaseAdmin, run)
   } catch (error) {
-    console.error('Bildirim sonucu doğrulanamadı.', { stage: 'run_result', code: error.code || 'RESULT_UNAVAILABLE' })
+    console.error('Bildirim sonucu doğrulanamadı.', { stage: 'run_result', code: error.code || 'RESULT_UNAVAILABLE', databaseCode: error.databaseCode || null })
   }
   return { ...base, status: 'failed', error: 'Gönderim sonucu doğrulanamadı; otomatik tekrar yapılmadı.',
     outcome: 'unknown', attempt: run.attempt }

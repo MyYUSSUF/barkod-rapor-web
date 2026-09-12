@@ -1648,12 +1648,12 @@ async function handleNotification(req, res, {
 
     return res.status(responseStatus).json(responsePayload)
   } catch (error) {
-    console.error('Bildirim işlemi tamamlanamadı.', { stage, code: error.code || 'NOTIFICATION_ERROR' })
+    console.error('Bildirim işlemi tamamlanamadı.', { stage, code: error.code || 'NOTIFICATION_ERROR', databaseCode: error.databaseCode || null })
     if (automationRun && automationDb && ['preflight', 'sending'].includes(automationRun.phase)) {
       try {
         await failNotificationRun(automationDb, automationRun, error)
       } catch (recordError) {
-        console.error('Bildirim hata kaydı doğrulanamadı.', { stage: 'run_result', code: recordError.code || 'RESULT_UNAVAILABLE' })
+        console.error('Bildirim hata kaydı doğrulanamadı.', { stage: 'run_result', code: recordError.code || 'RESULT_UNAVAILABLE', databaseCode: recordError.databaseCode || null })
       }
     }
     if (
