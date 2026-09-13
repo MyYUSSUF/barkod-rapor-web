@@ -11,7 +11,7 @@ import {
   serializeAutomation,
 } from './_notification-automation.js'
 import { enforceRequestLimit } from './_rate-limit.js'
-import { readNotificationData, withNotificationTimeout } from './_notification-retry.js'
+import { readNotificationData, withNotificationTimeout, notificationErrorDiagnostics } from './_notification-retry.js'
 import {
   claimNotificationRun, markNotificationDispatchUnknown, notificationCounts, readNotificationRun,
 } from './_notification-run.js'
@@ -326,10 +326,16 @@ async function dispatchAutomation(
   supabaseAdmin, automation, scheduledFor, { env, fetchImpl, now, dispatchTimeoutMs },
 ) {
   const base = { automationId: automation.id, name: automation.name }
+  const dispatchStartedAt = Date.now()
   let run
   try {
     run = await claimNotificationRun(supabaseAdmin, automation.id, scheduledFor, now)
     if (!run) return { ...base, status: 'skipped', reason: 'already_claimed' }
+    console.info('Bildirim çalışması doğrulandı.', {
+      stage: 'claimed', attempt: run.attempt, scheduledFor,
+      startDelayMs: Math.max(0, Date.now() - Date.parse(scheduledFor)),
+      claimElapsedMs: Date.now() - dispatchStartedAt,
+    })
     if (!isNotBlank(env.NOTIFICATION_ADMIN_SECRET)) {
       throw new NotificationAutomationError('Bildirim gönderim güvenlik ayarı eksik.', 503)
     }
@@ -356,8 +362,8 @@ async function dispatchAutomation(
     }, dispatchTimeoutMs, 'DISPATCH_UNCONFIRMED')
   } catch (error) {
     console.error('Bildirim otomasyonu tamamlanamadı.', {
-      stage: run ? 'dispatch' : 'claim', code: error.code || 'DISPATCH_ERROR',
-      databaseCode: error.databaseCode || null,
+      stage: run ? 'dispatch' : 'claim', ...notificationErrorDiagnostics(error),
+      dispatchElapsedMs: Date.now() - dispatchStartedAt,
     })
   }
   if (!run) return { ...base, status: 'failed', error: 'Çalıştırma kaydı oluşturulamadı.' }
@@ -366,6 +372,10 @@ async function dispatchAutomation(
     const row = await readNotificationRun(supabaseAdmin, run.id)
     if (row?.response?.token === run.token && row.response.protocol === 1) {
       if (row.response.phase === 'finished' && ['completed', 'failed'].includes(row.status)) {
+        console.info('Bildirim çalışması tamamlandı.', {
+          stage: 'finished', status: row.status, attempt: run.attempt,
+          ...notificationCounts(row.response), dispatchElapsedMs: Date.now() - dispatchStartedAt,
+        })
         return { ...base, status: row.status, ...notificationCounts(row.response), attempt: run.attempt,
           recipientRecordsComplete: row.response.recipientRecordsComplete === true }
       }
@@ -377,7 +387,7 @@ async function dispatchAutomation(
     }
     await markNotificationDispatchUnknown(supabaseAdmin, run)
   } catch (error) {
-    console.error('Bildirim sonucu doğrulanamadı.', { stage: 'run_result', code: error.code || 'RESULT_UNAVAILABLE', databaseCode: error.databaseCode || null })
+    console.error('Bildirim sonucu doğrulanamadı.', { stage: 'run_result', ...notificationErrorDiagnostics(error) })
   }
   return { ...base, status: 'failed', error: 'Gönderim sonucu doğrulanamadı; otomatik tekrar yapılmadı.',
     outcome: 'unknown', attempt: run.attempt }
@@ -397,11 +407,18 @@ export async function dispatchDueAutomations(
     throw new NotificationAutomationError('Bildirim gönderim servisi kullanılamıyor.', 503)
   }
 
-  const { data } = await readNotificationData((signal) => supabaseAdmin
-    .from('notification_automations')
-    .select(AUTOMATION_SELECT)
-    .eq('is_active', true)
-    .abortSignal(signal))
+  let data
+  try {
+    const result = await readNotificationData((signal) => supabaseAdmin
+      .from('notification_automations')
+      .select(AUTOMATION_SELECT)
+      .eq('is_active', true)
+      .abortSignal(signal))
+    data = result.data
+  } catch (error) {
+    console.error('Bildirim planları okunamadı.', { stage: 'automation_read', ...notificationErrorDiagnostics(error) })
+    throw error
+  }
 
   const dueAutomations = (data || [])
     .map((automation) => ({
@@ -515,10 +532,7 @@ export default async function handler(req, res) {
       : error.message
 
     if (statusCode >= 500) {
-      console.error('Bildirim merkezi hatası:', {
-        name: error?.name || 'Error',
-        message: error?.message || 'Bilinmeyen hata',
-      })
+      console.error('Bildirim merkezi hatası:', { stage: 'handler', ...notificationErrorDiagnostics(error) })
     }
 
     return res.status(statusCode).json({ error: message })

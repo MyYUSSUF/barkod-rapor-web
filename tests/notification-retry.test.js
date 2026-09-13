@@ -33,7 +33,7 @@ const deferred = () => {
 }
 const webTarget = (language = 'tr', index = 1) => ({
   id: `33333333-3333-4333-8333-${String(index).padStart(12, '0')}`,
-  user_id: USER, notification_language: language, subscription: { endpoint: `https://example.test/${index}` },
+  user_id: USER, notification_language: language, subscription: { endpoint: `https://fcm.googleapis.com/fcm/send/${index}` },
 })
 
 function sender(db, overrides = {}) {

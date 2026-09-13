@@ -7,6 +7,7 @@ import { getDailyMotivation } from './_daily-motivation.js'
 import { getCairoScheduleAttempt } from './_motivation-schedule.js'
 import { getNotificationLanguage } from './_notification-language.js'
 import { getFcmToken } from './_notification-targets.js'
+import { safeWebPushSubscription, webPushAgent } from './_web-push-security.js'
 import {
   createApnsPayload,
   getApnsProviderToken,
@@ -23,7 +24,7 @@ import {
   sendFcmHttpRequest,
 } from './_fcm-http-v1.js'
 import { enforceRequestLimit } from './_rate-limit.js'
-import { readNotificationData, withNotificationTimeout } from './_notification-retry.js'
+import { readNotificationData, withNotificationTimeout, notificationErrorDiagnostics } from './_notification-retry.js'
 import {
   beginNotificationRun, failNotificationRun, finishNotificationRun, markNotificationSending,
 } from './_notification-run.js'
@@ -256,9 +257,7 @@ async function finishDailyMotivationRun(
       .eq('run_date', motivation.date)
 
     if (error) {
-      console.error('Günlük bildirim sonucu kaydedilemedi.', {
-        code: error.code || null,
-      })
+      console.error('Günlük bildirim sonucu kaydedilemedi.', { stage: 'legacy_run_result', ...notificationErrorDiagnostics(error) })
     }
   } catch {
     // Gönderim sonucunun kaydedilememesi ikinci bir bildirime yol açmamalı.
@@ -310,7 +309,7 @@ export async function cleanupInvalidSubscriptionIds(
 
     if (error || !Number.isInteger(count) || count < 0) {
       const cleanupError = error || { code: 'COUNT_UNAVAILABLE' }
-      console.error(`${provider} geçersiz kayıt temizliği başarısız:`, cleanupError)
+      console.error('Geçersiz bildirim kaydı temizliği başarısız.', { stage: 'subscription_cleanup', ...notificationErrorDiagnostics(cleanupError) })
       result.failed += batch.length
       result.errors.push(
         makeSafeCleanupError({
@@ -974,9 +973,7 @@ export async function recordNotificationDelivery(
       .abortSignal(signal).single(), 5000, 'DELIVERY_RECORD_UNCERTAIN')
 
     if (error) {
-      console.error('Bildirim teslim kaydı oluşturulamadı.', {
-        code: error.code || null,
-      })
+      console.error('Bildirim teslim kaydı oluşturulamadı.', { stage: 'delivery_record', ...notificationErrorDiagnostics(error) })
       return { deliveryLogId: null, recipientRecordsComplete: false }
     }
     const deliveryLogId = data?.id || null
@@ -991,13 +988,14 @@ export async function recordNotificationDelivery(
         .from('notification_recipient_deliveries')
         .insert(rows).abortSignal(signal), 5000, 'DELIVERY_RECORD_UNCERTAIN')
       if (recipientError) {
-        console.error('Bildirim alıcı kayıtları oluşturulamadı.', { code: recipientError.code || null })
+        console.error('Bildirim alıcı kayıtları oluşturulamadı.', { stage: 'recipient_records', ...notificationErrorDiagnostics(recipientError) })
         return { deliveryLogId, recipientRecordsComplete: false }
       }
     }
     return { deliveryLogId, recipientRecordsComplete: Boolean(deliveryLogId) }
-  } catch {
+  } catch (error) {
     // A log outage must not trigger another provider send. The run retains a fallback.
+    console.error('Bildirim teslim kaydı doğrulanamadı.', { stage: 'delivery_record', ...notificationErrorDiagnostics(error) })
     return { deliveryLogId: null, recipientRecordsComplete: false }
   }
 }
@@ -1012,6 +1010,7 @@ async function handleNotification(req, res, {
   preflightTimeoutMs = 20_000,
 }) {
   let automationRun = null
+  const requestStartedAt = Date.now()
   let automationDb = null
   let stage = 'authorization'
   let scheduledMotivation = null
@@ -1260,6 +1259,9 @@ async function handleNotification(req, res, {
 
     // No provider call is allowed until the durable, attempt-specific gate succeeds.
     await markNotificationSending(supabaseAdmin, automationRun, totalSubscriptions)
+    console.info('Bildirim gönderim öncesi kontrolü tamamlandı.', {
+      stage: 'sending', preflightElapsedMs: Date.now() - requestStartedAt, plannedTotal: totalSubscriptions,
+    })
     stage = 'sending'
     let sent = 0
     let failed = 0
@@ -1306,9 +1308,9 @@ async function handleNotification(req, res, {
           async (item) => {
             try {
               await withNotificationTimeout(() => webPushClient.sendNotification(
-                item.subscription,
+                safeWebPushSubscription(item.subscription),
                 JSON.stringify(getPayloadForTarget(item)),
-                { timeout: 10_000 },
+                { timeout: 10_000, agent: webPushAgent },
               ), 11_000, 'PROVIDER_TIMEOUT')
               return { item, ok: true }
             } catch (sendError) {
@@ -1648,12 +1650,14 @@ async function handleNotification(req, res, {
 
     return res.status(responseStatus).json(responsePayload)
   } catch (error) {
-    console.error('Bildirim işlemi tamamlanamadı.', { stage, code: error.code || 'NOTIFICATION_ERROR', databaseCode: error.databaseCode || null })
+    console.error('Bildirim işlemi tamamlanamadı.', {
+      stage, ...notificationErrorDiagnostics(error), requestElapsedMs: Date.now() - requestStartedAt,
+    })
     if (automationRun && automationDb && ['preflight', 'sending'].includes(automationRun.phase)) {
       try {
         await failNotificationRun(automationDb, automationRun, error)
       } catch (recordError) {
-        console.error('Bildirim hata kaydı doğrulanamadı.', { stage: 'run_result', code: recordError.code || 'RESULT_UNAVAILABLE', databaseCode: recordError.databaseCode || null })
+        console.error('Bildirim hata kaydı doğrulanamadı.', { stage: 'run_result', ...notificationErrorDiagnostics(recordError) })
       }
     }
     if (

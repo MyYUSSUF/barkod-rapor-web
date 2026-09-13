@@ -1,20 +1,37 @@
 import { randomUUID } from 'node:crypto'
-import { readNotificationData, withNotificationTimeout } from './_notification-retry.js'
+import { readNotificationData, withNotificationTimeout, notificationErrorDiagnostics, safeNotificationDatabaseCode } from './_notification-retry.js'
 
 const TABLE = 'notification_automation_runs'
 export const MAX_NOTIFICATION_RUN_ATTEMPTS = 3
 const TOKEN_PATTERN = /^[0-9a-f-]{36}$/i
 
 export class NotificationRunError extends Error {
-  constructor(code, statusCode = 503, databaseError) {
+  constructor(code, statusCode = 503, databaseError, metadata = {}) {
     super(code === 'RUN_CONFLICT'
       ? 'Bildirim çalışması daha önce başlatılmış veya kapatılmış.'
       : 'Bildirim çalışma kaydı doğrulanamadı; gönderim durduruldu.')
     this.code = code
     this.statusCode = statusCode
     // Preserve only structured error codes, never DB messages/details or row values.
-    const databaseCode = String(databaseError?.code || '')
-    if (/^(?:[0-9A-Z]{5}|PGRST\d{3})$/.test(databaseCode)) this.databaseCode = databaseCode
+    const databaseCode = safeNotificationDatabaseCode(databaseError?.code)
+    if (databaseCode) this.databaseCode = databaseCode
+    const diagnostic = notificationErrorDiagnostics({ ...databaseError, cause: databaseError?.cause, ...metadata })
+    for (const key of ['httpStatus', 'failureKind', 'elapsedMs', 'timeoutMs', 'networkCode', 'attempts']) {
+      if (diagnostic[key] != null) this[key] = diagnostic[key]
+    }
+  }
+}
+
+// No write retry: a timeout can mean the write committed but its response was lost.
+async function writeRun(operation) {
+  const startedAt = Date.now()
+  try {
+    const result = await withNotificationTimeout(operation, 5000, 'RUN_WRITE_UNCERTAIN')
+    return { ...result, diagnostics: {
+      httpStatus: result?.status, elapsedMs: Date.now() - startedAt, attempts: 1,
+    } }
+  } catch (error) {
+    throw new NotificationRunError('RUN_WRITE_UNCERTAIN', 503, error, { elapsedMs: Date.now() - startedAt, attempts: 1 })
   }
 }
 
@@ -44,11 +61,11 @@ export async function readNotificationRun(db, id) {
 export async function claimNotificationRun(db, automationId, scheduledFor, now = new Date()) {
   const token = randomUUID()
   const response = state(1, token, 'claimed')
-  const { data, error } = await withNotificationTimeout((signal) => db.from(TABLE)
+  const { data, error, diagnostics } = await writeRun((signal) => db.from(TABLE)
     .insert({ automation_id: automationId, scheduled_for: scheduledFor, status: 'started', response })
-    .select('id').abortSignal(signal).single(), 5000, 'RUN_WRITE_UNCERTAIN')
+    .select('id').abortSignal(signal).single())
   if (!error && data?.id) return { id: data.id, automationId, ...response }
-  if (error?.code !== '23505') throw new NotificationRunError('RUN_WRITE_UNCERTAIN', 503, error)
+  if (error?.code !== '23505') throw new NotificationRunError('RUN_WRITE_UNCERTAIN', 503, error, diagnostics)
 
   const result = await readNotificationData((signal) => db.from(TABLE)
     .select('id, automation_id, status, response, sent')
@@ -62,14 +79,14 @@ export async function claimNotificationRun(db, automationId, scheduledFor, now =
       !TOKEN_PATTERN.test(previous.token || '') || !Number.isInteger(previous.attempt) ||
       previous.attempt < 1 || previous.attempt >= MAX_NOTIFICATION_RUN_ATTEMPTS) return null
   const next = state(previous.attempt + 1, token, 'claimed')
-  const claimed = await withNotificationTimeout((signal) => db.from(TABLE).update({
+  const claimed = await writeRun((signal) => db.from(TABLE).update({
     status: 'started', response: next, error: null, completed_at: null,
     started_at: now.toISOString(), total: 0, sent: 0, failed: 0,
   }).eq('id', old.id).eq('status', 'failed').eq('sent', 0).eq('response->>protocol', '1')
     .eq('response->>token', previous.token).eq('response->>phase', 'preflight_failed')
     .eq('response->>attempt', String(previous.attempt)).eq('response->>retryable', 'true')
-    .select('id').abortSignal(signal).maybeSingle(), 5000, 'RUN_WRITE_UNCERTAIN')
-  if (claimed.error) throw new NotificationRunError('RUN_WRITE_UNCERTAIN', 503, claimed.error)
+    .select('id').abortSignal(signal).maybeSingle())
+  if (claimed.error) throw new NotificationRunError('RUN_WRITE_UNCERTAIN', 503, claimed.error, claimed.diagnostics)
   return claimed.data?.id ? { id: old.id, automationId, ...next } : null
 }
 
@@ -81,7 +98,7 @@ async function transition(db, run, nextPhase, {
   const update = { status, response, error }
   if (counts) Object.assign(update, { total: counts.total, sent: counts.sent, failed: counts.failed })
   if (status !== 'started') update.completed_at = new Date().toISOString()
-  const result = await withNotificationTimeout((signal) => {
+  const result = await writeRun((signal) => {
     let query = db.from(TABLE).update(update)
       .eq('id', run.id).eq('automation_id', run.automationId)
       .eq('status', afterDispatchTimeout ? 'failed' : 'started')
@@ -90,8 +107,8 @@ async function transition(db, run, nextPhase, {
       .eq('response->>phase', afterDispatchTimeout ? 'unknown' : run.phase)
     if (afterDispatchTimeout) query = query.eq('response->>sendingStarted', 'true')
     return query.select('id').abortSignal(signal).maybeSingle()
-  }, 5000, 'RUN_WRITE_UNCERTAIN')
-  if (result.error) throw new NotificationRunError('RUN_WRITE_UNCERTAIN', 503, result.error)
+  })
+  if (result.error) throw new NotificationRunError('RUN_WRITE_UNCERTAIN', 503, result.error, result.diagnostics)
   if (!result.data?.id) throw new NotificationRunError('RUN_CONFLICT', 409)
   Object.assign(run, response)
 }
@@ -147,15 +164,15 @@ export async function markNotificationDispatchUnknown(db, run) {
   // Fence unsent work first. Only an already gated sender retains permission to
   // write its eventual outcome; neither unknown state permits another send.
   for (const phases of [['claimed', 'preflight'], ['sending']]) {
-    const result = await withNotificationTimeout((signal) => db.from(TABLE).update({
+    const result = await writeRun((signal) => db.from(TABLE).update({
       status: 'failed', completed_at: new Date().toISOString(),
       response: state(run.attempt, run.token, 'unknown', { sendingStarted: phases[0] === 'sending' }),
       error: 'Gönderim sonucu doğrulanamadı; otomatik tekrar kapalı.',
     }).eq('id', run.id).eq('automation_id', run.automationId).eq('status', 'started')
       .eq('response->>protocol', '1').eq('response->>attempt', String(run.attempt))
       .eq('response->>token', run.token).in('response->>phase', phases)
-      .select('id').abortSignal(signal).maybeSingle(), 5000, 'RUN_WRITE_UNCERTAIN')
-    if (result.error) throw new NotificationRunError('RUN_WRITE_UNCERTAIN', 503, result.error)
+      .select('id').abortSignal(signal).maybeSingle())
+    if (result.error) throw new NotificationRunError('RUN_WRITE_UNCERTAIN', 503, result.error, result.diagnostics)
     if (result.data?.id) return
   }
 }
