@@ -45,6 +45,7 @@ import {
 import { blurAndroidImeTarget } from './lib/androidSystemInsets'
 import { readBarcodeHistory, storeBarcodeHistory, removeBarcodeHistory } from './lib/barcodeHistory'
 import { fetchJsonWithTimeout } from './lib/fetchJsonWithTimeout'
+import { startForegroundPolling } from './lib/foregroundPolling'
 import './App.css'
 import './IndustrialTheme.css'
 import './AdminModern.css'
@@ -3617,20 +3618,17 @@ function App() {
     const checkedUserId = userProfile.id
     const checkedUserRole = userProfile.role
     let active = true
-    let checkRunning = false
 
-    const checkUserActiveStatus = async () => {
-      if (!active || checkRunning || logoutInProgressRef.current) {
+    const checkUserActiveStatus = async ({ isForeground }) => {
+      if (!active || !isForeground() || logoutInProgressRef.current) {
         return
       }
-
-      checkRunning = true
 
       try {
         const { data: sessionData } = await supabase.auth.getSession()
         const checkedSession = sessionData?.session
 
-        if (!active || !isAuthSessionUser(checkedSession, checkedUserId)) {
+        if (!active || !isForeground() || !isAuthSessionUser(checkedSession, checkedUserId)) {
           return
         }
 
@@ -3641,7 +3639,7 @@ function App() {
           .eq('id', checkedUserId)
           .single()
 
-        if (!active || error || !data) {
+        if (!active || !isForeground() || error || !data) {
           return
         }
 
@@ -3658,6 +3656,7 @@ function App() {
 
         if (
           !active ||
+          !isForeground() ||
           !isAuthSessionUser(
             (await supabase.auth.getSession()).data?.session,
             checkedUserId,
@@ -3675,18 +3674,37 @@ function App() {
         }
       } catch (err) {
         console.log('Aktiflik kontrol hatası:', err)
-      } finally {
-        checkRunning = false
       }
     }
 
-    checkUserActiveStatus()
-
-    const intervalId = setInterval(checkUserActiveStatus, DEVICE_ACCESS_CHECK_MS)
+    const nativeApp = isNativeMobileApp()
+    const polling = startForegroundPolling({
+      check: checkUserActiveStatus,
+      intervalMs: DEVICE_ACCESS_CHECK_MS,
+      initiallyActive: !nativeApp,
+    })
+    let appStateListener = null
+    let appStateEventObserved = false
+    if (nativeApp) {
+      CapacitorApp.addListener('appStateChange', ({ isActive }) => {
+        appStateEventObserved = true
+        if (active) polling.setAppActive(isActive)
+      }).then((handle) => {
+        if (active) appStateListener = handle
+        else handle.remove()
+      }).catch((err) => console.log('Uygulama durum dinleyicisi hatası:', err))
+      CapacitorApp.getState().then(({ isActive }) => {
+        if (active && !appStateEventObserved) polling.setAppActive(isActive)
+      }).catch((err) => {
+        console.log('Uygulama durumu okunamadı:', err)
+        if (active && !appStateEventObserved) polling.setAppActive(true)
+      })
+    }
 
     return () => {
       active = false
-      clearInterval(intervalId)
+      polling.stop()
+      appStateListener?.remove()
     }
     // Kontrol döngüsü yalnızca kullanıcı veya dil değiştiğinde yeniden kurulmalıdır.
     // eslint-disable-next-line react-hooks/exhaustive-deps
